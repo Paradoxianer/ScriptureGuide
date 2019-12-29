@@ -2,19 +2,23 @@
  * Copyright 2019 Paradoxianer <your@email.address>
  * All rights reserved. Distributed under the terms of the MIT license.
  */
+#include <AppDefs.h>
 #include <Catalog.h>
 #include <ColumnTypes.h>
 #include <Locale.h>
 
 #include "ResultListView.h"
 
-ResultRow::ResultRow(char* key, char* text))
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "SearchWindow"
+
+ResultRow::ResultRow(char* key, char* text)
 	: BRow()
 {
 	BStringField *key_field = new BStringField(key);
 	BStringField *text_field = new BStringField(text);
-	row->SetField(key_field,0);
-	row->SetField(text_field,1);
+	SetField(key_field,0);
+	SetField(text_field,1);
 }
 
 ResultRow::~ResultRow(void)
@@ -22,13 +26,28 @@ ResultRow::~ResultRow(void)
 }
 
 
+ResultListView::ResultListView(BRect rect, const char* name)
+	: BColumnListView(rect, name, 0, 0, B_NO_BORDER, true),
+		fDragCommand(B_SIMPLE_DATA)
+{
+	Init();
+}
 
 
 
 ResultListView::ResultListView(const char*name)
-	:BColumnListView(name, NULL),
+	:BColumnListView(name, 0, B_NO_BORDER, true),
 		fDragCommand(B_SIMPLE_DATA)
+{
+	Init();
+}
 
+
+ResultListView::~ResultListView()
+{
+}
+
+void ResultListView::Init()
 {
 	BStringColumn *verse_key = new BStringColumn(B_TRANSLATE("Bibleverse"),25,50,50,0);
 	BStringColumn *preview = new BStringColumn(B_TRANSLATE("Preview"),200,50,1000,0);
@@ -36,16 +55,11 @@ ResultListView::ResultListView(const char*name)
 	AddColumn(preview,1);
 }
 
-
 bool
 ResultListView::InitiateDrag( BPoint point, int32 index, bool )
 {
-	// supress drag&drop while an item is focused
-	if (fFocusedIndex >= 0)
-		return false;
-
 	bool success = false;
-	ResultRow* row = CurrentSelection( NULL );
+	BRow* row = CurrentSelection( NULL );
 	if ( row ) {
 		// create drag message
 		BMessage msg( fDragCommand );
@@ -56,7 +70,7 @@ ResultListView::InitiateDrag( BPoint point, int32 index, bool )
 		// figure out, how many items fit into our bitmap
 		int32 numItems;
 		bool fade = false;
-		for (numItems = 0; ResultRow* item = CurrentSelection( item ) ; numItems++) {
+		for (numItems = 0; BRow* item = CurrentSelection( item ) ; numItems++) {
 			dragRect.bottom += ceilf( item->Height() ) + 1.0;
 			if ( dragRect.Height() > MAX_DRAG_HEIGHT ) {
 				fade = true;
@@ -73,13 +87,18 @@ ResultListView::InitiateDrag( BPoint point, int32 index, bool )
 				BRect itemBounds( dragRect) ;
 				itemBounds.bottom = 0.0;
 				// let all selected items, that fit into our drag_bitmap, draw
-				ResultRow* item = NULL;	
+				BRow* item = NULL;	
 				for ( int32 i = 0; i < numItems; i++ ) {			
 					item = CurrentSelection( item );
 					itemBounds.bottom = itemBounds.top + ceilf( item->Height() );
 					if ( itemBounds.bottom > dragRect.bottom )
 						itemBounds.bottom = dragRect.bottom;
-					DrawField(item, itemBounds, v);
+					for (int32 q = 0; q < CountColumns(); q++)
+					{
+						BColumn* column = ColumnAt(q);
+						column->DrawField(item->GetField(0), itemBounds, v);
+						column->DrawField(item->GetField(1), itemBounds, v);
+					}
 					itemBounds.top = itemBounds.bottom + 1.0;
 				}
 				// make a black frame arround the edge
@@ -131,20 +150,19 @@ ResultListView::InitiateDrag( BPoint point, int32 index, bool )
 void
 ResultListView::MakeDragMessage(BMessage* message) const
 {
-	ResultRow* tmpRow	= NULL;
 	BLanguage language;
 	BLocale::Default()->GetLanguage(&language);
 	for (int32 i = 0; i < CountRows(); i++)
 	{
-		tmpRow = dynamic_cast<const ResultRow*>RowAt(i);
+		const ResultRow* tmpRow = dynamic_cast<const ResultRow*>(RowAt(i));
 		if (tmpRow != NULL)
 		{
 			if (tmpRow->HasLatch() != true)
 			{
-				BStringField* tmpField = dynamic_cast<const BStringField*>tmpRow->GetField(0)
+				const BStringField* tmpField = dynamic_cast<const BStringField*>(tmpRow->GetField(0));
 				if (tmpField != NULL)
 					message->AddString("key", tmpField->String());
-				tmpField = dynamic_cast<const BStringField*>tmpRow->GetField(1)
+				tmpField = dynamic_cast<const BStringField*>(tmpRow->GetField(1));
 				if (tmpField != NULL)
 					message->AddString("text",tmpField->String());
 				message->AddString("locale", language.Code());

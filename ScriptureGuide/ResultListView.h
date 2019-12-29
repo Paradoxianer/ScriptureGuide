@@ -2,8 +2,8 @@
  * Copyright 2019 Paradoxianer <your@email.address>
  * All rights reserved. Distributed under the terms of the MIT license.
  */
-#ifndef RESUTL_LIST_VIEW_H
-#define RESUTL_LIST_VIEW_H
+#ifndef RESULT_LIST_VIEW_H
+#define RESULT_LIST_VIEW_H
 
 #include <ColumnListView.h>
 #include <SupportDefs.h>
@@ -33,10 +33,14 @@ public:
 	ResultListView(const char* name);
 	virtual			~ResultListView();
 	virtual	bool	InitiateDrag(BPoint point, int32 index, bool wasSelected);
+	virtual void	MakeDragMessage(BMessage* message) const = 0;
 				
-private:
+protected:
+	uint32			fDragCommand;
 
-	uitn32	fDragCommand
+private:
+	void			Init(void);
+
 };
 
 
