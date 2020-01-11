@@ -29,9 +29,11 @@
 #include <iostream>
 
 #include "constants.h"
+
+#include "FontPanel.h"
 #include "LogosApp.h"
 #include "LogosSearchWindow.h"
-#include "FontPanel.h"
+#include "ParagraphStyle.h"
 #include "Preferences.h"
 
 #undef B_TRANSLATION_CONTEXT
@@ -45,12 +47,19 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
  	fCurrentModule(NULL),
  	fCurrentChapter(1),
  	fCurrentFont(NULL),
- 	fFindMessenger(NULL)
+ 	fFindMessenger(NULL),
+	fVerseStyle(NULL),
+	fNumberStyle(NULL)
 {
 	fCurrentVerse = selectVers;
 	fCurrentVerseEnd = selectVersEnd;
 		
 	fModManager = new SwordBackend();
+	
+	fVerseStyle = new CharacterStyle();
+	fNumberStyle = new CharacterStyle();
+	fNumberStyle->SetForegroundColor(BLUE);
+	fNumberStyle->SetBold(true);
 	BuildGUI();
 	
 	// More voodoo hackerdom to work around a bug. :)
@@ -140,6 +149,8 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	sprintf((char*)fam,"%s",HEBREW);
 	if (fHebrewFont.SetFamilyAndFace(fam, B_REGULAR_FACE)!=B_OK)
 		fHebrewFont=*be_plain_font;
+		
+
 }
 
 
@@ -286,16 +297,15 @@ void SGMainWindow::BuildGUI(void)
 	BRect textrect = textframe;
 	textrect.OffsetTo(B_ORIGIN);
 	
-	fVerseView = new BTextView(textframe, "text_view", textrect,
-				B_FOLLOW_ALL_SIDES, B_WILL_DRAW | B_PULSE_NEEDED);
+	fVerseView = new TextDocumentView("bible verse view");
 	fScrollView = new BScrollView("scroll_view", fVerseView,
-				B_FOLLOW_ALL_SIDES, 0, false, true, B_NO_BORDER);
+				false, true, B_NO_BORDER);
 	
-	fVerseView->SetDoesUndo(false);
+	/*fVerseView->SetDoesUndo(false);
 	fVerseView->MakeFocus(true);
 	fVerseView->MakeEditable(false);
 	fVerseView->SetStylable(true);
-	fVerseView->SetWordWrap(true);
+	fVerseView->SetWordWrap(true);*/
 
 	copyitem->SetTarget(fVerseView);
 	selectallitem->SetTarget(fVerseView);
@@ -311,9 +321,11 @@ void SGMainWindow::BuildGUI(void)
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(fMenuBar, B_USE_DEFAULT_SPACING)
 		.Add(toolBar)
-		.AddSplit(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
-			.Add(fScrollView)
-		.End()
+		.Add(fScrollView)
+		.SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNLIMITED))
+		/*.AddSplit(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
+			
+		.End()*/
 	.End();
 }
 
@@ -323,16 +335,22 @@ void SGMainWindow::InsertVerseNumber(int verse)
 	BString string;
 	string << " " << verse << " ";
 	
-	BFont boldfont(be_bold_font);
+	/*BFont boldfont(be_bold_font);
 	boldfont.SetSize(fFontSize);
 	fVerseView->SetFontAndColor(&boldfont, B_FONT_ALL, &BLUE);
 	fVerseView->Insert(string.String());
-	fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL, &BLACK);
+	fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL, &BLACK);*/
 }
 
 
 void SGMainWindow::InsertChapter(void)
 {
+	TextDocumentRef document(new TextDocument(), true);	
+	float fontSize = fVerseStyle->Font().Size();	
+	ParagraphStyle paragraphStyle;
+	paragraphStyle.SetJustify(true);
+	Paragraph paragraph;
+	
 	BString oldtxt("1"), newtxt("2");
 	BString currentbook(fBookMenu->FindMarked()->Label());
 	int32	highlightStart = 0;
@@ -341,7 +359,13 @@ void SGMainWindow::InsertChapter(void)
 	uint16 versecount = VersesInChapter(currentbook.String(),fCurrentChapter);
 	if (fCurrentModule == NULL)
 	{
-		fVerseView->Insert(B_TRANSLATE("No Modules installed\n\n Please use ScriptureGuideManager to download the books you want."));
+		paragraph = Paragraph(paragraphStyle);
+		paragraph.Append(TextSpan(
+				B_TRANSLATE("No Modules installed\n\n \
+				Please use ScriptureGuideManager to download the books you want."),
+				*fVerseStyle));
+		document->Append(paragraph);
+		fVerseView->SetTextDocument(document);
 		be_roster->Launch("application/x-vnd.wgp.ScriptureGuideManager");
 		return;
 	}
@@ -354,13 +378,20 @@ void SGMainWindow::InsertChapter(void)
 		{
 			// this condition will only happen if the module is only one particular
 			// testament.
-			fVerseView->Insert(B_TRANSLATE("This module does not have this section."));
+			paragraph = Paragraph(paragraphStyle);
+			paragraph.Append(TextSpan(
+							B_TRANSLATE("This module does not have this section."),
+							*fVerseStyle));
+			document->Append(paragraph);
+			fVerseView->SetTextDocument(document);
 			return;
 		}
 		if ((fCurrentVerseEnd != 0) && (fCurrentVerseEnd < fCurrentVerse))
 			fCurrentVerseEnd = fCurrentVerse;
 		for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
 		{
+			paragraph = Paragraph(paragraphStyle);
+
 			// Get the verse for processing
 			text.SetTo(fCurrentModule->GetVerse(currentbook.String(),
 						fCurrentChapter, currentverse));
@@ -368,8 +399,10 @@ void SGMainWindow::InsertChapter(void)
 			if (text.CountChars() < 1)
 				continue;
 			
+			/**ToDo
 			if ((fCurrentVerse!=0) && (fCurrentVerse == currentverse))
 				fVerseView->GetSelection(&highlightStart,&highlightStart);
+			*/
 			// Remove <P> tags and 0xc2 0xb6 sequences to carriage returns. 
 			// The crazy hex sequence is actually the UTF-8 encoding for the 
 			// paragraph symbol. If we convert them to \n's, output looks funky
@@ -381,16 +414,23 @@ void SGMainWindow::InsertChapter(void)
 				text += "\n";
 			
 			if (fShowVerseNumbers)
-				InsertVerseNumber(currentverse);
-			fVerseView->Insert(text.String());
-			if ((fCurrentVerseEnd!=0) && (fCurrentVerseEnd == currentverse))
-				fVerseView->GetSelection(&highlightEnd,&highlightEnd);
-
+			{
+				BString string;
+				string << " " << currentverse << " ";
+				paragraph.Append(TextSpan(string, *fNumberStyle));
+			}
+			paragraph.Append(TextSpan(text.String(),*fVerseStyle));
+/*			if ((fCurrentVerseEnd!=0) && (fCurrentVerseEnd == currentverse))
+/				fVerseView->GetSelection(&highlightEnd,&highlightEnd);
+*/
+			document->Append(paragraph);
 		}
 	} else
 	{
 		for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
 		{
+			paragraph = Paragraph(paragraphStyle);
+
 			// for commentaries, avoid doubled output
 			oldtxt.SetTo(newtxt);
 			newtxt.SetTo(fCurrentModule->GetVerse(currentbook.String(),
@@ -398,7 +438,11 @@ void SGMainWindow::InsertChapter(void)
 			if (oldtxt != newtxt && newtxt.CountChars() > 0)
 			{
 				if (fShowVerseNumbers)
-					InsertVerseNumber(currentverse);
+				{
+					BString string;
+					string << " " << currentverse << " ";
+					paragraph.Append(TextSpan(string, *fNumberStyle));
+				}
 				
 				// Remove <P> tags and 0xc2 0xb6 sequences to carriage returns. 
 				// The crazy hex sequence is actually the UTF-8 encoding for 
@@ -407,21 +451,28 @@ void SGMainWindow::InsertChapter(void)
 				newtxt.RemoveAll("\xc2\xb6 ");
 				newtxt.RemoveAll("<P> ");
 				
-				fVerseView->Insert(newtxt.String());
-				
 				// add an extra line break after each verse to make better readability
-				fVerseView->Insert("\n");
-
+				newtxt<<"\n";
 				if (fIsLineBreak)
-					fVerseView->Insert("\n");
+					newtxt << "\n";
+				paragraph.Append(TextSpan(newtxt,*fVerseStyle));
+
 			}
+			document->Append(paragraph);
 		}
 	}
+	/**ToDo
 	if (fCurrentVerseEnd != 0)
 		fVerseView->Select(highlightStart, highlightEnd);
 	else
 		fVerseView->Select(highlightStart, highlightStart);
-	fVerseView->ScrollToSelection();
+	*/
+	fVerseView->SetTextDocument(document);
+	TextEditorRef textEditor(new TextEditor(), true);
+	textEditor->SetEditingEnabled(false);
+	fVerseView->SetTextEditor(textEditor);
+
+	//fVerseView->ScrollToSelection();
 }
 
 
@@ -578,9 +629,12 @@ bool SGMainWindow::NeedsLineBreaks(void)
 // the window is resized, ajust the fVerseView and the toolbar
 void SGMainWindow::FrameResized(float width, float height) 
 {
+	/**ToDo
 	BRect textrect = fVerseView->TextRect();
 	textrect.right = textrect.left + (width - B_V_SCROLL_BAR_WIDTH - 3.0);
 	fVerseView->SetTextRect(textrect);
+	*/
+	BWindow::FrameResized(width,height);
 }
 
 
@@ -622,7 +676,7 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 				
 				fCurrentChapter = 1;
 
-				fVerseView->Delete(0, fVerseView->TextLength());
+				//fVerseView->Delete(0, fVerseView->TextLength());
 				InsertChapter();
 				
 				fChapterBox->SetText("1");
@@ -647,7 +701,7 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 				
 				fCurrentChapter = 1;
 
-				fVerseView->Delete(0, fVerseView->TextLength());
+			//	fVerseView->Delete(0, fVerseView->TextLength());
 				InsertChapter();
 				
 				fChapterBox->SetText("1");
@@ -660,7 +714,7 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fCurrentChapter = 1;
 			fCurrentVerse = 1;
 
-			fVerseView->Delete(0, fVerseView->TextLength());
+			//fVerseView->Delete(0, fVerseView->TextLength());
 			InsertChapter();
 			fChapterBox->SetText("1");
 			fVerseBox->SetText("1");
@@ -702,8 +756,8 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		{
 			fShowVerseNumbers = (fShowVerseNumbers) ? false : true;
 			fShowVerseNumItem->SetMarked(fShowVerseNumbers);
-			fVerseView->Delete(0, fVerseView->TextLength());
-			fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL,&BLACK);
+		//	fVerseView->Delete(0, fVerseView->TextLength());
+		//	fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL,&BLACK);
 			InsertChapter();
 			break;
 		}
@@ -809,8 +863,8 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fDisplayFont.SetSize(size);
 			fDisplayFont.SetFamilyAndStyle(family.String(),style.String());
 			
-			fVerseView->Delete(0, fVerseView->TextLength());
-			fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL, &BLACK);
+//			fVerseView->Delete(0, fVerseView->TextLength());
+//			fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL, &BLACK);
 			InsertChapter();
 			fVerseView->MakeFocus();
 			break;
@@ -923,7 +977,7 @@ void SGMainWindow::SetModule(const TextType &module, const int32 &index)
 	title << fCurrentModule->FullName();
 	SetTitle(title.String());
 	
-	fVerseView->Delete(0, fVerseView->TextLength());
+//	fVerseView->Delete(0, fVerseView->TextLength());
 	
 	LoadPrefsForModule();
 	
@@ -935,7 +989,7 @@ void SGMainWindow::SetModule(const TextType &module, const int32 &index)
 		fCurrentFont = &fRomanFont;
 	
 	fCurrentFont->SetSize(fFontSize);
-	fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL, &BLACK);
+//	fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL, &BLACK);
 	
 	BString chapterString;
 	chapterString << fCurrentChapter;
@@ -1019,7 +1073,7 @@ void SGMainWindow::SetChapter(const int16 &chapter)
 		fCurrentChapter = chapter;
 	}
 	
-	fVerseView->Delete(0, fVerseView->TextLength());
+//	fVerseView->Delete(0, fVerseView->TextLength());
 	InsertChapter();
 	
 	BString cText;
@@ -1035,7 +1089,7 @@ void SGMainWindow::SetChapter(const int16 &chapter)
 void SGMainWindow::SetVerse(const int16 &verse)
 {
 	fCurrentVerse = verse;
-	fVerseView->Delete(0, fVerseView->TextLength());
+//	fVerseView->Delete(0, fVerseView->TextLength());
 	// ToDo make a better implemenation since now we redraw everything...
 	// just to scroll to the right verse..
 	InsertChapter();

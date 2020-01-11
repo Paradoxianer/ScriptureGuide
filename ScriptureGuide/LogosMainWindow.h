@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "SwordBackend.h"
+#include "TextDocumentView.h"
 
 class FontPanel;
 class SGModule;
@@ -57,48 +58,51 @@ private:
 	void SetChapter(const int16 &chapter);
 	void SetVerse(const int16 &verse);
 
-	BMenuBar		*fMenuBar;
+	BMenuBar			*fMenuBar;
 	
-	BMenuField		*fModuleField;
+	BMenuField			*fModuleField;
 	
-	BMenuItem		*fShowParallelItem,
-					*fShowVerseNumItem,
-					*fShowParallelContextItem;
+	BMenuItem			*fShowParallelItem,
+						*fShowVerseNumItem,
+						*fShowParallelContextItem;
 
-	BMenu			*fBookMenu,
-					*fBibleMenu,
-					*fCommentaryMenu,
-					*fLexiconMenu,
-					*fGeneralMenu;
+	BMenu				*fBookMenu,
+						*fBibleMenu,
+						*fCommentaryMenu,
+						*fLexiconMenu,
+						*fGeneralMenu;
 	
-	BTextControl	*fChapterBox;
-	BTextControl	*fVerseBox;
+	BTextControl		*fChapterBox;
+	BTextControl		*fVerseBox;
 
-	BButton			*fNoteButton;
+	BButton				*fNoteButton;
 	
-	BTextView		*fVerseView;
-	BScrollView		*fScrollView;
+	TextDocumentView	*fVerseView;
+	CharacterStyle		*fVerseStyle;
+	CharacterStyle		*fNumberStyle;
+
+	BScrollView			*fScrollView;
 	
-	FontPanel		*fFontPanel;
+	FontPanel			*fFontPanel;
 	
 	
-	SwordBackend	*fModManager;
-	SGModule		*fCurrentModule;
-	uint16			fCurrentChapter;
-	uint16			fCurrentVerse;
-	uint16			fCurrentVerseEnd;	
+	SwordBackend		*fModManager;
+	SGModule			*fCurrentModule;
+	uint16				fCurrentChapter;
+	uint16				fCurrentVerse;
+	uint16				fCurrentVerseEnd;	
 	
-	int16			fFontSize;
-	BFont			*fCurrentFont;
-	BFont			fDisplayFont,
-					fGreekFont,
-					fHebrewFont,
-					fRomanFont;
+	int16				fFontSize;
+	BFont				*fCurrentFont;
+	BFont				fDisplayFont,
+						fGreekFont,
+						fHebrewFont,
+						fRomanFont;
 	
-	bool			fIsLineBreak,
-					fShowVerseNumbers;
+	bool				fIsLineBreak,
+						fShowVerseNumbers;
 	
-	BMessenger		*fFindMessenger;
+	BMessenger			*fFindMessenger;
 };
 
 #endif
