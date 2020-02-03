@@ -55,7 +55,8 @@ SRCS = \
 	 textview/TextSelection.cpp\
 	 textview/TextSpan.cpp\
 	 textview/TextView.cpp\
-	 textview/UndoableEditListener.cpp
+	 textview/UndoableEditListener.cpp \
+	 textview_support/support.cpp
 
 		
 #	Specify the resource definition files to use. Full or relative paths can be
