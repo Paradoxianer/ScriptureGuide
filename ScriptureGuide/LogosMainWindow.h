@@ -71,6 +71,8 @@ private:
 						*fCommentaryMenu,
 						*fLexiconMenu,
 						*fGeneralMenu;
+
+	BTextControl		*fKeyAndFind;
 	
 	BTextControl		*fChapterBox;
 	BTextControl		*fVerseBox;

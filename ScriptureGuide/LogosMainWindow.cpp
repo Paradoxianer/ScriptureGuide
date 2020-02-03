@@ -28,6 +28,9 @@
 #include <stdlib.h>
 #include <iostream>
 
+
+#include <versekey.h>
+
 #include "constants.h"
 
 #include "FontPanel.h"
@@ -35,6 +38,8 @@
 #include "LogosSearchWindow.h"
 #include "ParagraphStyle.h"
 #include "Preferences.h"
+
+using namespace sword;
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "MainWindow"
@@ -280,6 +285,7 @@ void SGMainWindow::BuildGUI(void)
 									new BMessage(SELECT_CHAPTER));
 	fVerseBox = new BTextControl("verse_choice", B_TRANSLATE("Verse"), NULL,
 									new BMessage(SELECT_VERSE));
+	fKeyAndFind	= new BTextControl("key_and_find", B_TRANSLATE("->"),NULL, new BMessage(FIND_OR_KEY));
 	BTextView* verseView = fVerseBox->TextView();
 	BTextView* chapterView = fChapterBox->TextView();
 	
@@ -301,20 +307,16 @@ void SGMainWindow::BuildGUI(void)
 	fScrollView = new BScrollView("scroll_view", fVerseView,
 				false, true, B_NO_BORDER);
 	
-	/*fVerseView->SetDoesUndo(false);
-	fVerseView->MakeFocus(true);
-	fVerseView->MakeEditable(false);
-	fVerseView->SetStylable(true);
-	fVerseView->SetWordWrap(true);*/
 
 	copyitem->SetTarget(fVerseView);
 	selectallitem->SetTarget(fVerseView);
 	
 	BToolBar *toolBar = new BToolBar();
 	toolBar->AddView(fModuleField);
-	toolBar->AddView(bookfield);
-	toolBar->AddView(fChapterBox);
-	toolBar->AddView(fVerseBox);
+	//toolBar->AddView(bookfield);
+	//toolBar->AddView(fChapterBox);
+	//toolBar->AddView(fVerseBox);
+	toolBar->AddView(fKeyAndFind);
 	toolBar->AddGlue();
 	toolBar->AddView(fNoteButton);
 	
@@ -323,9 +325,6 @@ void SGMainWindow::BuildGUI(void)
 		.Add(toolBar)
 		.Add(fScrollView)
 		.SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNLIMITED))
-		/*.AddSplit(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
-			
-		.End()*/
 	.End();
 }
 
@@ -720,6 +719,17 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fVerseBox->SetText("1");
 
 			fVerseView->MakeFocus();
+			break;
+		}
+		case FIND_OR_KEY:
+		{
+			BLanguage language;
+			BLocale::Default()->GetLanguage(&language);
+			VerseKey *testParse = new VerseKey();
+			testParse->setLocale(language.Code());
+			testParse->setText(fKeyAndFind->Text());
+			printf("Found Key: %s with language %s \n",testParse->getText(), testParse->getLocale());
+			printf("ERROR while parsing the Input %s\n", testParse->getBookAbbrev());
 			break;
 		}
 		case NEXT_CHAPTER:

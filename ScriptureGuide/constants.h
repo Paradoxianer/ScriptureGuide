@@ -68,6 +68,8 @@ const uint32 SELECT_CHAPTER				= 'STch';
 const uint32 SELECT_VERSE				= 'STve';
 const uint32 SELECT_FONT				= 'STfn';
 
+const uint32 FIND_OR_KEY				= 'ForK';
+
 const uint32 NEXT_BOOK					= 'STnb';
 const uint32 PREV_BOOK					= 'STpb';
 const uint32 NEXT_CHAPTER				= 'STnc';
