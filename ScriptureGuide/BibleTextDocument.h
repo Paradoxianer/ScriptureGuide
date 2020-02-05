@@ -5,13 +5,22 @@
 #ifndef BIBLE_TEXT_DOCUMENT_H
 #define BIBLE_TEXT_DOCUMENT_H
 
+#include "Paragraph.h"
+#include "BibleLayout.h"
+#include "TextDocument.h"
+
+#include <versekey.h>
+#include <swmodule.h>
+
+#include <map>
 
 #include <SupportDefs.h>
 
 
-class BibleTextDocument {
+class BibleTextDocument : public TextDocument {
 public:
-
+	/**ToDo implement LayoutMessenger to inform all others about layouting
+	*/
 						BibleTextDocument(char iKey, char *moduleName);
 
 	const char*			GetKey();
@@ -43,6 +52,8 @@ public:
 	
 	VerseKey&			KeyAt(int32 index);
 	
+	Paragraph&			ParagraphFor(SWKey key);	
+	
 	BibleVerseLayout&	ParagraphStyleFor(SWKey key);
 
 protected:
@@ -51,8 +62,14 @@ protected:
 private:
 	SGModule			*module;
 	
-	map<VerseKey,BibleVerseLayout>
-						*verseLayout;
+	map<VerseKey* ,Paragraph*>
+						*verseParagraph
+						
+	CharacterStyle		*fVerseStyle;
+	CharacterStyle		*fNumberStyle;
+;
+	
+	BLanguage			language;
 
 };
 
