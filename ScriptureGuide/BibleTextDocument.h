@@ -23,7 +23,7 @@ public:
 	status_t			SetBook(const char *book);	
 	status_t			SetChapter(int ichapter);
 	status_t			SetVerse(int iverse);
-	status_t			SetKey();
+	status_t			SetKey(const char iKey);
 	
 	status_t			NextBook();
 	status_t			NextChapter();
@@ -50,7 +50,9 @@ protected:
 	
 private:
 	SGModule			*module;
-	SWKey				*key;
+	
+	map<VerseKey,BibleVerseLayout>
+						*verseLayout;
 
 };
 
