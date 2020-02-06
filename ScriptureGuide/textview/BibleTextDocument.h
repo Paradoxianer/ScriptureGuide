@@ -6,15 +6,22 @@
 #define BIBLE_TEXT_DOCUMENT_H
 
 #include "Paragraph.h"
-#include "BibleLayout.h"
+#include "ParagraphStyle.h"
+#include "BibleVerseLayout.h"
 #include "TextDocument.h"
 
+#include <Language.h>
+
 #include <versekey.h>
+#include <swkey.h>
 #include <swmodule.h>
 
 #include <map>
 
 #include <SupportDefs.h>
+
+using namespace sword;
+using namespace std;
 
 
 class BibleTextDocument : public TextDocument {
@@ -29,10 +36,10 @@ public:
 	int					GetChapter() const;
 	int					GetVerse() const;
 	
-	status_t			SetBook(const char *book);	
+	status_t			SetBook(char book);	
 	status_t			SetChapter(int ichapter);
 	status_t			SetVerse(int iverse);
-	status_t			SetKey(const char iKey);
+	status_t			SetKey(const char *iKey);
 	
 	status_t			NextBook();
 	status_t			NextChapter();
@@ -47,29 +54,28 @@ public:
 	
 	const char*			VerseForSelection();
 	
-	status_t			SetModule(SGModule* mod);
- 	SGModule*			CurrentModule(void);
+	status_t			SetModule(SWModule* mod);
+ 	SWModule*			CurrentModule(void);
 	
 	VerseKey&			KeyAt(int32 index);
 	
 	Paragraph&			ParagraphFor(SWKey key);	
 	
-	BibleVerseLayout&	ParagraphStyleFor(SWKey key);
+	const ParagraphStyle&		ParagraphStyleFor(SWKey key);
 
 protected:
 	void				_UpdateBibleText();
 	
 private:
-	SGModule			*module;
-	
-	map<VerseKey* ,Paragraph*>
-						*verseParagraph
+	SWModule			*fModule;
 						
 	CharacterStyle		*fVerseStyle;
 	CharacterStyle		*fNumberStyle;
-;
-	
+
 	BLanguage			language;
+	
+	bool				fIsLineBreak;
+	bool				fShowVerseNumbers;
 
 };
 

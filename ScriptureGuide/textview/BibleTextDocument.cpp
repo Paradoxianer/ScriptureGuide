@@ -3,8 +3,20 @@
  * All rights reserved. Distributed under the terms of the MIT license.
  */
 
+#include <Catalog.h>
+#include <Locale.h>
 
+#include <versekey.h>
+
+#include "constants.h"
 #include "BibleTextDocument.h"
+
+using namespace sword;
+using namespace std;
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "BibleTextDocument"
+
 
 BibleTextDocument::BibleTextDocument(char iKey, char *moduleName) 
 	: TextDocument()
@@ -15,16 +27,16 @@ BibleTextDocument::BibleTextDocument(char iKey, char *moduleName)
 	fNumberStyle->SetForegroundColor(BLUE);
 	fNumberStyle->SetBold(true);
 	
-	module	= new SWModule(moduleName);
-	module->addRenderFilter(new GBFPlain());
-	const char *error = module->SetKey(iKey);
-	printf("ERROR setting Key %s", error);
+	fModule	= NULL;
+	//module->addRenderFilter(new GBFPlain());
+	//const char *error = module->SetKey(iKey);
+	//printf("ERROR setting Key %s", error);
 }
 
 
-char* BibleTextDocument::GetKey()
+const char* BibleTextDocument::GetKey() 
 {
-	module->getKeyText();
+	return fModule->getKeyText();
 }
 
 
@@ -35,43 +47,43 @@ const char* BibleTextDocument::GetTestament() const
 
 const char* BibleTextDocument::GetBook() const
 {
-	((VerseKey*)module->getKey())->GetBook();
+	((VerseKey*)fModule->getKey())->getBook();
 }
 
 
 int BibleTextDocument::GetChapter() const
 {
-	((VerseKey*)module->getKey())->GetChapter();
+	((VerseKey*)fModule->getKey())->getChapter();
 }
 
 
 int BibleTextDocument::GetVerse() const
 {
-	((VerseKey*)module->getKey())->GetVerse();
+	((VerseKey*)fModule->getKey())->getVerse();
 }
 
 
-status_t BibleTextDocument::SetBook(const char *book)
+status_t BibleTextDocument::SetBook(char book)
 {
-	((VerseKey*)module->getKey())->SetBook(book);
+	((VerseKey*)fModule->getKey())->setBook(book);
 }
 
 
 status_t BibleTextDocument::SetChapter(int iChapter)
 {
-	((VerseKey*)module->getKey())->SetChapter(iChapter);
+	((VerseKey*)fModule->getKey())->setChapter(iChapter);
 }
 
 
 status_t BibleTextDocument::SetVerse(int iVerse)
 {
-	((VerseKey*)module->getKey())->SetVerse(iVerse);
+	((VerseKey*)fModule->getKey())->setVerse(iVerse);
 }
 
 
-status_t BibleTextDocument::SetKey(const char iKey)
+status_t BibleTextDocument::SetKey(const char* iKey)
 {
-	module->SetKey(new VerseKey(iKey));
+	fModule->setKey(new VerseKey(iKey));
 }
 
 
@@ -83,7 +95,7 @@ status_t BibleTextDocument::NextBook()
 
 status_t BibleTextDocument::NextChapter()
 {
-	module->increment();
+	fModule->increment();
 	_UpdateBibleText();
 }
 
@@ -95,7 +107,7 @@ status_t BibleTextDocument::NextVerse()
 
 status_t BibleTextDocument::PrevBook()
 {
-	module->decrement();
+	fModule->decrement();
 	_UpdateBibleText();
 }
 
@@ -126,17 +138,17 @@ const char* BibleTextDocument::VerseForSelection()
 }
 
 
-status_t BibleTextDocument::SetModule(SGModule* mod)
+status_t BibleTextDocument::SetModule(SWModule* mod)
 {
-	VerseKey key = ((VerseKey *)module->GetKey());
-	module=mod;
-	module->SetKey(key);
+	VerseKey key = ((VerseKey *)fModule->getKey());
+	fModule=mod;
+	fModule->setKey(key);
 }
 
 
-SGModule* BibleTextDocument::CurrentModule(void)
+SWModule* BibleTextDocument::CurrentModule(void)
 {
-	return module;
+	return fModule;
 }
 
 
@@ -144,76 +156,65 @@ VerseKey& BibleTextDocument::KeyAt(int32 index)
 {
 }
 
+
 Paragraph& BibleTextDocument::ParagraphFor(SWKey key)
 {
-	return verseParagraph[key];
 }
 
-BibleVerseLayout& BibleTextDocument::ParagraphStyleFor(SWKey key)
+
+const ParagraphStyle& BibleTextDocument::ParagraphStyleFor(SWKey key)
 {
-	return (BibleVerseLayout *)ParagraphFor(key)->Style();
-	
+	return ParagraphFor(key).Style();
 }
 
 
 void BibleTextDocument::_UpdateBibleText()
 {
-	BibleVerseStyle bibleVerseStyle;
+	ParagraphStyle bibleVerseStyle;
 	bibleVerseStyle.SetJustify(true);
 	Paragraph paragraph;
 	
 	BString oldtxt("1"), newtxt("2");
-	BString currentbook(fBookMenu->FindMarked()->Label());
+	BString currentbook("Matthäus");
 	int32	highlightStart = 0;
 	int32	highlightEnd = 0;
-	module->getKey()
-	uint16 versecount = key->getVerseMax();
-	if (fCurrentModule == NULL)
+	VerseKey key = fModule->getKey();
+	uint16 versecount = key.getVerseMax();
+	if (fModule == NULL)
 	{
-		paragraph = Paragraph(paragraphStyle);
+		paragraph = Paragraph(bibleVerseStyle);
 		paragraph.Append(TextSpan(
 				B_TRANSLATE("No Modules installed\n\n \
 				Please use ScriptureGuideManager to download the books you want."),
 				*fVerseStyle));
-		document->Append(paragraph);
-		fVerseView->SetTextDocument(document);
-		be_roster->Launch("application/x-vnd.wgp.ScriptureGuideManager");
+		Append(paragraph);
 		return;
 	}
-	if (fCurrentModule->Type() == TEXT_BIBLE) 
+	if (strcmp(fModule->getType(), "Biblical Texts")==0) 
 	{
-		BString text(fCurrentModule->GetVerse(currentbook.String(),
-			fCurrentChapter, 1));
+		BString text(fModule->renderText());
 
 		if (text.CountChars()<1)
 		{
 			// this condition will only happen if the module is only one particular
 			// testament.
-			paragraph = Paragraph(paragraphStyle);
+			paragraph = Paragraph(bibleVerseStyle);
 			paragraph.Append(TextSpan(
 							B_TRANSLATE("This module does not have this section."),
 							*fVerseStyle));
-			document->Append(paragraph);
-			fVerseView->SetTextDocument(document);
+			Append(paragraph);
 			return;
 		}
-		if ((fCurrentVerseEnd != 0) && (fCurrentVerseEnd < fCurrentVerse))
-			fCurrentVerseEnd = fCurrentVerse;
 		for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
 		{
-			paragraph = Paragraph(paragraphStyle);
+			paragraph = Paragraph(bibleVerseStyle);
 
 			// Get the verse for processing
-			text.SetTo(fCurrentModule->GetVerse(currentbook.String(),
-						fCurrentChapter, currentverse));
+			text.SetTo(fModule->renderText());
 			
 			if (text.CountChars() < 1)
 				continue;
 			
-			/**ToDo
-			if ((fCurrentVerse!=0) && (fCurrentVerse == currentverse))
-				fVerseView->GetSelection(&highlightStart,&highlightStart);
-			*/
 			// Remove <P> tags and 0xc2 0xb6 sequences to carriage returns. 
 			// The crazy hex sequence is actually the UTF-8 encoding for the 
 			// paragraph symbol. If we convert them to \n's, output looks funky
@@ -231,7 +232,8 @@ void BibleTextDocument::_UpdateBibleText()
 				paragraph.Append(TextSpan(string, *fNumberStyle));
 			}
 			paragraph.Append(TextSpan(text.String(),*fVerseStyle));
-			document->Append(paragraph);
+			Append(paragraph);
 		}
+	}
 }
 
