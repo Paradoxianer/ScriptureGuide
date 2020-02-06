@@ -38,6 +38,7 @@ SRCS = \
 	 ResultListView.cpp  \
 	 Spinner.cpp  \
 	 SwordBackend.cpp  \
+	 textview/BibleTextDocument \
 	 textview/Bullet.cpp\
 	 textview/BulletData.cpp\
 	 textview/CharacterStyle.cpp\
