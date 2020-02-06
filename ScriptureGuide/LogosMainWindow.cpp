@@ -22,7 +22,6 @@
 #include <ToolBar.h>
 
 
-
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,7 +35,6 @@
 #include "FontPanel.h"
 #include "LogosApp.h"
 #include "LogosSearchWindow.h"
-#include "ParagraphStyle.h"
 #include "Preferences.h"
 
 using namespace sword;
@@ -345,6 +343,11 @@ void SGMainWindow::InsertVerseNumber(int verse)
 void SGMainWindow::InsertChapter(void)
 {
 	TextDocumentRef document(new TextDocument(), true);	
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+	VerseKey *key = new VerseKey();
+	key->setLocale(language.Code());
+	key->setText(fKeyAndFind->Text());
 	float fontSize = fVerseStyle->Font().Size();	
 	ParagraphStyle paragraphStyle;
 	paragraphStyle.SetJustify(true);
@@ -355,7 +358,7 @@ void SGMainWindow::InsertChapter(void)
 	int32	highlightStart = 0;
 	int32	highlightEnd = 0;
 	
-	uint16 versecount = VersesInChapter(currentbook.String(),fCurrentChapter);
+	uint16 versecount = key->getVerseMax();
 	if (fCurrentModule == NULL)
 	{
 		paragraph = Paragraph(paragraphStyle);
@@ -730,6 +733,8 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			testParse->setText(fKeyAndFind->Text());
 			printf("Found Key: %s with language %s \n",testParse->getText(), testParse->getLocale());
 			printf("ERROR while parsing the Input %s\n", testParse->getBookAbbrev());
+			InsertChapter();
+
 			break;
 		}
 		case NEXT_CHAPTER:
