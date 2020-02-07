@@ -4,8 +4,14 @@
  */
 
 #include <Catalog.h>
+#include <Debug.h>
 #include <Locale.h>
 
+#include <gbfplain.h>
+#include <gbfstrongs.h>
+#include <localemgr.h>
+#include <markupfiltmgr.h>
+#include <swmgr.h>
 #include <versekey.h>
 
 #include "constants.h"
@@ -17,20 +23,28 @@ using namespace std;
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "BibleTextDocument"
 
+#define CONFIGPATH MODULES_PATH
 
-BibleTextDocument::BibleTextDocument(char iKey, char *moduleName) 
-	: TextDocument()
+
+BibleTextDocument::BibleTextDocument(const char *moduleName, const char* iKey) 
+	: TextDocument(),
+	fIsLineBreak(false),
+	fShowVerseNumbers(true)
 {
+	PRINT(("key %s module %s\n", iKey, moduleName));
 	BLocale::Default()->GetLanguage(&language);
 	fVerseStyle = new CharacterStyle();
 	fNumberStyle = new CharacterStyle();
 	fNumberStyle->SetForegroundColor(BLUE);
 	fNumberStyle->SetBold(true);
-	
-	fModule	= NULL;
-	//module->addRenderFilter(new GBFPlain());
-	//const char *error = module->SetKey(iKey);
-	//printf("ERROR setting Key %s", error);
+	fManager = new SWMgr(CONFIGPATH, true, new MarkupFilterMgr(FMT_GBF, ENC_UTF8));
+	fModule	= fManager->getModule(moduleName);
+	fModule->addRenderFilter(new GBFPlain());
+	VerseKey key = new VerseKey();
+	key.setLocale(language.Code());
+	key.setText(iKey);
+	const char error = fModule->SetKey(key);
+	printf("ERROR setting Key %c\n", error);
 }
 
 
@@ -42,48 +56,73 @@ const char* BibleTextDocument::GetKey()
 
 const char* BibleTextDocument::GetTestament() const
 {
+	//**ToDo implement
+	return NULL;
 }
 	
 
 const char* BibleTextDocument::GetBook() const
 {
-	((VerseKey*)fModule->getKey())->getBook();
+	return ((VerseKey*)fModule->getKey())->getBookName();
 }
 
 
 int BibleTextDocument::GetChapter() const
 {
-	((VerseKey*)fModule->getKey())->getChapter();
+	return ((VerseKey*)fModule->getKey())->getChapter();
 }
 
 
 int BibleTextDocument::GetVerse() const
 {
-	((VerseKey*)fModule->getKey())->getVerse();
+	return ((VerseKey*)fModule->getKey())->getVerse();
 }
 
 
-status_t BibleTextDocument::SetBook(char book)
+status_t BibleTextDocument::SetBook(char* book)
 {
-	((VerseKey*)fModule->getKey())->setBook(book);
+	((VerseKey*)fModule->getKey())->setBookName(book);
+	char error = fModule->popError();
+	printf("Error %c",error);
+	//ToDo return correct Error
+	_UpdateBibleText();
+	return B_OK;
+	
 }
 
 
 status_t BibleTextDocument::SetChapter(int iChapter)
 {
 	((VerseKey*)fModule->getKey())->setChapter(iChapter);
+	char error = fModule->popError();
+	printf("Error %c",error);
+	//ToDo return correct Error
+	_UpdateBibleText();
+	return B_OK;
 }
 
 
 status_t BibleTextDocument::SetVerse(int iVerse)
 {
 	((VerseKey*)fModule->getKey())->setVerse(iVerse);
+	char error = fModule->popError();
+	printf("Error %c",error);
+	//ToDo return correct Error
+	_UpdateBibleText();
+	return B_OK;
 }
 
 
 status_t BibleTextDocument::SetKey(const char* iKey)
 {
-	fModule->setKey(new VerseKey(iKey));
+	VerseKey key = new VerseKey();
+	key.setLocale(language.Code());
+	key.setText(iKey);
+	char error = fModule->setKey(key);
+	printf("Error %c",error);
+	//ToDo return correct Error
+	_UpdateBibleText();
+	return B_OK;
 }
 
 
@@ -102,6 +141,7 @@ status_t BibleTextDocument::NextChapter()
 
 status_t BibleTextDocument::NextVerse()
 {
+	_UpdateBibleText();
 }
 
 
@@ -120,6 +160,7 @@ status_t BibleTextDocument::PrevChapter()
 
 status_t BibleTextDocument::PrevVerse()
 {
+	_UpdateBibleText();
 }
 
 
@@ -170,15 +211,13 @@ const ParagraphStyle& BibleTextDocument::ParagraphStyleFor(SWKey key)
 
 void BibleTextDocument::_UpdateBibleText()
 {
+	Remove(0,Length());
 	ParagraphStyle bibleVerseStyle;
 	bibleVerseStyle.SetJustify(true);
 	Paragraph paragraph;
-	
-	BString oldtxt("1"), newtxt("2");
-	BString currentbook("Matthäus");
-	int32	highlightStart = 0;
-	int32	highlightEnd = 0;
 	VerseKey key = fModule->getKey();
+	VerseKey oldKey = fModule->getKey();
+
 	uint16 versecount = key.getVerseMax();
 	if (fModule == NULL)
 	{
@@ -192,6 +231,8 @@ void BibleTextDocument::_UpdateBibleText()
 	}
 	if (strcmp(fModule->getType(), "Biblical Texts")==0) 
 	{
+		key.setVerse(1);
+		fModule->setKey(key);
 		BString text(fModule->renderText());
 
 		if (text.CountChars()<1)
@@ -207,8 +248,9 @@ void BibleTextDocument::_UpdateBibleText()
 		}
 		for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
 		{
+			key.setVerse(currentverse);
+			fModule->setKey(key);
 			paragraph = Paragraph(bibleVerseStyle);
-
 			// Get the verse for processing
 			text.SetTo(fModule->renderText());
 			
@@ -235,5 +277,8 @@ void BibleTextDocument::_UpdateBibleText()
 			Append(paragraph);
 		}
 	}
+	fModule->setKey(oldKey);
+	//trigger update...
+	Insert(Length(),"");
 }
 

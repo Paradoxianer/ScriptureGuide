@@ -28,7 +28,7 @@ class BibleTextDocument : public TextDocument {
 public:
 	/**ToDo implement LayoutMessenger to inform all others about layouting
 	*/
-						BibleTextDocument(char iKey, char *moduleName);
+						BibleTextDocument(const char *moduleName,const char* iKey);
 
 	const char*			GetKey();
 	const char*			GetTestament() const;	
@@ -36,7 +36,7 @@ public:
 	int					GetChapter() const;
 	int					GetVerse() const;
 	
-	status_t			SetBook(char book);	
+	status_t			SetBook(char* book);	
 	status_t			SetChapter(int ichapter);
 	status_t			SetVerse(int iverse);
 	status_t			SetKey(const char *iKey);
@@ -67,6 +67,7 @@ protected:
 	void				_UpdateBibleText();
 	
 private:
+	SWMgr				*fManager;
 	SWModule			*fModule;
 						
 	CharacterStyle		*fVerseStyle;
