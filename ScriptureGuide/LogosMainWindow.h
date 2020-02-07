@@ -18,6 +18,7 @@
 
 #include "SwordBackend.h"
 #include "TextDocumentView.h"
+#include "BibleTextDocument.h"
 
 class FontPanel;
 class SGModule;
@@ -80,6 +81,7 @@ private:
 	BButton				*fNoteButton;
 	
 	TextDocumentView	*fVerseView;
+	BibleTextDocument	*fBibleText;
 	CharacterStyle		*fVerseStyle;
 	CharacterStyle		*fNumberStyle;
 

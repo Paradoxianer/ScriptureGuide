@@ -63,7 +63,6 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	fNumberStyle = new CharacterStyle();
 	fNumberStyle->SetForegroundColor(BLUE);
 	fNumberStyle->SetBold(true);
-	BuildGUI();
 	
 	// More voodoo hackerdom to work around a bug. :)
 	AddCommonFilter(new EndKeyFilter);
@@ -73,9 +72,10 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 		// TODO: fail
 		return;
 	}
+	fBibleText = new BibleTextDocument(module, key);
 	
-	SetModuleFromString(module);
-	if (!fCurrentModule)
+	//SetModuleFromString(module);
+	/*if (!fCurrentModule)
 	{
 		// It's possible for this call to fail, so we'll handle it as best we can. 
 		// Seeing how we managed to get this far, there has to be *some* kind 
@@ -118,10 +118,10 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	}
 	
 	// Load the preferences for the individual module
-	LoadPrefsForModule();
+	LoadPrefsForModule();*/
 	
 		
-	BMenuItem* item = fBookMenu->FindItem(BookFromKey(key));
+	/*BMenuItem* item = fBookMenu->FindItem(BookFromKey(key));
 	if (item)
 		item->SetMarked(true);
 	
@@ -131,7 +131,9 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 		fCurrentVerse = VerseFromKey(key);
 		SetChapter(fCurrentChapter);
 		SetVerse(fCurrentVerse);
-	}	
+	}*/
+	BuildGUI();
+
 	
 	fCurrentFont = &fDisplayFont;
 	
@@ -283,7 +285,10 @@ void SGMainWindow::BuildGUI(void)
 									new BMessage(SELECT_CHAPTER));
 	fVerseBox = new BTextControl("verse_choice", B_TRANSLATE("Verse"), NULL,
 									new BMessage(SELECT_VERSE));
-	fKeyAndFind	= new BTextControl("key_and_find", B_TRANSLATE("->"),NULL, new BMessage(FIND_OR_KEY));
+	if (fBibleText != NULL)
+		fKeyAndFind	= new BTextControl("key_and_find", B_TRANSLATE(" ->"),fBibleText->GetKey(), new BMessage(FIND_OR_KEY));
+	else
+		fKeyAndFind	= new BTextControl("key_and_find", B_TRANSLATE(" ->"),NULL, new BMessage(FIND_OR_KEY));
 	BTextView* verseView = fVerseBox->TextView();
 	BTextView* chapterView = fChapterBox->TextView();
 	
@@ -302,6 +307,8 @@ void SGMainWindow::BuildGUI(void)
 	textrect.OffsetTo(B_ORIGIN);
 	
 	fVerseView = new TextDocumentView("bible verse view");
+	if (fBibleText != NULL)
+		fVerseView->SetTextDocument(TextDocumentRef(fBibleText,true));
 	fScrollView = new BScrollView("scroll_view", fVerseView,
 				false, true, B_NO_BORDER);
 	
@@ -342,6 +349,7 @@ void SGMainWindow::InsertVerseNumber(int verse)
 
 void SGMainWindow::InsertChapter(void)
 {
+	/*
 	TextDocumentRef document(new TextDocument(), true);	
 	BLanguage language;
 	BLocale::Default()->GetLanguage(&language);
@@ -408,7 +416,7 @@ void SGMainWindow::InsertChapter(void)
 			// Remove <P> tags and 0xc2 0xb6 sequences to carriage returns. 
 			// The crazy hex sequence is actually the UTF-8 encoding for the 
 			// paragraph symbol. If we convert them to \n's, output looks funky
-			text.RemoveAll("\x0a\x0a");
+/*			text.RemoveAll("\x0a\x0a");
 			text.RemoveAll("\xc2\xb6 ");
 			text.RemoveAll("<P> ");
 			
@@ -425,7 +433,7 @@ void SGMainWindow::InsertChapter(void)
 /*			if ((fCurrentVerseEnd!=0) && (fCurrentVerseEnd == currentverse))
 /				fVerseView->GetSelection(&highlightEnd,&highlightEnd);
 */
-			document->Append(paragraph);
+/*			document->Append(paragraph);
 		}
 	} else
 	{
@@ -469,10 +477,10 @@ void SGMainWindow::InsertChapter(void)
 	else
 		fVerseView->Select(highlightStart, highlightStart);
 	*/
-	fVerseView->SetTextDocument(document);
+/*	fVerseView->SetTextDocument(document);
 	TextEditorRef textEditor(new TextEditor(), true);
 	textEditor->SetEditingEnabled(false);
-	fVerseView->SetTextEditor(textEditor);
+	fVerseView->SetTextEditor(textEditor);*/
 
 	//fVerseView->ScrollToSelection();
 }
@@ -726,15 +734,9 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		}
 		case FIND_OR_KEY:
 		{
-			BLanguage language;
-			BLocale::Default()->GetLanguage(&language);
-			VerseKey *testParse = new VerseKey();
-			testParse->setLocale(language.Code());
-			testParse->setText(fKeyAndFind->Text());
-			printf("Found Key: %s with language %s \n",testParse->getText(), testParse->getLocale());
-			printf("ERROR while parsing the Input %s\n", testParse->getBookAbbrev());
-			InsertChapter();
-
+			fBibleText->SetKey(fKeyAndFind->Text());
+			fVerseView->SetTextDocument(TextDocumentRef(fBibleText,true));
+			fVerseView->Invalidate();
 			break;
 		}
 		case NEXT_CHAPTER:
