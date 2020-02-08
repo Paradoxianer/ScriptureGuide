@@ -38,8 +38,7 @@ BibleTextDocument::BibleTextDocument(const char *moduleName, const char* iKey)
 	fNumberStyle->SetForegroundColor(BLUE);
 	fNumberStyle->SetBold(true);
 	fManager = new SWMgr(CONFIGPATH, true, new MarkupFilterMgr(FMT_GBF, ENC_UTF8));
-	fModule	= fManager->getModule(moduleName);
-	fModule->addRenderFilter(new GBFPlain());
+	SetModule(moduleName);
 	VerseKey key = new VerseKey();
 	key.setLocale(language.Code());
 	key.setText(iKey);
@@ -187,6 +186,15 @@ status_t BibleTextDocument::SetModule(SWModule* mod)
 }
 
 
+status_t BibleTextDocument::SetModule(const char* modulName)
+{
+	if (fModule)
+		VerseKey key = ((VerseKey *)fModule->getKey());
+	fModule	= fManager->getModule(modulName);
+	fModule->addRenderFilter(new GBFPlain());
+}
+
+
 SWModule* BibleTextDocument::CurrentModule(void)
 {
 	return fModule;
@@ -282,3 +290,13 @@ void BibleTextDocument::_UpdateBibleText()
 	Insert(Length(),"");
 }
 
+
+void  BibleTextDocument::SetShowVerseNumbers(bool showVerseNumbers)
+{
+	if (fShowVerseNumbers != showVerseNumbers)
+	{
+		fShowVerseNumbers=showVerseNumbers;
+		//trigger update...
+		Insert(Length(),"");
+	}
+};

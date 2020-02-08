@@ -55,11 +55,17 @@ public:
 	const char*			VerseForSelection();
 	
 	status_t			SetModule(SWModule* mod);
+	status_t			SetModule(const char* modulName);
  	SWModule*			CurrentModule(void);
 	
 	VerseKey&			KeyAt(int32 index);
 	
-	Paragraph&			ParagraphFor(SWKey key);	
+	Paragraph&			ParagraphFor(SWKey key);
+	
+	
+	void				SetShowVerseNumbers(bool showVerseNumber);
+	
+	bool				GetShowVersenumbers(){return fShowVerseNumbers;};
 	
 	const ParagraphStyle&		ParagraphStyleFor(SWKey key);
 
