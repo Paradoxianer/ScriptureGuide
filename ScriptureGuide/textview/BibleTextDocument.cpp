@@ -183,15 +183,28 @@ status_t BibleTextDocument::SetModule(SWModule* mod)
 	VerseKey key = ((VerseKey *)fModule->getKey());
 	fModule=mod;
 	fModule->setKey(key);
+	_UpdateBibleText();
 }
 
 
 status_t BibleTextDocument::SetModule(const char* modulName)
 {
+	
+	VerseKey	key;
+	bool		setKey=false;
 	if (fModule)
-		VerseKey key = ((VerseKey *)fModule->getKey());
+	{
+		key = ((VerseKey *)fModule->getKey());
+		setKey=true;
+	}
 	fModule	= fManager->getModule(modulName);
-	fModule->addRenderFilter(new GBFPlain());
+	if (fModule)
+	{
+		fModule->addRenderFilter(new GBFPlain());
+		if (setKey)
+			fModule->setKey(key);
+	}	
+	_UpdateBibleText();
 }
 
 
