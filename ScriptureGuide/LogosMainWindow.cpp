@@ -178,25 +178,24 @@ void SGMainWindow::BuildGUI(void)
 		BString modname = fModManager->BibleAt(i)->FullName();
 		
 		BMessage* biblemsg = new BMessage(SELECT_BIBLE);
-		biblemsg->AddInt32("index", i);
+		biblemsg->AddString("mod", fModManager->BibleAt(i)->Name());
 		fBibleMenu->AddItem(new BMenuItem(modname.String(),biblemsg));
 	}
 	modulemenu->AddItem(fBibleMenu);
-
 	count = fModManager->CountCommentaries();
 	
 	// Add Commentaries
 	fCommentaryMenu = new BMenu(B_TRANSLATE("Commentaries"));
 	for (int32 i = 0; i < count; i++)
 	{
-		BString modname = fModManager->CommentaryAt(i)->FullName();
+		BString modname = fModManager->CommentaryAt(i)->Name();
 		
 		BMessage* commmsg = new BMessage(SELECT_COMMENTARY);
-		commmsg->AddInt32("index",i);
+		commmsg->AddString("mod", modname.String());
 		fCommentaryMenu->AddItem(new BMenuItem(modname.String(),commmsg));
 	}
 	modulemenu->AddItem(fCommentaryMenu);
-	
+	modulemenu->SetLabelFromMarked(true);
 	// Add the toolbar view	
 	BBox* toolbar = new BBox("toolbar_view");
 	
@@ -422,15 +421,17 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 	{
 		case SELECT_BIBLE:
 		{
-			BMenuItem* item = fBibleMenu->FindMarked();
-			fBibleText->SetModule(item->Label());
+			BString *newMod = new BString();
+			msg->FindString("mod",newMod);
+			fBibleText->SetModule(newMod->String());
 			fVerseView->MakeFocus ();
 			break;
 		}
 		case SELECT_COMMENTARY:
 		{
-			fBibleText->SetModule(fCommentaryMenu->FindMarked()->Label());
-			fVerseView->MakeFocus ();
+			BString *newMod = new BString();
+			msg->FindString("mod",newMod);
+			fBibleText->SetModule(newMod->String());			fVerseView->MakeFocus ();
 			break;
 		}
 		
