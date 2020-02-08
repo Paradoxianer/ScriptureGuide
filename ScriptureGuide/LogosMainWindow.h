@@ -47,18 +47,13 @@ public:
 
 private:
 	void BuildGUI(void);
-	void InsertVerseNumber(int verse);
-	void InsertChapter(void);
+
+
 	void LoadPrefsForModule(void);
 	void SavePrefsForModule(void);
 	bool NeedsLineBreaks(void);
 	
-	void SetModule(const TextType &module, const int32 &index);
-	void SetModuleFromString(const char* name);
-	void SetBook(const char* name);	
-	void SetChapter(const int16 &chapter);
-	void SetVerse(const int16 &verse);
-
+	
 	BMenuBar			*fMenuBar;
 	
 	BMenuField			*fModuleField;
@@ -74,9 +69,6 @@ private:
 						*fGeneralMenu;
 
 	BTextControl		*fKeyAndFind;
-	
-	BTextControl		*fChapterBox;
-	BTextControl		*fVerseBox;
 
 	BButton				*fNoteButton;
 	
