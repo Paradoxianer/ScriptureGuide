@@ -1,19 +1,22 @@
 #ifndef SGMAINWINDOW_H
 #define SGMAINWINDOW_H
 
-#include <Window.h>
+
 #include <Font.h>
 #include <Menu.h>
 #include <MenuItem.h>
 #include <MenuField.h>
+#include <MessageFilter.h>
+#include <Messenger.h>
 #include <ScrollView.h>
 #include <TextControl.h>
 #include <TextView.h>
 #include <String.h>
-#include <MessageFilter.h>
-#include <Messenger.h>
-#include "SwordBackend.h"
+#include <Window.h>
+
 #include <vector>
+
+#include "SwordBackend.h"
 
 class FontPanel;
 class SGModule;
@@ -50,6 +53,7 @@ private:
 	
 	void SetModule(const TextType &module, const int32 &index);
 	void SetModuleFromString(const char* name);
+	void SetBook(const char* name);	
 	void SetChapter(const int16 &chapter);
 	void SetVerse(const int16 &verse);
 

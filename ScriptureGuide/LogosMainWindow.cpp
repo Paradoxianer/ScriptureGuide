@@ -4,8 +4,12 @@
 #include <Application.h>
 #include <AboutWindow.h>
 #include <Button.h>
+#include <Box.h>
 #include <Catalog.h>
+#include <Directory.h>
 #include <Entry.h>
+#include <File.h>
+#include <LayoutBuilder.h>
 #include <Locale.h>
 #include <MenuBar.h>
 #include <MenuItem.h>
@@ -15,11 +19,9 @@
 #include <PopUpMenu.h>
 #include <Roster.h>
 #include <String.h>
-#include <File.h>
-#include <Directory.h>
-#include <Box.h>
+#include <ToolBar.h>
 
-#include <LayoutBuilder.h>
+
 
 #include <string.h>
 #include <stdio.h>
@@ -298,17 +300,17 @@ void SGMainWindow::BuildGUI(void)
 	copyitem->SetTarget(fVerseView);
 	selectallitem->SetTarget(fVerseView);
 	
+	BToolBar *toolBar = new BToolBar();
+	toolBar->AddView(fModuleField);
+	toolBar->AddView(bookfield);
+	toolBar->AddView(fChapterBox);
+	toolBar->AddView(fVerseBox);
+	toolBar->AddGlue();
+	toolBar->AddView(fNoteButton);
+	
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(fMenuBar, B_USE_DEFAULT_SPACING)
-		.AddGroup(B_HORIZONTAL)
-			.SetInsets(B_USE_SMALL_SPACING, 0)
-			.Add(fModuleField)
-			.Add(bookfield)
-			.Add(fChapterBox, -1)
-			.Add(fVerseBox,-1)
-			.AddGlue()
-			.Add(fNoteButton)
-		.End()
+		.Add(toolBar)
 		.AddSplit(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
 			.Add(fScrollView)
 		.End()
@@ -340,6 +342,7 @@ void SGMainWindow::InsertChapter(void)
 	if (fCurrentModule == NULL)
 	{
 		fVerseView->Insert(B_TRANSLATE("No Modules installed\n\n Please use ScriptureGuideManager to download the books you want."));
+		be_roster->Launch("application/x-vnd.wgp.ScriptureGuideManager");
 		return;
 	}
 	if (fCurrentModule->Type() == TEXT_BIBLE) 
@@ -691,6 +694,7 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		}
 		case MENU_FILE_QUIT:
 		{
+			
 			PostMessage(B_QUIT_REQUESTED);
 			break;
 		}
@@ -817,6 +821,17 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			SetVerse(num);
 			break;
 		}
+		case SG_BIBLE:
+		{
+			BString key;
+			if (msg->FindString("key",&key) == B_OK)
+			{
+				SetBook(BookFromKey(key.String()));
+				SetChapter(ChapterFromKey(key.String()));
+				SetVerse(VerseFromKey(key.String()));
+			}
+			break;
+		}
 		default:
 		{
 			BWindow::MessageReceived(msg);
@@ -933,6 +948,24 @@ void SGMainWindow::SetModule(const TextType &module, const int32 &index)
 	InsertChapter();
 	fVerseView->MakeFocus();
 }
+
+void SGMainWindow::SetBook(const char* book)
+{
+	BMenuItem *bookItem=fBookMenu->FindItem(book);
+	if (bookItem != NULL)
+	{
+		BMenuItem *tmpItem = fBookMenu->FindMarked();
+		while (tmpItem != NULL)
+		{
+			tmpItem->SetMarked(false);
+			tmpItem = fBookMenu->FindMarked();
+		}
+		bookItem->SetMarked(true);
+	}
+	InsertChapter();
+	fVerseView->MakeFocus();
+}
+
 
 
 void SGMainWindow::SetChapter(const int16 &chapter)

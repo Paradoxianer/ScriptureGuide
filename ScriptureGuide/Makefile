@@ -29,24 +29,32 @@ APP_MIME_SIG = application/x-vnd.Scripture-Guide
 #	means this Makefile will not work correctly if two source files with the
 #	same name (source.c or source.cpp) are included from different directories.
 #	Also note that spaces in folder names do not work well with this Makefile.
-SRCS =	SwordBackend.cpp \
-		LogosMainWindow.cpp \
-		LogosSearchWindow.cpp \
-		LogosApp.cpp \
-		Preferences.cpp \
-		FontPanel.cpp \
-		Spinner.cpp
+SRCS = \
+	 FontPanel.cpp  \
+	 LogosApp.cpp  \
+	 LogosMainWindow.cpp  \
+	 LogosSearchWindow.cpp  \
+	 Preferences.cpp  \
+	 ResultListView.cpp  \
+	 Spinner.cpp  \
+	 SwordBackend.cpp  
+
 		
 #	Specify the resource definition files to use. Full or relative paths can be
 #	used.
-RDEFS = ScriptureGuide.rdef
+RDEFS = \
+	 ScriptureGuide.rdef  \
+
 
 #	Specify the resource files to use. Full or relative paths can be used.
 #	Both RDEFS and RSRCS can be utilized in the same Makefile.
-RSRCS = 
+RSRCS = \
+
 
 # End Pe/Eddie support.
 # @<-src@ 
+#%}
+
 #%}
 
 #	Specify libraries to link against.
@@ -61,8 +69,7 @@ RSRCS =
 #	- 	if your library does not follow the standard library naming scheme,
 #		you need to specify the path to the library and it's name.
 #		(e.g. for mylib.a, specify "mylib.a" or "path/mylib.a")
-LIBS = be $(STDCPPLIBS) sword z columnlistview localestub
-
+LIBS = be $(STDCPPLIBS) sword z columnlistview localestub shared
 #	Specify additional paths to directories following the standard libXXX.so
 #	or libXXX.a naming scheme. You can specify full paths or paths relative
 #	to the Makefile. The paths included are not parsed recursively, so
@@ -76,16 +83,20 @@ LIBPATHS =
 MACHINE=$(shell uname -m)
 ifeq ($(MACHINE), BePC)
 	SYSTEM_INCLUDE_PATHS =  /system/develop/headers/x86/sword \
-							/system/develop/headers/private/interface
+							/system/develop/headers/private/interface \
+							/boot/system/develop/headers/private/shared \
+							/boot/system/develop/headers/private/interface
 else
 	SYSTEM_INCLUDE_PATHS =  /system/develop/headers/sword \
-							/system/develop/headers/private/interface
+							/system/develop/headers/private/interface \
+							/boot/system/develop/headers/private/shared \
+							/boot/system/develop/headers/private/interface
 endif
 
 #	Additional paths paths to look for local headers. These use the form
 #	#include "header". Directories that contain the files in SRCS are
 #	automatically included.
-LOCAL_INCLUDE_PATHS = 
+LOCAL_INCLUDE_PATHS =  .
 
 #	Specify the level of optimization that you want. Specify either NONE (O0),
 #	SOME (O1), FULL (O2), or leave blank (for the default optimization level).
@@ -103,19 +114,19 @@ LOCALES = en de
 #	use. For example, setting DEFINES to "DEBUG=1" will cause the compiler
 #	option "-DDEBUG=1" to be used. Setting DEFINES to "DEBUG" would pass
 #	"-DDEBUG" on the compiler's command line.
-DEFINES = 
+DEFINES = DEBUG=1
 
 #	Specify the warning level. Either NONE (suppress all warnings),
 #	ALL (enable all warnings), or leave blank (enable default warnings).
-WARNINGS = 
+WARNINGS = ALL
 
 #	With image symbols, stack crawls in the debugger are meaningful.
 #	If set to "TRUE", symbols will be created.
-SYMBOLS := 
+SYMBOLS := TRUE
 
 #	Includes debug information, which allows the binary to be debugged easily.
 #	If set to "TRUE", debug info will be created.
-DEBUGGER := 
+DEBUGGER := TRUE
 
 #	Specify any additional compiler flags to be used.
 COMPILER_FLAGS = 
@@ -126,7 +137,7 @@ LINKER_FLAGS =
 #	Specify the version of this binary. Example:
 #		-app 3 4 0 d 0 -short 340 -long "340 "`echo -n -e '\302\251'`"1999 GNU GPL"
 #	This may also be specified in a resource.
-APP_VERSION :=  
+APP_VERSION := 
 
 #	(Only used when "TYPE" is "DRIVER"). Specify the desired driver install
 #	location in the /dev hierarchy. Example:
