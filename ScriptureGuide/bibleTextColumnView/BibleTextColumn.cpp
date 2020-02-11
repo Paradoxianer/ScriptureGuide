@@ -16,6 +16,7 @@
 
 #include "constants.h"
 #include "BibleTextColumn.h"
+#include "BibleTextField.h"
 
 using namespace sword;
 using namespace std;
@@ -49,6 +50,12 @@ void BibleTextColumn::DrawField(BField* field, BRect rect, BView* parent)
 
 int BibleTextColumn::CompareFields(BField* field1, BField* field2)
 {
+	const BibleTextField *first = dynamic_cast<const BibleTextField*>(field1);
+	const BibleTextField *second = dynamic_cast<const BibleTextField*>(field1);
+	if (first!=NULL & second!=NULL)
+		return first->Key() == second->Key();
+	else
+		return;
 }
 
 
@@ -59,6 +66,7 @@ float BibleTextColumn::GetPreferredWidth(BField* field, BView* parent) const
 
 bool BibleTextColumn::AcceptsField(const BField* field) const
 {
+	return static_cast<bool>(dynamic_cast<const BibleTextField*>(field));
 }
 
 
@@ -87,7 +95,7 @@ status_t BibleTextColumn::SetModule(SWModule* mod)
 	VerseKey key = ((VerseKey *)fModule->getKey());
 	fModule=mod;
 	fModule->setKey(key);
-	_UpdateBibleText();
+	
 }
 
 
@@ -108,7 +116,7 @@ status_t BibleTextColumn::SetModule(const char* modulName)
 		if (setKey)
 			fModule->setKey(key);
 	}	
-	_UpdateBibleText();
+	
 }
 
 
@@ -202,9 +210,7 @@ void BibleTextColumn::_UpdateBibleText()
 			Append(paragraph);
 		}
 	}
-	fModule->setKey(oldKey);
-	//trigger update...
-	Insert(Length(),"");
+	fModule->setKey(oldKey);	
 }
 
 
@@ -213,7 +219,5 @@ void  BibleTextColumn::SetShowVerseNumbers(bool showVerseNumbers)
 	if (fShowVerseNumbers != showVerseNumbers)
 	{
 		fShowVerseNumbers=showVerseNumbers;
-		//trigger update...
-		Insert(Length(),"");
 	}
 };

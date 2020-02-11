@@ -9,17 +9,18 @@
 #include <SupportDefs.h>
 
 
+#include <versekey.h>
+
 class BibleTextField{
 public:
 								BibleTextField(const char* key);
 
-			void				SetString(const char* string);
-			const char*			String() const;
-			void				SetClippedString(const char* string);
-			bool				HasClippedString() const;
-			const char*			ClippedString();
+			void				SetKey(VerseKey *key);
+			VerseKey			Key() const;	
 			void				SetWidth(float);
 			float				Width();
+			float				HeightForWidth();
+
 
 private:
 			VerseKey			key;
