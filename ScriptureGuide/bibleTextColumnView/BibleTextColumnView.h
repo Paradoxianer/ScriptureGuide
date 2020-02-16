@@ -11,11 +11,12 @@
 #include <listkey.h>
 #include <versekey.h>
 
+using namespace sword;
 
 
-class BibleTextColumnView : public ColumnListView {
+class BibleTextColumnView : public BColumnListView {
 public:
-						BibleTextColumnView(char *name, ListKey *listKey)
+						BibleTextColumnView(char *name, ListKey *listKey);
 	
 	// +++ Key navigations Methods
 	const char*			GetKey();
@@ -37,8 +38,12 @@ public:
 	status_t			PrevChapter();
 	status_t			PrevVerse();
 	
-	VerseKey&			KeyAt(int32 index);	
+	VerseKey&			KeyAt(int32 index);
+	const char*			VerseForSelection();
+	status_t			SelectVerse(int vStart, int vEnd);
 	// --- Key navigation Methods
+
+	void				Select(int start, int end);
 
 private:
 	ListKey				*fListKey;	

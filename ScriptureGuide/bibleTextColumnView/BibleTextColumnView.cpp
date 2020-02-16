@@ -4,15 +4,19 @@
  */
 
 
-#include "BibleTextColumnViewView.h"
+#include "BibleTextColumnView.h"
 
-BibleTextColumnView::BibleTextColumnView()
+BibleTextColumnView::BibleTextColumnView(char *name, ListKey *listKey)
+	: BColumnListView(name, 0,B_NO_BORDER, false),
+	fListKey(listKey)
 {
+
 }
 
 const char* BibleTextColumnView::GetKey() 
 {
-	return fModule->getKeyText();
+	//return fModule->getKeyText();
+	return NULL;
 }
 
 
@@ -25,27 +29,30 @@ const char* BibleTextColumnView::GetTestament() const
 
 const char* BibleTextColumnView::GetBook() const
 {
-	return ((VerseKey*)fModule->getKey())->getBookName();
+	//return ((VerseKey*)fModule->getKey())->getBookName();
+	return NULL;
 }
 
 
 int BibleTextColumnView::GetChapter() const
 {
-	return ((VerseKey*)fModule->getKey())->getChapter();
+	//return ((VerseKey*)fModule->getKey())->getChapter();
+	return NULL;
 }
 
 
 int BibleTextColumnView::GetVerse() const
 {
-	return ((VerseKey*)fModule->getKey())->getVerse();
+	//return ((VerseKey*)fModule->getKey())->getVerse();
+	return NULL;
 }
 
 
 status_t BibleTextColumnView::SetBook(char* book)
 {
-	((VerseKey*)fModule->getKey())->setBookName(book);
+	/*((VerseKey*)fModule->getKey())->setBookName(book);
 	char error = fModule->popError();
-	printf("Error %c\n",error);
+	printf("Error %c\n",error);*/
 	//ToDo return correct Error
 	;
 	return B_OK;
@@ -55,69 +62,73 @@ status_t BibleTextColumnView::SetBook(char* book)
 
 status_t BibleTextColumnView::SetChapter(int iChapter)
 {
-	((VerseKey*)fModule->getKey())->setChapter(iChapter);
+	/*((VerseKey*)fModule->getKey())->setChapter(iChapter);
 	char error = fModule->popError();
 	printf("Error %c\n",error);
 	//ToDo return correct Error
-	;
+	;*/
 	return B_OK;
 }
 
 
 status_t BibleTextColumnView::SetVerse(int iVerse)
 {
-	((VerseKey*)fModule->getKey())->setVerse(iVerse);
+	/*((VerseKey*)fModule->getKey())->setVerse(iVerse);
 	char error = fModule->popError();
 	printf("Error %c\n",error);
 	//ToDo return correct Error
-	;
+	;*/
 	return B_OK;
 }
 
 
 status_t BibleTextColumnView::SetKey(const char* iKey)
 {
-	VerseKey key = new VerseKey();
+	/*VerseKey key = new VerseKey();
 	key.setLocale(language.Code());
 	key.setText(iKey);
 	char error = fModule->setKey(key);
 	printf("Error SetKey %c\n",error);
-	//ToDo return correct Error
+	//ToDo return correct Error*/
 	return B_OK;
 }
 
 
 status_t BibleTextColumnView::NextBook()
 {
+	return B_OK;
 }
 
 
 status_t BibleTextColumnView::NextChapter()
 {
-	
+	return B_OK;
 }
 
 
 status_t BibleTextColumnView::NextVerse()
 {
 	(*fListKey)++;
+	return B_OK;
 }
 
 
 status_t BibleTextColumnView::PrevBook()
 {
+	return B_OK;
 }
 
 
 status_t BibleTextColumnView::PrevChapter()
 {
-	
+	return B_OK;
 }
 
 
 status_t BibleTextColumnView::PrevVerse()
 {
 	(*fListKey)--;
+	return B_OK;
 }
 
 
@@ -128,9 +139,11 @@ void BibleTextColumnView::Select(int start, int end)
 
 status_t BibleTextColumnView::SelectVerse(int vStart, int vEnd)
 {
+	return B_OK;
 }
 
 
-const char* BibleTextColumn::VerseForSelection()
+const char* BibleTextColumnView::VerseForSelection()
 {
+	return NULL;
 }

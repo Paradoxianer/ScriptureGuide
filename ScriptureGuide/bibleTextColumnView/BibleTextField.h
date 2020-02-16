@@ -5,13 +5,16 @@
 #ifndef BIBLE_TEXT_FIELD_H
 #define BIBLE_TEXT_FIELD_H
 
-
+#include <ColumnListView.h>
 #include <SupportDefs.h>
-
 
 #include <versekey.h>
 
-class BibleTextField{
+using namespace sword;
+
+
+class BibleTextField : public BField
+{
 public:
 								BibleTextField(const char* key);
 

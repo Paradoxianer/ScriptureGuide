@@ -5,9 +5,12 @@
 #ifndef BIBLE_TEXT_COLUMN_H
 #define BIBLE_TEXT_COLUMN_H
 
+#include <Bitmap.h>
 #include <ColumnListView.h>
-#include <ColumnListTypes.h>
+#include <ColumnListView.h>
+#include <ColumnTypes.h>
 #include <Language.h>
+#include <TextView.h>
 
 #include <versekey.h>
 #include <swkey.h>

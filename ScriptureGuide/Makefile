@@ -30,14 +30,17 @@ APP_MIME_SIG = application/x-vnd.Scripture-Guide
 #	same name (source.c or source.cpp) are included from different directories.
 #	Also note that spaces in folder names do not work well with this Makefile.
 SRCS = \
-	 FontPanel.cpp  \
-	 LogosApp.cpp  \
-	 LogosMainWindow.cpp  \
-	 LogosSearchWindow.cpp  \
-	 Preferences.cpp  \
-	 ResultListView.cpp  \
-	 Spinner.cpp  \
-	 SwordBackend.cpp  
+	 FontPanel.cpp \
+	 LogosApp.cpp \
+	 LogosMainWindow.cpp \
+	 LogosSearchWindow.cpp \
+	 Preferences.cpp \
+	 ResultListView.cpp \
+	 Spinner.cpp \
+	 SwordBackend.cpp \
+	 bibleTextColumnView/BibleTextColumn.cpp \
+	 bibleTextColumnView/BibleTextColumnView.cpp \
+	 bibleTextColumnView/BibleTextField.cpp
 
 		
 #	Specify the resource definition files to use. Full or relative paths can be

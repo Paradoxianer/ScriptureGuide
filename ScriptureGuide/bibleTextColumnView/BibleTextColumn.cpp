@@ -6,6 +6,7 @@
 #include <Catalog.h>
 #include <Debug.h>
 #include <Locale.h>
+#include <Rect.h>
 
 #include <gbfplain.h>
 #include <gbfstrongs.h>
@@ -30,11 +31,11 @@ using namespace std;
 BibleTextColumn::BibleTextColumn(const char *moduleName, 
 										float width, float minWidth,
 										float maxWidth, alignment align) 
-	: BTitledColumn("Select Bible", width, minWidth, maxWidth,align)
+	: BTitledColumn("Select Bible", width, minWidth, maxWidth,align),
 	fIsLineBreak(false),
 	fShowVerseNumbers(true)
 {
-	PRINT(("key %s module %s\n", iKey, moduleName));
+	PRINT(("module %s\n",  moduleName));
 	BLocale::Default()->GetLanguage(&language);
 	fManager = new SWMgr(CONFIGPATH, true, new MarkupFilterMgr(FMT_GBF, ENC_UTF8));
 	SetModule(moduleName);
@@ -55,7 +56,7 @@ int BibleTextColumn::CompareFields(BField* field1, BField* field2)
 	if (first!=NULL & second!=NULL)
 		return first->Key() == second->Key();
 	else
-		return;
+		return -1;
 }
 
 
@@ -92,31 +93,14 @@ void BibleTextColumn::MouseUp(BColumnListView* parent, BRow* row,
 
 status_t BibleTextColumn::SetModule(SWModule* mod)
 {
-	VerseKey key = ((VerseKey *)fModule->getKey());
 	fModule=mod;
-	fModule->setKey(key);
-	
 }
 
 
 status_t BibleTextColumn::SetModule(const char* modulName)
 {
 	
-	VerseKey	key;
-	bool		setKey=false;
-	if (fModule)
-	{
-		key = ((VerseKey *)fModule->getKey());
-		setKey=true;
-	}
 	fModule	= fManager->getModule(modulName);
-	if (fModule)
-	{
-		fModule->addRenderFilter(new GBFPlain());
-		if (setKey)
-			fModule->setKey(key);
-	}	
-	
 }
 
 
@@ -125,41 +109,18 @@ SWModule* BibleTextColumn::CurrentModule(void)
 	return fModule;
 }
 
-
-VerseKey& BibleTextColumn::KeyAt(int32 index)
-{
-}
-
-
-Paragraph& BibleTextColumn::ParagraphFor(SWKey key)
-{
-}
-
-
-const ParagraphStyle& BibleTextColumn::ParagraphStyleFor(SWKey key)
-{
-	return ParagraphFor(key).Style();
-}
-
-
 void BibleTextColumn::_UpdateBibleText()
 {
-	Remove(0,Length());
-	ParagraphStyle bibleVerseStyle;
-	bibleVerseStyle.SetJustify(true);
-	Paragraph paragraph;
+	verseRenderer->Delete(0, verseRenderer->TextLength());
 	VerseKey key = fModule->getKey();
 	VerseKey oldKey = fModule->getKey();
 
 	uint16 versecount = key.getVerseMax();
 	if (fModule == NULL)
 	{
-		paragraph = Paragraph(bibleVerseStyle);
-		paragraph.Append(TextSpan(
+		verseRenderer->SetText(
 				B_TRANSLATE("No Modules installed\n\n \
-				Please use ScriptureGuideManager to download the books you want."),
-				*fVerseStyle));
-		Append(paragraph);
+				Please use ScriptureGuideManager to download the books you want."));
 		return;
 	}
 	if (strcmp(fModule->getType(), "Biblical Texts")==0) 
@@ -167,26 +128,18 @@ void BibleTextColumn::_UpdateBibleText()
 		key.setVerse(1);
 		fModule->setKey(key);
 		BString text(fModule->renderText());
-
 		if (text.CountChars()<1)
 		{
 			// this condition will only happen if the module is only one particular
 			// testament.
-			paragraph = Paragraph(bibleVerseStyle);
-			paragraph.Append(TextSpan(
-							B_TRANSLATE("This module does not have this section."),
-							*fVerseStyle));
-			Append(paragraph);
+			verseRenderer->SetText(
+						B_TRANSLATE("This module does not have this section."));
 			return;
 		}
 		for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
 		{
 			key.setVerse(currentverse);
 			fModule->setKey(key);
-			paragraph = Paragraph(bibleVerseStyle);
-			// Get the verse for processing
-			text.SetTo(fModule->renderText());
-			
 			if (text.CountChars() < 1)
 				continue;
 			
@@ -204,13 +157,27 @@ void BibleTextColumn::_UpdateBibleText()
 			{
 				BString string;
 				string << " " << currentverse << " ";
-				paragraph.Append(TextSpan(string, *fNumberStyle));
+				verseRenderer->Insert(string);
 			}
-			paragraph.Append(TextSpan(text.String(),*fVerseStyle));
-			Append(paragraph);
+			verseRenderer->Insert(fModule->renderText());
 		}
 	}
 	fModule->setKey(oldKey);	
+	
+	if (verseBitmap != NULL && verseBitmap->Lock())
+	{
+		delete verseBitmap;
+		verseBitmap = NULL;
+	}
+	BRect textRect = verseRenderer->TextRect();
+	BRect bitmapRect(0, 0, textRect.Width() + 5.0, textRect.Height());
+	verseBitmap = new BBitmap(bitmapRect, B_CMAP8, true, false);
+	if (verseBitmap != NULL && verseBitmap->Lock()) 
+	{
+		verseBitmap->AddChild(verseRenderer);
+		verseRenderer->Sync();
+		verseBitmap->Unlock();
+	}
 }
 
 
