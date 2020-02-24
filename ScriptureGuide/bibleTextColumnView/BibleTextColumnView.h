@@ -9,6 +9,8 @@
 #include <SupportDefs.h>
 
 #include <listkey.h>
+#include <swmgr.h>
+#include <swmodule.h>
 #include <versekey.h>
 
 using namespace sword;
@@ -16,7 +18,7 @@ using namespace sword;
 
 class BibleTextColumnView : public BColumnListView {
 public:
-						BibleTextColumnView(char *name, ListKey *listKey);
+						BibleTextColumnView(char *name, SWMgr fManager,ListKey listKey);
 	
 	// +++ Key navigations Methods
 	const char*			GetKey();
@@ -46,7 +48,8 @@ public:
 	void				Select(int start, int end);
 
 private:
-	ListKey				*fListKey;	
+	SWMgr				fManager;
+	ListKey				fListKey;	
 };
 
 

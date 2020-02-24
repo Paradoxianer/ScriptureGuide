@@ -6,8 +6,9 @@
 
 #include "BibleTextColumnView.h"
 
-BibleTextColumnView::BibleTextColumnView(char *name, ListKey *listKey)
+BibleTextColumnView::BibleTextColumnView(char *name, SWMgr fManager,ListKey listKey)
 	: BColumnListView(name, 0,B_NO_BORDER, false),
+	fManager(fManager),
 	fListKey(listKey)
 {
 
@@ -37,14 +38,14 @@ const char* BibleTextColumnView::GetBook() const
 int BibleTextColumnView::GetChapter() const
 {
 	//return ((VerseKey*)fModule->getKey())->getChapter();
-	return NULL;
+	return 0;
 }
 
 
 int BibleTextColumnView::GetVerse() const
 {
 	//return ((VerseKey*)fModule->getKey())->getVerse();
-	return NULL;
+	return 0;
 }
 
 
@@ -108,7 +109,7 @@ status_t BibleTextColumnView::NextChapter()
 
 status_t BibleTextColumnView::NextVerse()
 {
-	(*fListKey)++;
+	fListKey++;
 	return B_OK;
 }
 
@@ -127,7 +128,7 @@ status_t BibleTextColumnView::PrevChapter()
 
 status_t BibleTextColumnView::PrevVerse()
 {
-	(*fListKey)--;
+	fListKey--;
 	return B_OK;
 }
 
