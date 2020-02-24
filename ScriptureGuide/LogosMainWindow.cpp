@@ -28,6 +28,10 @@
 #include <stdlib.h>
 #include <iostream>
 
+#include <gbfplain.h>
+#include <gbfstrongs.h>
+#include <markupfiltmgr.h>
+
 #include "constants.h"
 #include "LogosApp.h"
 #include "FontPanel.h"
@@ -35,6 +39,8 @@
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "MainWindow"
+
+#define CONFIGPATH MODULES_PATH
 
 SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 		uint16 selectVers, uint16 selectVersEnd )
@@ -308,11 +314,14 @@ void SGMainWindow::BuildGUI(void)
 	toolBar->AddGlue();
 	toolBar->AddView(fNoteButton);
 	
+	bibleTextView = new BibleTextColumnView("bibletextview",
+		SWMgr(CONFIGPATH, true, new MarkupFilterMgr(FMT_GBF, ENC_UTF8)),ListKey());
+	
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(fMenuBar, B_USE_DEFAULT_SPACING)
 		.Add(toolBar)
 		.AddSplit(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
-			.Add(fScrollView)
+			.Add(bibleTextView)
 		.End()
 	.End();
 }

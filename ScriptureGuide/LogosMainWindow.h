@@ -16,6 +16,7 @@
 
 #include <vector>
 
+#include "BibleTextColumnView.h"
 #include "LogosSearchWindow.h"
 #include "SwordBackend.h"
 
@@ -80,11 +81,13 @@ private:
 	BButton			*fNoteButton;
 	
 	BTextView		*fVerseView;
+	
 	BScrollView		*fScrollView;
 	
 	FontPanel		*fFontPanel;
 	SGSearchWindow	*fSearchWindow;
 	
+	BibleTextColumnView	*bibleTextView;
 	
 	SwordBackend	*fModManager;
 	SGModule		*fCurrentModule;
