@@ -3,15 +3,56 @@
  * All rights reserved. Distributed under the terms of the MIT license.
  */
 
+#include <gbfplain.h>
+#include <versekey.h>
 
+#include "BibleTextColumn.h"
 #include "BibleTextColumnView.h"
+#include "BibleTextField.h"
 
-BibleTextColumnView::BibleTextColumnView(char *name, SWMgr fManager,ListKey listKey)
+
+
+BibleTextColumnView::BibleTextColumnView(char *name, SWMgr *fManager, VerseKey *key)
 	: BColumnListView(name, 0,B_NO_BORDER, false),
 	fManager(fManager),
-	fListKey(listKey)
+	fVerseKey(key)
 {
+	ModMap::iterator it;
+	SWModule* currentmodule = NULL;
+	BibleTextColumn *tmpColumn = NULL;
+	int32 i =0;
+	for (it = fManager->Modules.begin(); it != fManager->Modules.end(); it++)
+	{
+		currentmodule = (*it).second;
+		i++;
+		currentmodule->addRenderFilter(new GBFPlain());
+		tmpColumn = new BibleTextColumn(fManager, currentmodule, 100, 350, 2000);
+		AddColumn(tmpColumn,i);
+		if (i > 1)
+			SetColumnVisible(tmpColumn,false);
 
+	}
+	SetSortingEnabled(false);
+	_InsertRowForKeys();
+}
+
+void BibleTextColumnView::_InsertRowForKeys()
+{
+	BRow		*row			= NULL;
+	VerseKey	*key			= NULL;
+	int32		countColumns	= CountColumns();
+	int32		versecount		= fVerseKey->getVerseMax();
+	for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
+	{
+		key = new VerseKey(fVerseKey);
+		key->setVerse(currentverse);
+		row = new BRow(100.0);
+		for (uint32 column = 0; column < countColumns; column++)
+		{
+			row->SetField( new BibleTextField(key),column);
+		}
+		AddRow(row);
+	}
 }
 
 const char* BibleTextColumnView::GetKey() 
@@ -109,7 +150,7 @@ status_t BibleTextColumnView::NextChapter()
 
 status_t BibleTextColumnView::NextVerse()
 {
-	fListKey++;
+	fVerseKey++;
 	return B_OK;
 }
 
@@ -128,7 +169,7 @@ status_t BibleTextColumnView::PrevChapter()
 
 status_t BibleTextColumnView::PrevVerse()
 {
-	fListKey--;
+	fVerseKey--;
 	return B_OK;
 }
 

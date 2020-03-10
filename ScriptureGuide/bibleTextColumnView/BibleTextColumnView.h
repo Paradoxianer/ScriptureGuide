@@ -18,7 +18,7 @@ using namespace sword;
 
 class BibleTextColumnView : public BColumnListView {
 public:
-						BibleTextColumnView(char *name, SWMgr fManager,ListKey listKey);
+						BibleTextColumnView(char *name, SWMgr *fManager, VerseKey *key);
 	
 	// +++ Key navigations Methods
 	const char*			GetKey();
@@ -46,10 +46,12 @@ public:
 	// --- Key navigation Methods
 
 	void				Select(int start, int end);
+	
 
 private:
-	SWMgr				fManager;
-	ListKey				fListKey;	
+	void				_InsertRowForKeys();
+	SWMgr				*fManager;
+	VerseKey			*fVerseKey;	
 };
 
 

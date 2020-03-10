@@ -313,9 +313,8 @@ void SGMainWindow::BuildGUI(void)
 	toolBar->AddView(fVerseBox);
 	toolBar->AddGlue();
 	toolBar->AddView(fNoteButton);
-	
 	bibleTextView = new BibleTextColumnView("bibletextview",
-		SWMgr(CONFIGPATH, true, new MarkupFilterMgr(FMT_GBF, ENC_UTF8)),ListKey());
+		new SWMgr(CONFIGPATH, true, new MarkupFilterMgr(FMT_GBF, ENC_UTF8)),new VerseKey("John 1:10-12"));
 	
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(fMenuBar, B_USE_DEFAULT_SPACING)
