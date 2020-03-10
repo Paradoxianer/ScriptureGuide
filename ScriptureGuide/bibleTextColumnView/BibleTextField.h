@@ -16,17 +16,17 @@ using namespace sword;
 class BibleTextField : public BField
 {
 public:
-								BibleTextField(const char* key);
+								BibleTextField(VerseKey *key);
 
 			void				SetKey(VerseKey *key);
-			VerseKey			Key() const;	
+			VerseKey*			Key(){return fKey;};
 			void				SetWidth(float);
 			float				Width();
 			float				HeightForWidth();
 
 
 private:
-			VerseKey			key;
+			VerseKey			*fKey;
 };
 
 

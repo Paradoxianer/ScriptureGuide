@@ -7,6 +7,7 @@
 #include <Debug.h>
 #include <Locale.h>
 #include <Rect.h>
+#include <StringView.h>
 
 #include <gbfplain.h>
 #include <gbfstrongs.h>
@@ -27,34 +28,54 @@ using namespace std;
 
 #define CONFIGPATH MODULES_PATH
 
-
-BibleTextColumn::BibleTextColumn(const char *moduleName, 
+BibleTextColumn::BibleTextColumn(SWMgr *manager, SWModule* mod,  
 										float width, float minWidth,
 										float maxWidth, alignment align) 
 	: BTitledColumn("Select Bible", width, minWidth, maxWidth,align),
 	fIsLineBreak(false),
-	fShowVerseNumbers(true)
+	fShowVerseNumbers(true),
+	fManager(manager),
+	fModule(mod)
 {
-	PRINT(("module %s\n",  moduleName));
-	BLocale::Default()->GetLanguage(&language);
-	fManager = new SWMgr(CONFIGPATH, true, new MarkupFilterMgr(FMT_GBF, ENC_UTF8));
+	Init();
+}
+
+BibleTextColumn::BibleTextColumn(SWMgr *manager, const char *moduleName, 
+										float width, float minWidth,
+										float maxWidth, alignment align) 
+	: BTitledColumn("Select Bible", width, minWidth, maxWidth,align),
+	fIsLineBreak(false),
+	fShowVerseNumbers(true),
+	fManager(manager)
+{
 	SetModule(moduleName);
+	Init();
+}
+
+void BibleTextColumn::Init()
+{
+	BLocale::Default()->GetLanguage(&language);
 	verseRenderer	= new BTextView("verseRenderer");
 	verseBitmap		= NULL;
+	SetTitle(fModule->getName());
 }
 
 
-void BibleTextColumn::DrawField(BField* field, BRect rect, BView* parent)
+void BibleTextColumn::DrawField(BField* _field, BRect rect, BView* parent)
 {
+	BibleTextField* field = static_cast<BibleTextField*>(_field);
+	DrawString(field->Key()->getText(), parent, rect);
 }
 
 
 int BibleTextColumn::CompareFields(BField* field1, BField* field2)
 {
 	const BibleTextField *first = dynamic_cast<const BibleTextField*>(field1);
-	const BibleTextField *second = dynamic_cast<const BibleTextField*>(field1);
+	const BibleTextField *second = dynamic_cast<const BibleTextField*>(field2);
 	if (first!=NULL & second!=NULL)
-		return first->Key() == second->Key();
+	{
+//		return (first->Key() == second->Key());
+	}
 	else
 		return -1;
 }
@@ -82,6 +103,7 @@ void BibleTextColumn::MouseDown(BColumnListView* parent, BRow* row,
 							BField* field, BRect fieldRect,
 							BPoint point, uint32 buttons)
 {
+	printf("BibleTextColumn::MouseDown()\n");
 }
 
 
@@ -109,10 +131,11 @@ SWModule* BibleTextColumn::CurrentModule(void)
 	return fModule;
 }
 
+
 void BibleTextColumn::_UpdateBibleText()
 {
-	verseRenderer->Delete(0, verseRenderer->TextLength());
-	VerseKey key = fModule->getKey();
+	//verseRenderer->Delete(0, verseRenderer->TextLength());
+/*	VerseKey key = fModule->getKey();
 	VerseKey oldKey = fModule->getKey();
 
 	uint16 versecount = key.getVerseMax();
@@ -121,7 +144,6 @@ void BibleTextColumn::_UpdateBibleText()
 		verseRenderer->SetText(
 				B_TRANSLATE("No Modules installed\n\n \
 				Please use ScriptureGuideManager to download the books you want."));
-		return;
 	}
 	if (strcmp(fModule->getType(), "Biblical Texts")==0) 
 	{
@@ -134,7 +156,6 @@ void BibleTextColumn::_UpdateBibleText()
 			// testament.
 			verseRenderer->SetText(
 						B_TRANSLATE("This module does not have this section."));
-			return;
 		}
 		for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
 		{
@@ -162,19 +183,25 @@ void BibleTextColumn::_UpdateBibleText()
 			verseRenderer->Insert(fModule->renderText());
 		}
 	}
-	fModule->setKey(oldKey);	
+	fModule->setKey(oldKey);	*/
 	
 	if (verseBitmap != NULL && verseBitmap->Lock())
 	{
 		delete verseBitmap;
 		verseBitmap = NULL;
 	}
-	BRect textRect = verseRenderer->TextRect();
+	//BRect textRect = verseRenderer->TextRect();
+	BRect textRect = BRect(0,0,400,100);
 	BRect bitmapRect(0, 0, textRect.Width() + 5.0, textRect.Height());
-	verseBitmap = new BBitmap(bitmapRect, B_CMAP8, true, false);
+	verseBitmap = new BBitmap(bitmapRect, B_RGBA32, true, false);
+	verseRenderer = new BTextView(BRect(0,0,100,20), "verseRenderer", 0, 0);
 	if (verseBitmap != NULL && verseBitmap->Lock()) 
 	{
 		verseBitmap->AddChild(verseRenderer);
+		verseRenderer->SetText("Test Test Test Test \n Test Test Test");
+		verseRenderer->Insert("Noch mehr text");		
+		verseRenderer->Draw(textRect);
+		verseRenderer->DrawAfterChildren(textRect);
 		verseRenderer->Sync();
 		verseBitmap->Unlock();
 	}

@@ -6,20 +6,16 @@
 
 #include "BibleTextField.h"
 
-BibleTextField::BibleTextField(const char* key)
-	: BField()
+BibleTextField::BibleTextField(VerseKey *key)
+	: BField(),
+	fKey(key)
 {
 }
 
 void BibleTextField::SetKey(VerseKey *key)
 {
+	fKey = key;
 }
-
-
-VerseKey BibleTextField::Key() const
-{
-}
-
 	
 void BibleTextField::SetWidth(float)
 {
@@ -33,4 +29,5 @@ float BibleTextField::Width()
 
 float BibleTextField::HeightForWidth()
 {
+	return 100.0;
 }

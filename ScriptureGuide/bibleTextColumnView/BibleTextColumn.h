@@ -14,6 +14,7 @@
 
 #include <versekey.h>
 #include <swkey.h>
+#include <swmgr.h>
 #include <swmodule.h>
 
 #include <map>
@@ -26,14 +27,16 @@ using namespace std;
 
 class BibleTextColumn : public BTitledColumn {
 public:
-
-						BibleTextColumn(const char *moduleName, 
+						BibleTextColumn(SWMgr *manager, SWModule* mod, 
 										float width, float minWidth,
-										float maxWidth, alignment align);
+										float maxWidth, alignment align = B_ALIGN_LEFT);
+						BibleTextColumn(SWMgr *manager, const char *moduleName, 
+										float width, float minWidth,
+										float maxWidth, alignment align = B_ALIGN_LEFT);
 										
 	//+++ BColumn Methods
 										
-	virtual	void		DrawField(BField* field, BRect rect, BView* parent);
+	virtual	void		DrawField(BField* _field, BRect rect, BView* parent);
 	virtual	int			CompareFields(BField* field1, BField* field2);
 	virtual	float		GetPreferredWidth(BField* field, BView* parent) const;
 	virtual	bool		AcceptsField(const BField* field) const;
@@ -71,6 +74,7 @@ public:
 	// --- Config Settings Method
 
 protected:
+	void				Init();
 	void				_UpdateBibleText();
 	
 private:
