@@ -8,18 +8,12 @@
 #include <String.h>
 #include <StatusBar.h>
 
+#include "constants.h"
 #include "ObjectList.h"
 
+
 // Type for a particular module
-typedef enum
-{
-	TEXT_UNASSIGNED = -1,
-	TEXT_UNKNOWN = 0,
-	TEXT_GENERIC,
-	TEXT_BIBLE,
-	TEXT_COMMENTARY,
-	TEXT_LEXICON
-} TextType;
+
 
 // Flags for which testaments exist in a book
 enum

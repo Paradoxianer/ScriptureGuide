@@ -95,4 +95,14 @@ const uint32 SG_BIBLE					= 'SGbl';
 const int REG_ICASE						= 2;  
 // include "posix/regex.h" instead if more are needed
 
+typedef enum
+{
+	TEXT_UNASSIGNED = -1,
+	TEXT_UNKNOWN = 0,
+	TEXT_GENERIC,
+	TEXT_BIBLE,
+	TEXT_COMMENTARY,
+	TEXT_LEXICON
+} TextType;
+
 #endif
