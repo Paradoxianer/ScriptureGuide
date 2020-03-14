@@ -64,7 +64,8 @@ void BibleTextColumn::Init()
 void BibleTextColumn::DrawField(BField* _field, BRect rect, BView* parent)
 {
 	BibleTextField* field = static_cast<BibleTextField*>(_field);
-	DrawString(field->Key()->getText(), parent, rect);
+	fModule->setKey(field->Key());
+	DrawString(fModule->renderText(), parent, rect);
 }
 
 
