@@ -52,60 +52,18 @@ All rights reserved.
 #include <Invoker.h>
 #include <ListView.h>
 
+#include "ColumnConsts.h"
+#include "ObjectList.h"
+#include "TitleView.h"
+
 class BScrollBar;
 
-namespace BPrivate {
-
-class OutlineView;
-class TitleView;
 class BRowContainer;
 class RecursiveOutlineIterator;
-
-}	// ns BPrivate
-
 class BColumn;
 class BColumnListView;
 class BField;
 class BRow;
-
-enum LatchType {
-	B_NO_LATCH					= 0,
-	B_OPEN_LATCH				= 1,
-	B_PRESSED_LATCH				= 2,
-	B_CLOSED_LATCH				= 3
-};
-
-typedef enum {
-	B_ALLOW_COLUMN_NONE			= 0,
-	B_ALLOW_COLUMN_MOVE			= 1,
-	B_ALLOW_COLUMN_RESIZE		= 2,
-	B_ALLOW_COLUMN_POPUP		= 4,
-	B_ALLOW_COLUMN_REMOVE		= 8
-} column_flags;
-
-enum ColumnListViewColor {
-	B_COLOR_BACKGROUND			= 0,
-	B_COLOR_TEXT				= 1,
-	B_COLOR_ROW_DIVIDER			= 2,
-	B_COLOR_SELECTION			= 3,
-	B_COLOR_SELECTION_TEXT		= 4,
-	B_COLOR_NON_FOCUS_SELECTION	= 5,
-	B_COLOR_EDIT_BACKGROUND		= 6,
-	B_COLOR_EDIT_TEXT			= 7,
-	B_COLOR_HEADER_BACKGROUND	= 8,
-	B_COLOR_HEADER_TEXT			= 9,
-	B_COLOR_SEPARATOR_LINE		= 10,
-	B_COLOR_SEPARATOR_BORDER	= 11,
-
-	B_COLOR_TOTAL				= 12
-};
-
-enum ColumnListViewFont {
-	B_FONT_ROW					= 0,
-	B_FONT_HEADER				= 1,
-
-	B_FONT_TOTAL				= 2
-};
 
 
 // A single row/column intersection in the list.
@@ -145,7 +103,6 @@ private:
 									int32 logicalFieldIndex) const;
 private:
 			BList				fFields;
-			BPrivate::
 			BRowContainer*		fChildList;
 			bool				fIsExpanded;
 			float				fHeight;
@@ -156,8 +113,8 @@ private:
 
 
 	friend class BColumnListView;
-	friend class BPrivate::RecursiveOutlineIterator;
-	friend class BPrivate::OutlineView;
+	friend class RecursiveOutlineIterator;
+	friend class OutlineView;
 };
 
 // Information about a single column in the list.  A column knows
@@ -239,9 +196,9 @@ private:
 			bool				fShowHeading;
 			alignment			fAlignment;
 
-	friend class BPrivate::OutlineView;
+	friend class OutlineView;
 	friend class BColumnListView;
-	friend class BPrivate::TitleView;
+	friend class TitleView;
 };
 
 // The column list view class.
@@ -291,6 +248,7 @@ public:
 			void				ClearSortColumns();
 
 	// The status view is a little area in the lower left hand corner.
+			TitleView*			GetTitleView(void){return fTitleView;};
 			void				AddStatusView(BView* view);
 			BView*				RemoveStatusView();
 
@@ -405,8 +363,8 @@ private:
 
 			rgb_color 			fColorList[B_COLOR_TOTAL];
 			bool				fCustomColors;
-			BPrivate::TitleView* fTitleView;
-			BPrivate::OutlineView* fOutlineView;
+			TitleView*			fTitleView;
+			OutlineView*		fOutlineView;
 			BList 				fColumns;
 			BScrollBar*			fHorizontalScrollBar;
 			BScrollBar* 		fVerticalScrollBar;
@@ -418,5 +376,160 @@ private:
 			border_style		fBorderStyle;
 			bool				fShowingHorizontalScrollBar;
 };
+
+class BRowContainer : public BObjectList<BRow>
+{
+};
+
+
+class RecursiveOutlineIterator {
+public:
+								RecursiveOutlineIterator(
+									BRowContainer* container,
+									bool openBranchesOnly = true);
+
+			BRow*				CurrentRow() const;
+			int32				CurrentLevel() const;
+			void				GoToNext();
+
+private:
+			struct {
+				BRowContainer* fRowSet;
+				int32 fIndex;
+				int32 fDepth;
+			}					fStack[kMaxDepth];
+
+			int32				fStackIndex;
+			BRowContainer*		fCurrentList;
+			int32				fCurrentListIndex;
+			int32				fCurrentListDepth;
+			bool				fOpenBranchesOnly;
+};
+
+
+class OutlineView : public BView {
+	typedef BView _inherited;
+public:
+								OutlineView(BRect, BList* visibleColumns,
+									BList* sortColumns,
+									BColumnListView* listView);
+	virtual						~OutlineView();
+
+	virtual void				Draw(BRect);
+	const 	BRect&				VisibleRect() const;
+
+			void				RedrawColumn(BColumn* column, float leftEdge,
+									bool isFirstColumn);
+			void 				StartSorting();
+			float				GetColumnPreferredWidth(BColumn* column);
+
+			void				AddRow(BRow*, int32 index, BRow* TheRow);
+			BRow*				CurrentSelection(BRow* lastSelected) const;
+			void 				ToggleFocusRowSelection(bool selectRange);
+			void 				ToggleFocusRowOpen();
+			void 				ChangeFocusRow(bool up, bool updateSelection,
+									bool addToCurrentSelection);
+			void 				MoveFocusToVisibleRect();
+			void 				ExpandOrCollapse(BRow* parent, bool expand);
+			void 				RemoveRow(BRow*);
+			BRowContainer*		RowList();
+			void				UpdateRow(BRow*);
+			bool				FindParent(BRow* row, BRow** _parent,
+									bool* _isVisible);
+			int32				IndexOf(BRow* row);
+			void				Deselect(BRow*);
+			void				AddToSelection(BRow*);
+			void				DeselectAll();
+			BRow*				FocusRow() const;
+			void				SetFocusRow(BRow* row, bool select);
+			BRow*				FindRow(float ypos, int32* _indent,
+									float* _top);
+			bool				FindRect(const BRow* row, BRect* _rect);
+			void				ScrollTo(const BRow* row);
+
+			void				Clear();
+			void				SetSelectionMode(list_view_type type);
+			list_view_type		SelectionMode() const;
+			void				SetMouseTrackingEnabled(bool);
+			void				FixScrollBar(bool scrollToFit);
+			void				SetEditMode(bool state)
+									{ fEditMode = state; }
+
+	virtual void				FrameResized(float width, float height);
+	virtual void				ScrollTo(BPoint where);
+	virtual void				MouseDown(BPoint where);
+	virtual void				MouseMoved(BPoint where, uint32 transit,
+									const BMessage* dragMessage);
+	virtual void				MouseUp(BPoint where);
+	virtual void				MessageReceived(BMessage* message);
+
+private:
+			bool				SortList(BRowContainer* list, bool isVisible);
+	static	int32				DeepSortThreadEntry(void* outlineView);
+			void				DeepSort();
+			void				SelectRange(BRow* start, BRow* end);
+			int32				CompareRows(BRow* row1, BRow* row2);
+			void				AddSorted(BRowContainer* list, BRow* row);
+			void				RecursiveDeleteRows(BRowContainer* list,
+									bool owner);
+			void				InvalidateCachedPositions();
+			bool				FindVisibleRect(BRow* row, BRect* _rect);
+
+			BList*				fColumns;
+			BList*				fSortColumns;
+			float				fItemsHeight;
+			BRowContainer		fRows;
+			BRect				fVisibleRect;
+
+#if DOUBLE_BUFFERED_COLUMN_RESIZE
+			BBitmap*			fDrawBuffer;
+			BView*				fDrawBufferView;
+#endif
+
+			BRow*				fFocusRow;
+			BRect				fFocusRowRect;
+			BRow*				fRollOverRow;
+
+			BRow				fSelectionListDummyHead;
+			BRow*				fLastSelectedItem;
+			BRow*				fFirstSelectedItem;
+
+			thread_id			fSortThread;
+			int32				fNumSorted;
+			bool				fSortCancelled;
+
+			enum CurrentState {
+				INACTIVE,
+				LATCH_CLICKED,
+				ROW_CLICKED,
+				DRAGGING_ROWS
+			};
+
+			CurrentState		fCurrentState;
+
+
+			BColumnListView*	fMasterView;
+			list_view_type		fSelectionMode;
+			bool				fTrackMouse;
+			BField*				fCurrentField;
+			BRow*				fCurrentRow;
+			BColumn*			fCurrentColumn;
+			bool				fMouseDown;
+			BRect				fFieldRect;
+			int32				fCurrentCode;
+			bool				fEditMode;
+
+	// State information for mouse/keyboard interaction
+			BPoint				fClickPoint;
+			bool				fDragging;
+			int32				fClickCount;
+			BRow*				fTargetRow;
+			float				fTargetRowTop;
+			BRect				fLatchRect;
+			float				fDropHighlightY;
+
+	friend class RecursiveOutlineIterator;
+};
+
 
 #endif // _COLUMN_LIST_VIEW_H

@@ -6,8 +6,6 @@
 #define BIBLE_TEXT_COLUMN_H
 
 #include <Bitmap.h>
-#include <ColumnListView.h>
-#include <ColumnListView.h>
 #include <ColumnTypes.h>
 #include <Language.h>
 #include <TextView.h>
@@ -20,6 +18,9 @@
 #include <map>
 
 #include <SupportDefs.h>
+
+#include "ColumnListView.h"
+#include "ColumnListView.h"
 
 using namespace sword;
 using namespace std;

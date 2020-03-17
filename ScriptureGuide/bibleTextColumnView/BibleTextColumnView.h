@@ -5,13 +5,14 @@
 #ifndef BIBLE_TEXT_COLUMN_VIEW_H
 #define BIBLE_TEXT_COLUMN_VIEW_H
 
-#include <ColumnListView.h>
 #include <SupportDefs.h>
 
 #include <listkey.h>
 #include <swmgr.h>
 #include <swmodule.h>
 #include <versekey.h>
+
+#include "ColumnListView.h"
 
 using namespace sword;
 

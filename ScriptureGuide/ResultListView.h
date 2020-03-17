@@ -12,7 +12,7 @@
 #define ALPHA				170
 #define TEXT_OFFSET			5.0
 
-static const float kRowDragSensitivity = 5.0;
+
 
 
 class BibleItem : public BListItem

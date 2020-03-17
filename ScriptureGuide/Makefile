@@ -40,7 +40,10 @@ SRCS = \
 	 SwordBackend.cpp \
 	 bibleTextColumnView/BibleTextColumn.cpp \
 	 bibleTextColumnView/BibleTextColumnView.cpp \
-	 bibleTextColumnView/BibleTextField.cpp
+	 bibleTextColumnView/BibleTextField.cpp \
+	 bibleTextColumnView/ColumnListView.cpp \
+	 bibleTextColumnView/ColumnTypes.cpp \
+	 bibleTextColumnView/TitleView.cpp
 
 		
 #	Specify the resource definition files to use. Full or relative paths can be
@@ -88,12 +91,14 @@ ifeq ($(MACHINE), BePC)
 	SYSTEM_INCLUDE_PATHS =  /system/develop/headers/x86/sword \
 							/system/develop/headers/private/interface \
 							/boot/system/develop/headers/private/shared \
-							/boot/system/develop/headers/private/interface
+							/boot/system/develop/headers/private/interface \
+							/boot/system/develop/headers/private/support
 else
 	SYSTEM_INCLUDE_PATHS =  /system/develop/headers/sword \
 							/system/develop/headers/private/interface \
 							/boot/system/develop/headers/private/shared \
-							/boot/system/develop/headers/private/interface
+							/boot/system/develop/headers/private/interface \
+							/boot/system/develop/headers/private/support
 endif
 
 #	Additional paths paths to look for local headers. These use the form
