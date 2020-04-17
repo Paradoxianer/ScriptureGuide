@@ -6,6 +6,7 @@
 #include <gbfplain.h>
 #include <versekey.h>
 
+#include "BibleTextRow.h"
 #include "BibleTextColumn.h"
 #include "BibleTextColumnView.h"
 #include "BibleTextField.h"
@@ -38,18 +39,18 @@ BibleTextColumnView::BibleTextColumnView(char *name, SWMgr *fManager, VerseKey *
 
 void BibleTextColumnView::_InsertRowForKeys()
 {
-	BRow		*row			= NULL;
-	VerseKey	*key			= NULL;
-	int32		countColumns	= CountColumns();
-	int32		versecount		= fVerseKey->getVerseMax();
+	BibleTextRow	*row			= NULL;
+	VerseKey		*key			= NULL;
+	int32			countColumns	= CountColumns();
+	int32			versecount		= fVerseKey->getVerseMax();
 	for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
 	{
 		key = new VerseKey(fVerseKey);
 		key->setVerse(currentverse);
-		row = new BRow(100.0);
+		row = new BibleTextRow();
 		for (uint32 column = 0; column < countColumns; column++)
 		{
-			row->SetField( new BibleTextField(key),column);
+			row->SetField(new BibleTextField(key),column);
 		}
 		AddRow(row);
 	}

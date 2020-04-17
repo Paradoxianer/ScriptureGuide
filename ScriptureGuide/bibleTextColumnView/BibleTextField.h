@@ -20,13 +20,16 @@ public:
 
 			void				SetKey(VerseKey *key);
 			VerseKey*			Key(){return fKey;};
-			void				SetWidth(float);
-			float				Width();
-			float				HeightForWidth();
+			void				SetWidth(float widht){fWidth=widht;};
+			float				Width(){return fWidth;};
+			void				SetHeight(float height){fHeight=height;};
+			float				Height(){return fHeight;};
 
 
 private:
 			VerseKey			*fKey;
+			float				fHeight;
+			float				fWidth;
 };
 
 

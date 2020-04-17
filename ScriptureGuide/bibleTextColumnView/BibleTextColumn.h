@@ -41,7 +41,7 @@ public:
 	virtual	int			CompareFields(BField* field1, BField* field2);
 	virtual	float		GetPreferredWidth(BField* field, BView* parent) const;
 	virtual	bool		AcceptsField(const BField* field) const;
-	
+		
 	virtual void		MouseMoved(BColumnListView* parent, BRow* row,
 							BField* field, BRect fieldRect,
 							BPoint point, uint32 buttons, int32 code);
@@ -76,7 +76,7 @@ public:
 
 protected:
 	void				Init();
-	void				_UpdateBibleText();
+	void 				DrawBibeltext(const char* string, BView* parent, BRect rect);
 	
 private:
 	SWMgr				*fManager;

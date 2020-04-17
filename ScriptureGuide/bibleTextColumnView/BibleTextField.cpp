@@ -16,18 +16,3 @@ void BibleTextField::SetKey(VerseKey *key)
 {
 	fKey = key;
 }
-	
-void BibleTextField::SetWidth(float)
-{
-}
-
-
-float BibleTextField::Width()
-{
-}
-
-
-float BibleTextField::HeightForWidth()
-{
-	return 100.0;
-}

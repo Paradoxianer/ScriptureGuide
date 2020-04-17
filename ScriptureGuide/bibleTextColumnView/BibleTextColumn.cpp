@@ -64,8 +64,10 @@ void BibleTextColumn::Init()
 void BibleTextColumn::DrawField(BField* _field, BRect rect, BView* parent)
 {
 	BibleTextField* field = static_cast<BibleTextField*>(_field);
+	field->SetWidth(rect.Width());
 	fModule->setKey(field->Key());
-	DrawString(fModule->renderText(), parent, rect);
+	field->SetHeight(verseRenderer->TextRect().Height());
+	DrawBibeltext(fModule->renderText(), parent, rect);
 }
 
 
@@ -91,7 +93,6 @@ bool BibleTextColumn::AcceptsField(const BField* field) const
 {
 	return static_cast<bool>(dynamic_cast<const BibleTextField*>(field));
 }
-
 
 void BibleTextColumn::MouseMoved(BColumnListView* parent, BRow* row,
 							BField* field, BRect fieldRect,
@@ -122,7 +123,6 @@ status_t BibleTextColumn::SetModule(SWModule* mod)
 
 status_t BibleTextColumn::SetModule(const char* modulName)
 {
-	
 	fModule	= fManager->getModule(modulName);
 }
 
@@ -133,79 +133,29 @@ SWModule* BibleTextColumn::CurrentModule(void)
 }
 
 
-void BibleTextColumn::_UpdateBibleText()
+void BibleTextColumn::DrawBibeltext(const char* string, BView* parent, BRect rect)
 {
-	//verseRenderer->Delete(0, verseRenderer->TextLength());
-/*	VerseKey key = fModule->getKey();
-	VerseKey oldKey = fModule->getKey();
-
-	uint16 versecount = key.getVerseMax();
-	if (fModule == NULL)
-	{
-		verseRenderer->SetText(
-				B_TRANSLATE("No Modules installed\n\n \
-				Please use ScriptureGuideManager to download the books you want."));
-	}
-	if (strcmp(fModule->getType(), "Biblical Texts")==0) 
-	{
-		key.setVerse(1);
-		fModule->setKey(key);
-		BString text(fModule->renderText());
-		if (text.CountChars()<1)
-		{
-			// this condition will only happen if the module is only one particular
-			// testament.
-			verseRenderer->SetText(
-						B_TRANSLATE("This module does not have this section."));
-		}
-		for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
-		{
-			key.setVerse(currentverse);
-			fModule->setKey(key);
-			if (text.CountChars() < 1)
-				continue;
-			
-			// Remove <P> tags and 0xc2 0xb6 sequences to carriage returns. 
-			// The crazy hex sequence is actually the UTF-8 encoding for the 
-			// paragraph symbol. If we convert them to \n's, output looks funky
-			text.RemoveAll("\x0a\x0a");
-			text.RemoveAll("\xc2\xb6 ");
-			text.RemoveAll("<P> ");
-			
-			if (fIsLineBreak)
-				text += "\n";
-			
-			if (fShowVerseNumbers)
-			{
-				BString string;
-				string << " " << currentverse << " ";
-				verseRenderer->Insert(string);
-			}
-			verseRenderer->Insert(fModule->renderText());
-		}
-	}
-	fModule->setKey(oldKey);	*/
-	
-	if (verseBitmap != NULL && verseBitmap->Lock())
-	{
-		delete verseBitmap;
-		verseBitmap = NULL;
-	}
-	//BRect textRect = verseRenderer->TextRect();
-	BRect textRect = BRect(0,0,400,100);
-	BRect bitmapRect(0, 0, textRect.Width() + 5.0, textRect.Height());
+	verseRenderer->ResizeTo(rect.Width(),rect.Height());
+	verseRenderer->SetTextRect(BRect(0,0,rect.Width(),rect.Height()));
+	verseRenderer->SetText(string);
+	BRect textRect = verseRenderer->TextRect();
+	BRect bitmapRect = textRect;
 	verseBitmap = new BBitmap(bitmapRect, B_RGBA32, true, false);
-	verseRenderer = new BTextView(BRect(0,0,100,20), "verseRenderer", 0, 0);
 	if (verseBitmap != NULL && verseBitmap->Lock()) 
 	{
 		verseBitmap->AddChild(verseRenderer);
-		verseRenderer->SetText("Test Test Test Test \n Test Test Test");
-		verseRenderer->Insert("Noch mehr text");		
 		verseRenderer->Draw(textRect);
-		verseRenderer->DrawAfterChildren(textRect);
 		verseRenderer->Sync();
 		verseBitmap->Unlock();
 	}
+	parent->DrawBitmap(verseBitmap, BPoint(rect.left, rect.top));
+	if (verseBitmap != NULL && verseBitmap->Lock()) 
+	{
+		verseRenderer->RemoveSelf();
+		verseBitmap->Unlock();
+	}
+	delete verseBitmap;
+	verseBitmap = NULL;
 }
 
 
