@@ -2011,9 +2011,9 @@ OutlineView::Draw(BRect invalidBounds)
 	float line = 0.0;
 	bool tintedLine = true;
 	int32 numColumns = fColumns->CountItems();
-	for (RecursiveOutlineIterator iterator(&fRows); iterator.CurrentRow();
-		iterator.GoToNext()) {
-		BRow* row = iterator.CurrentRow();
+	BRow	*row	= NULL;
+	for (int32 i =0; i< fRows.CountItems();i++) {
+		row = fRows.ItemAt(i);
 		if (line > invalidBounds.bottom)
 			break;
 
@@ -2130,23 +2130,22 @@ OutlineView::Draw(BRect invalidBounds)
 	}
 }
 
-
+//@ToDo remove _rowIndent and??? _top?
 BRow*
 OutlineView::FindRow(float ypos, int32* _rowIndent, float* _top)
 {
 	if (_rowIndent && _top) {
 		float line = 0.0;
-		for (RecursiveOutlineIterator iterator(&fRows); iterator.CurrentRow();
-			iterator.GoToNext()) {
-
-			BRow* row = iterator.CurrentRow();
+		BRow	*row	= NULL;
+		for (int32 i =0; i< fRows.CountItems();i++) {
+			row = fRows.ItemAt(i);
 			if (line > ypos)
 				break;
 
 			float rowHeight = row->Height();
 			if (ypos <= line + rowHeight) {
 				*_top = line;
-				*_rowIndent = iterator.CurrentLevel();
+				*_rowIndent = 0;
 				return row;
 			}
 
@@ -2896,16 +2895,16 @@ OutlineView::FindVisibleRect(BRow* row, BRect* _rect)
 {
 	if (row && _rect) {
 		float line = 0.0;
-		for (RecursiveOutlineIterator iterator(&fRows); iterator.CurrentRow();
-			iterator.GoToNext()) {
-
-			if (iterator.CurrentRow() == row) {
+		BRow	*iterRow	= NULL;
+		for (int32 i =0; i< fRows.CountItems();i++) {
+			iterRow = fRows.ItemAt(i);
+			if (iterRow == row) {
 				_rect->Set(fVisibleRect.left, line, fVisibleRect.right,
 					line + row->Height());
 				return line <= fVisibleRect.bottom;
 			}
 
-			line += iterator.CurrentRow()->Height() + 1;
+			line += iterRow->Height() + 1;
 		}
 	}
 	return false;
@@ -2916,15 +2915,16 @@ bool
 OutlineView::FindRect(const BRow* row, BRect* _rect)
 {
 	float line = 0.0;
-	for (RecursiveOutlineIterator iterator(&fRows); iterator.CurrentRow();
-		iterator.GoToNext()) {
-		if (iterator.CurrentRow() == row) {
+	BRow	*iterRow	= NULL;
+	for (int32 i =0; i< fRows.CountItems();i++) {
+		iterRow = fRows.ItemAt(i);
+		if (iterRow == row) {
 			_rect->Set(fVisibleRect.left, line, fVisibleRect.right,
 				line + row->Height());
 			return true;
 		}
 
-		line += iterator.CurrentRow()->Height() + 1;
+		line += iterRow->Height() + 1;
 	}
 
 	return false;
@@ -2950,12 +2950,12 @@ OutlineView::DeselectAll()
 {
 	// Invalidate all selected rows
 	float line = 0.0;
-	for (RecursiveOutlineIterator iterator(&fRows); iterator.CurrentRow();
-		iterator.GoToNext()) {
+	BRow	*row	= NULL;
+	for (int32 i =0; i< fRows.CountItems();i++) {
+		row = fRows.ItemAt(i);
 		if (line > fVisibleRect.bottom)
 			break;
 
-		BRow* row = iterator.CurrentRow();
 		if (line + row->Height() > fVisibleRect.top) {
 			if (row->fNextSelected != 0)
 				Invalidate(BRect(fVisibleRect.left, line, fVisibleRect.right,
@@ -3109,23 +3109,21 @@ OutlineView::SelectRange(BRow* start, BRow* end)
 
 	if (start == end)	// start is always selected when this is called
 		return;
-
-	RecursiveOutlineIterator iterator(&fRows, false);
-	while (iterator.CurrentRow() != 0) {
-		if (iterator.CurrentRow() == end) {
+	BRow	*row	= NULL;
+	for (int32 i =0; i< fRows.CountItems();i++) {
+		row = fRows.ItemAt(i);
+		if (row == end) {
 			// reverse selection, swap to fix special case
 			BRow* temp = start;
 			start = end;
 			end = temp;
 			break;
-		} else if (iterator.CurrentRow() == start)
+		} else if (row == start)
 			break;
-
-		iterator.GoToNext();
 	}
 
-	while (true) {
-		BRow* row = iterator.CurrentRow();
+	for (int32 i =0; i< fRows.CountItems();i++) {
+		row = fRows.ItemAt(i);
 		if (row) {
 			if (row->fNextSelected == 0) {
 				row->fNextSelected = fSelectionListDummyHead.fNextSelected;
@@ -3138,8 +3136,6 @@ OutlineView::SelectRange(BRow* start, BRow* end)
 
 		if (row == end)
 			break;
-
-		iterator.GoToNext();
 	}
 
 	Invalidate();  // xxx make invalidation smaller
@@ -3167,12 +3163,12 @@ float
 OutlineView::GetColumnPreferredWidth(BColumn* column)
 {
 	float preferred = 0.0;
-	for (RecursiveOutlineIterator iterator(&fRows); BRow* row =
-		iterator.CurrentRow(); iterator.GoToNext()) {
+	BRow	*row	= NULL;
+	for (int32 i =0; i< fRows.CountItems();i++) {
+		row = fRows.ItemAt(i);
 		BField* field = row->GetField(column->fFieldID);
 		if (field) {
-			float width = column->GetPreferredWidth(field, this)
-				+ iterator.CurrentLevel() * kOutlineLevelIndent;
+			float width = column->GetPreferredWidth(field, this);
 			preferred = max_c(preferred, width);
 		}
 	}
@@ -3190,78 +3186,3 @@ OutlineView::GetColumnPreferredWidth(BColumn* column)
 
 	return preferred;
 }
-
-
-// #pragma mark -
-
-
-RecursiveOutlineIterator::RecursiveOutlineIterator(BRowContainer* list,
-	bool openBranchesOnly)
-	:
-	fStackIndex(0),
-	fCurrentListIndex(0),
-	fCurrentListDepth(0),
-	fOpenBranchesOnly(openBranchesOnly)
-{
-	if (list == 0 || list->CountItems() == 0)
-		fCurrentList = 0;
-	else
-		fCurrentList = list;
-}
-
-
-BRow*
-RecursiveOutlineIterator::CurrentRow() const
-{
-	if (fCurrentList == 0)
-		return 0;
-
-	return fCurrentList->ItemAt(fCurrentListIndex);
-}
-
-
-void
-RecursiveOutlineIterator::GoToNext()
-{
-	if (fCurrentList == 0)
-		return;
-	if (fCurrentListIndex < 0 || fCurrentListIndex >= fCurrentList->CountItems()) {
-		fCurrentList = 0;
-		return;
-	}
-
-	BRow* currentRow = fCurrentList->ItemAt(fCurrentListIndex);
-	if(currentRow) {
-		/*if (currentRow->fChildList && (currentRow->fIsExpanded || !fOpenBranchesOnly)
-			&& currentRow->fChildList->CountItems() > 0) {
-			// Visit child.
-			// Put current list on the stack if it needs to be revisited.
-			if (fCurrentListIndex < fCurrentList->CountItems() - 1) {
-				fStack[fStackIndex].fRowSet = fCurrentList;
-				fStack[fStackIndex].fIndex = fCurrentListIndex + 1;
-				fStack[fStackIndex].fDepth = fCurrentListDepth;
-				fStackIndex++;
-			}
-
-			fCurrentList = currentRow->fChildList;
-			fCurrentListIndex = 0;
-			fCurrentListDepth++;
-		} else*/ if (fCurrentListIndex < fCurrentList->CountItems() - 1)
-			fCurrentListIndex++; // next item in current list
-		else if (--fStackIndex >= 0) {
-			fCurrentList = fStack[fStackIndex].fRowSet;
-			fCurrentListIndex = fStack[fStackIndex].fIndex;
-			fCurrentListDepth = fStack[fStackIndex].fDepth;
-		} else
-			fCurrentList = 0;
-	}
-}
-
-
-int32
-RecursiveOutlineIterator::CurrentLevel() const
-{
-	return fCurrentListDepth;
-}
-
-

@@ -59,7 +59,6 @@ All rights reserved.
 class BScrollBar;
 
 class BRowContainer;
-class RecursiveOutlineIterator;
 class BColumn;
 class BColumnListView;
 class BField;
@@ -109,7 +108,6 @@ private:
 
 
 	friend class BColumnListView;
-	friend class RecursiveOutlineIterator;
 	friend class OutlineView;
 };
 
@@ -371,31 +369,6 @@ class BRowContainer : public BObjectList<BRow>
 };
 
 
-class RecursiveOutlineIterator {
-public:
-								RecursiveOutlineIterator(
-									BRowContainer* container,
-									bool openBranchesOnly = true);
-
-			BRow*				CurrentRow() const;
-			int32				CurrentLevel() const;
-			void				GoToNext();
-
-private:
-			struct {
-				BRowContainer* fRowSet;
-				int32 fIndex;
-				int32 fDepth;
-			}					fStack[kMaxDepth];
-
-			int32				fStackIndex;
-			BRowContainer*		fCurrentList;
-			int32				fCurrentListIndex;
-			int32				fCurrentListDepth;
-			bool				fOpenBranchesOnly;
-};
-
-
 class OutlineView : public BView {
 	typedef BView _inherited;
 public:
@@ -510,7 +483,6 @@ private:
 			float				fTargetRowTop;
 			float				fDropHighlightY;
 
-	friend class RecursiveOutlineIterator;
 };
 
 

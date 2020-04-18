@@ -15,7 +15,7 @@
 
 
 #include "TitleView.h"
-#include "ColumnListView.h";
+#include "ColumnListView.h"
 
 TitleView::TitleView(BRect rect, OutlineView* horizontalSlave,
 	BList* visibleColumns, BList* sortColumns, BColumnListView* listView,
