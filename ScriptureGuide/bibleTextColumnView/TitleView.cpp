@@ -134,7 +134,8 @@ TitleView::SetColumnVisible(BColumn* column, bool visible)
 void
 TitleView::GetTitleRect(BColumn* findColumn, BRect* _rect)
 {
-	float leftEdge = MAX(kLeftMargin, fMasterView->LatchWidth());
+	//float leftEdge = MAX(kLeftMargin, fMasterView->LatchWidth());
+	float leftEdge = kLeftMargin;
 	int32 numColumns = fColumns->CountItems();
 	for (int index = 0; index < numColumns; index++) {
 		BColumn* column = (BColumn*) fColumns->ItemAt(index);
@@ -157,7 +158,8 @@ TitleView::GetTitleRect(BColumn* findColumn, BRect* _rect)
 int32
 TitleView::FindColumn(BPoint position, float* _leftEdge)
 {
-	float leftEdge = MAX(kLeftMargin, fMasterView->LatchWidth());
+	//float leftEdge = MAX(kLeftMargin, fMasterView->LatchWidth());
+	float leftEdge = kLeftMargin;
 	int32 numColumns = fColumns->CountItems();
 	for (int index = 0; index < numColumns; index++) {
 		BColumn* column = (BColumn*) fColumns->ItemAt(index);
@@ -258,7 +260,8 @@ TitleView::SetColumnFlags(column_flags flags)
 float
 TitleView::MarginWidth() const
 {
-	return MAX(kLeftMargin, fMasterView->LatchWidth()) + kRightMargin;
+	//return MAX(kLeftMargin, fMasterView->LatchWidth()) + kRightMargin;
+	return kLeftMargin + kRightMargin;
 }
 
 
@@ -338,7 +341,8 @@ TitleView::ComputeDragBoundries(BColumn* findColumn, BPoint)
 	float nextColumnRightEdge = 1000000.0;
 
 	bool foundColumn = false;
-	float leftEdge = MAX(kLeftMargin, fMasterView->LatchWidth());
+	//float leftEdge = MAX(kLeftMargin, fMasterView->LatchWidth());
+	float leftEdge = kLeftMargin;
 	int32 numColumns = fColumns->CountItems();
 	for (int index = 0; index < numColumns; index++) {
 		BColumn* column = (BColumn*) fColumns->ItemAt(index);
@@ -484,7 +488,8 @@ TitleView::_VirtualWidth() const
 void
 TitleView::Draw(BRect invalidRect)
 {
-	float columnLeftEdge = MAX(kLeftMargin, fMasterView->LatchWidth());
+	//float columnLeftEdge = MAX(kLeftMargin, fMasterView->LatchWidth());
+	float columnLeftEdge = kLeftMargin;
 	for (int32 columnIndex = 0; columnIndex < fColumns->CountItems();
 		columnIndex++) {
 
@@ -515,8 +520,13 @@ TitleView::Draw(BRect invalidRect)
 	}
 
 	// bevels for left title margin
-	if (invalidRect.left < MAX(kLeftMargin, fMasterView->LatchWidth())) {
+	/*if (invalidRect.left < MAX(kLeftMargin, fMasterView->LatchWidth())) {
 		BRect titleRect(0, 0, MAX(kLeftMargin, fMasterView->LatchWidth()) - 1,
+			fVisibleRect.Height());
+		DrawTitle(this, titleRect, NULL, false);
+	}*/
+	if (invalidRect.left < kLeftMargin) {
+		BRect titleRect(0, 0, kLeftMargin - 1,
 			fVisibleRect.Height());
 		DrawTitle(this, titleRect, NULL, false);
 	}
@@ -616,7 +626,8 @@ TitleView::MouseDown(BPoint position)
 	}
 
 	fResizingFirstColumn = true;
-	float leftEdge = MAX(kLeftMargin, fMasterView->LatchWidth());
+	//float leftEdge = MAX(kLeftMargin, fMasterView->LatchWidth());
+	float leftEdge = kLeftMargin;
 	for (int index = 0; index < fColumns->CountItems(); index++) {
 		BColumn* column = (BColumn*)fColumns->ItemAt(index);
 		if (column == NULL || !column->IsVisible())
@@ -785,7 +796,8 @@ TitleView::MouseMoved(BPoint position, uint32 transit,
 			// Check for cursor changes if we are over the resize area for
 			// a column.
 			BColumn* resizeColumn = 0;
-			float leftEdge = MAX(kLeftMargin, fMasterView->LatchWidth());
+			//float leftEdge = MAX(kLeftMargin, fMasterView->LatchWidth());
+			float leftEdge = kLeftMargin;
 			for (int index = 0; index < fColumns->CountItems(); index++) {
 				BColumn* column = (BColumn*) fColumns->ItemAt(index);
 				if (!column->IsVisible())

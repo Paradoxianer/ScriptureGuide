@@ -5,7 +5,7 @@
 #ifndef BIBLE_TEXT_ROW_H
 #define BIBLE_TEXT_ROW_H
 
-#include <ColumnListView.h>
+#include "ColumnListView.h"
 
 #include <SupportDefs.h>
 
@@ -15,7 +15,7 @@ public:
 				BibleTextRow();
 				BibleTextRow(float height);
 
-	float 		Height() const;
+	virtual	float 	Height() const;
 	
 
 };
