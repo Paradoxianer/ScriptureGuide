@@ -82,7 +82,6 @@ public:
 								BRow();
 								BRow(float height);
 	virtual 					~BRow();
-	virtual bool		 		HasLatch() const;
 
 			int32				CountFields() const;
 			BField*				GetField(int32 logicalFieldIndex);
@@ -90,7 +89,7 @@ public:
 			void				SetField(BField* field,
 									int32 logicalFieldIndex);
 
-			float 				Height() const;
+	virtual	float 				Height() const;
 			bool 				IsExpanded() const;
 			bool				IsSelected() const;
 
@@ -103,12 +102,11 @@ private:
 									int32 logicalFieldIndex) const;
 private:
 			BList				fFields;
-			BRowContainer*		fChildList;
-			bool				fIsExpanded;
+//			BRowContainer*		fChildList;
+//			bool				fIsExpanded;
 			float				fHeight;
 			BRow*				fNextSelected;
 			BRow*				fPrevSelected;
-			BRow*				fParent;
 			BColumnListView*	fList;
 
 
@@ -216,7 +214,7 @@ public:
 	// Interaction
 	virtual	bool				InitiateDrag(BPoint, bool wasSelected);
 	virtual	void				MessageDropped(BMessage*, BPoint point);
-	virtual	void				ExpandOrCollapse(BRow* row, bool expand);
+
 	virtual	status_t			Invoke(BMessage* message = NULL);
 	virtual	void				ItemInvoked();
 	virtual	void				SetInvocationMessage(BMessage* message);
@@ -269,18 +267,16 @@ public:
 			void				ResizeAllColumnsToPreferred();
 
 	// Row manipulation
-			const BRow*			RowAt(int32 index, BRow *parent = 0) const;
-			BRow*				RowAt(int32 index, BRow *parent = 0);
+			const BRow*			RowAt(int32 index) const;
+			BRow*				RowAt(int32 index);
+			
 			const BRow*			RowAt(BPoint) const;
 			BRow*				RowAt(BPoint);
 			bool				GetRowRect(const BRow* row, BRect* _rect) const;
-			bool				FindParent(BRow* row, BRow** _parent,
-									bool *_isVisible) const;
 			int32				IndexOf(BRow* row);
-			int32				CountRows(BRow* parent = 0) const;
-			void				AddRow(BRow* row, BRow* parent = NULL);
-			void				AddRow(BRow* row, int32 index,
-									BRow* parent = NULL);
+			int32				CountRows() const;
+			void				AddRow(BRow* row);
+			void				AddRow(BRow* row, int32 index);
 
 			void				ScrollTo(const BRow* Row);
 			void				ScrollTo(BPoint point);
@@ -289,8 +285,8 @@ public:
 	// todo: Make delete row and children
 			void				RemoveRow(BRow* row);
 			void				UpdateRow(BRow* row);
-			bool				SwapRows(int32 index1, int32 index2, BRow*
-									parentRow1 = NULL, BRow* parentRow2 = NULL);
+			bool				SwapRows(int32 index1, int32 index2);
+									
 			void				Clear();
 
 			void				InvalidateRow(BRow* row);
@@ -325,10 +321,6 @@ public:
 			BRect				GetFieldRect(const BRow* row,
 									const BColumn* column) const;
 
-			void				SetLatchWidth(float width);
-			float				LatchWidth() const;
-	virtual	void				DrawLatch(BView* view, BRect frame,
-									LatchType type, BRow* row);
 	virtual	void				MakeFocus(bool isfocus = true);
 			void				SaveState(BMessage* archive);
 			void				LoadState(BMessage* archive);
@@ -372,7 +364,6 @@ private:
 			BView*				fStatusView;
 			BMessage*			fSelectionMessage;
 			bool				fSortingEnabled;
-			float				fLatchWidth;
 			border_style		fBorderStyle;
 			bool				fShowingHorizontalScrollBar;
 };
@@ -423,19 +414,20 @@ public:
 			void 				StartSorting();
 			float				GetColumnPreferredWidth(BColumn* column);
 
-			void				AddRow(BRow*, int32 index, BRow* TheRow);
+	//		void				AddRow(BRow*, int32 index, BRow* TheRow);
+			void				AddRow(BRow*, int32 index);
 			BRow*				CurrentSelection(BRow* lastSelected) const;
 			void 				ToggleFocusRowSelection(bool selectRange);
 			void 				ToggleFocusRowOpen();
 			void 				ChangeFocusRow(bool up, bool updateSelection,
 									bool addToCurrentSelection);
 			void 				MoveFocusToVisibleRect();
-			void 				ExpandOrCollapse(BRow* parent, bool expand);
+			//void 				ExpandOrCollapse(BRow* parent, bool expand);
 			void 				RemoveRow(BRow*);
 			BRowContainer*		RowList();
 			void				UpdateRow(BRow*);
-			bool				FindParent(BRow* row, BRow** _parent,
-									bool* _isVisible);
+			/*bool				FindParent(BRow* row, BRow** _parent,
+									bool* _isVisible);*/
 			int32				IndexOf(BRow* row);
 			void				Deselect(BRow*);
 			void				AddToSelection(BRow*);
@@ -470,8 +462,9 @@ private:
 			void				SelectRange(BRow* start, BRow* end);
 			int32				CompareRows(BRow* row1, BRow* row2);
 			void				AddSorted(BRowContainer* list, BRow* row);
-			void				RecursiveDeleteRows(BRowContainer* list,
-									bool owner);
+			/*void				RecursiveDeleteRows(BRowContainer* list,
+									bool owner);*/
+			void				DeleteRows(BRowContainer* list, bool owner);
 			void				InvalidateCachedPositions();
 			bool				FindVisibleRect(BRow* row, BRect* _rect);
 
@@ -500,7 +493,6 @@ private:
 
 			enum CurrentState {
 				INACTIVE,
-				LATCH_CLICKED,
 				ROW_CLICKED,
 				DRAGGING_ROWS
 			};
@@ -525,7 +517,6 @@ private:
 			int32				fClickCount;
 			BRow*				fTargetRow;
 			float				fTargetRowTop;
-			BRect				fLatchRect;
 			float				fDropHighlightY;
 
 	friend class RecursiveOutlineIterator;
