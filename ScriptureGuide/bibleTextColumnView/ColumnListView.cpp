@@ -1262,11 +1262,6 @@ BColumnListView::KeyDown(const char* bytes, int32 numBytes)
 				if (focusRow == NULL)
 					break;
 
-/*				bool expanded = focusRow->IsExpanded();
-				if ((c == B_RIGHT_ARROW && !expanded)
-					|| (c == B_LEFT_ARROW && expanded)) {
-					fOutlineView->ToggleFocusRowOpen();
-				}*/
 			}
 			break;
 		}
@@ -1319,10 +1314,6 @@ BColumnListView::KeyDown(const char* bytes, int32 numBytes)
 		case B_SPACE:
 			fOutlineView->ToggleFocusRowSelection(
 				(modifiers() & B_SHIFT_KEY) != 0);
-			break;
-
-		case '+':
-			fOutlineView->ToggleFocusRowOpen();
 			break;
 
 		default:
@@ -1799,9 +1790,8 @@ OutlineView::~OutlineView()
 void
 OutlineView::Clear()
 {
+	// Make sure selection list doesn't point to deleted rows!
 	DeselectAll();
-		// Make sure selection list doesn't point to deleted rows!
-	//RecursiveDeleteRows(&fRows, false);
 	DeleteRows(&fRows, false);
 	fItemsHeight = 0.0;
 	FixScrollBar(true);
@@ -1862,27 +1852,6 @@ OutlineView::AddToSelection(BRow* row)
 }
 
 
-/*void
-OutlineView::RecursiveDeleteRows(BRowContainer* list, bool isOwner)
-{
-	if (list == NULL)
-		return;
-
-	while (true) {
-		BRow* row = list->RemoveItemAt(0L);
-		if (row == 0)
-			break;
-
-		if (row->fChildList)
-			RecursiveDeleteRows(row->fChildList, true);
-
-		delete row;
-	}
-
-	if (isOwner)
-		delete list;
-}*/
-
 void
 OutlineView::DeleteRows(BRowContainer* list, bool isOwner)
 {
@@ -1914,115 +1883,115 @@ OutlineView::RedrawColumn(BColumn* column, float leftEdge, bool isFirstColumn)
 	GetFontHeight(&fh);
 	float line = 0.0;
 	bool tintedLine = true;
-	for (RecursiveOutlineIterator iterator(&fRows); iterator.CurrentRow();
-		line += iterator.CurrentRow()->Height() + 1, iterator.GoToNext()) {
-
-		BRow* row = iterator.CurrentRow();
-		float rowHeight = row->Height();
-		if (line > fVisibleRect.bottom)
-			break;
-		tintedLine = !tintedLine;
-
-		if (line + rowHeight >= fVisibleRect.top) {
+	BRow	*row	= NULL;
+	for (int32 i =0; i< fRows.CountItems();i++) {
+		row = fRows.ItemAt(i);
+		if (row != NULL) {
+			line += row->Height() + 1;
+			float rowHeight = row->Height();
+			if (line > fVisibleRect.bottom)
+				break;
+			tintedLine = !tintedLine;
+			if (line + rowHeight >= fVisibleRect.top) {
 #if DOUBLE_BUFFERED_COLUMN_RESIZE
-			BRect sourceRect(0, 0, column->Width(), rowHeight);
+				BRect sourceRect(0, 0, column->Width(), rowHeight);
 #endif
-			BRect destRect(leftEdge, line, leftEdge + column->Width(),
-				line + rowHeight);
+				BRect destRect(leftEdge, line, leftEdge + column->Width(),
+					line + rowHeight);
 
-			rgb_color highColor;
-			rgb_color lowColor;
-			if (row->fNextSelected != 0) {
-				if (fEditMode) {
-					highColor = fMasterView->Color(B_COLOR_EDIT_BACKGROUND);
-					lowColor = fMasterView->Color(B_COLOR_EDIT_BACKGROUND);
+				rgb_color highColor;
+				rgb_color lowColor;
+				if (row->fNextSelected != 0) {
+					if (fEditMode) {
+						highColor = fMasterView->Color(B_COLOR_EDIT_BACKGROUND);
+						lowColor = fMasterView->Color(B_COLOR_EDIT_BACKGROUND);
+					} else {
+						highColor = fMasterView->Color(B_COLOR_SELECTION);
+						lowColor = fMasterView->Color(B_COLOR_SELECTION);
+					}
 				} else {
-					highColor = fMasterView->Color(B_COLOR_SELECTION);
-					lowColor = fMasterView->Color(B_COLOR_SELECTION);
+					highColor = fMasterView->Color(B_COLOR_BACKGROUND);
+					lowColor = fMasterView->Color(B_COLOR_BACKGROUND);
 				}
-			} else {
-				highColor = fMasterView->Color(B_COLOR_BACKGROUND);
-				lowColor = fMasterView->Color(B_COLOR_BACKGROUND);
-			}
-			if (tintedLine)
-				lowColor = tint_color(lowColor, kTintedLineTint);
-
+				if (tintedLine)
+					lowColor = tint_color(lowColor, kTintedLineTint);
 
 #if DOUBLE_BUFFERED_COLUMN_RESIZE
-			fDrawBuffer->Lock();
+				fDrawBuffer->Lock();
 
-			fDrawBufferView->SetHighColor(highColor);
-			fDrawBufferView->SetLowColor(lowColor);
+				fDrawBufferView->SetHighColor(highColor);
+				fDrawBufferView->SetLowColor(lowColor);
 
-			BFont font;
-			GetFont(&font);
-			fDrawBufferView->SetFont(&font);
-			fDrawBufferView->FillRect(sourceRect, B_SOLID_LOW);
+				BFont font;
+				GetFont(&font);
+				fDrawBufferView->SetFont(&font);
+				fDrawBufferView->FillRect(sourceRect, B_SOLID_LOW);
 
-			BField* field = row->GetField(column->fFieldID);
-			if (field) {
-				BRect fieldRect(sourceRect);
+				BField* field = row->GetField(column->fFieldID);
+				if (field) {
+					BRect fieldRect(sourceRect);
 
 	#if CONSTRAIN_CLIPPING_REGION
-				BRegion clipRegion(fieldRect);
-				fDrawBufferView->PushState();
-				fDrawBufferView->ConstrainClippingRegion(&clipRegion);
+					BRegion clipRegion(fieldRect);
+					fDrawBufferView->PushState();
+					fDrawBufferView->ConstrainClippingRegion(&clipRegion);
 	#endif
-				fDrawBufferView->SetHighColor(fMasterView->Color(
-					row->fNextSelected ? B_COLOR_SELECTION_TEXT
+					fDrawBufferView->SetHighColor(fMasterView->Color(
+						row->fNextSelected ? B_COLOR_SELECTION_TEXT
 						: B_COLOR_TEXT));
-				float baseline = floor(fieldRect.top + fh.ascent
-					+ (fieldRect.Height() + 1 - (fh.ascent+fh.descent)) / 2);
-				fDrawBufferView->MovePenTo(fieldRect.left + 8, baseline);
-				column->DrawField(field, fieldRect, fDrawBufferView);
+					float baseline = floor(fieldRect.top + fh.ascent
+						+ (fieldRect.Height() + 1 - (fh.ascent+fh.descent)) / 2);
+					fDrawBufferView->MovePenTo(fieldRect.left + 8, baseline);
+					column->DrawField(field, fieldRect, fDrawBufferView);
 	#if CONSTRAIN_CLIPPING_REGION
-				fDrawBufferView->PopState();
+					fDrawBufferView->PopState();
 	#endif
-			}
+				}
 
-			if (fFocusRow == row && !fEditMode && fMasterView->IsFocus()
-				&& Window()->IsActive()) {
-				fDrawBufferView->SetHighColor(fMasterView->Color(
-					B_COLOR_ROW_DIVIDER));
-				fDrawBufferView->StrokeRect(BRect(-1, sourceRect.top,
-					10000.0, sourceRect.bottom));
-			}
+				if (fFocusRow == row && !fEditMode && fMasterView->IsFocus()
+					&& Window()->IsActive()) {
+					fDrawBufferView->SetHighColor(fMasterView->Color(
+						B_COLOR_ROW_DIVIDER));
+					fDrawBufferView->StrokeRect(BRect(-1, sourceRect.top,
+						10000.0, sourceRect.bottom));
+				}
 
-			fDrawBufferView->Sync();
-			fDrawBuffer->Unlock();
-			SetDrawingMode(B_OP_COPY);
-			DrawBitmap(fDrawBuffer, sourceRect, destRect);
+				fDrawBufferView->Sync();
+				fDrawBuffer->Unlock();
+				SetDrawingMode(B_OP_COPY);
+				DrawBitmap(fDrawBuffer, sourceRect, destRect);
 
 #else
 
-			SetHighColor(highColor);
-			SetLowColor(lowColor);
-			FillRect(destRect, B_SOLID_LOW);
+				SetHighColor(highColor);
+				SetLowColor(lowColor);
+				FillRect(destRect, B_SOLID_LOW);
 
-			BField* field = row->GetField(column->fFieldID);
-			if (field) {
+				BField* field = row->GetField(column->fFieldID);
+				if (field) {
 	#if CONSTRAIN_CLIPPING_REGION
-				BRegion clipRegion(destRect);
-				PushState();
-				ConstrainClippingRegion(&clipRegion);
+					BRegion clipRegion(destRect);
+					PushState();
+					ConstrainClippingRegion(&clipRegion);
 	#endif
-				SetHighColor(fMasterView->Color(row->fNextSelected
-					? B_COLOR_SELECTION_TEXT : B_COLOR_TEXT));
-				float baseline = floor(destRect.top + fh.ascent
-					+ (destRect.Height() + 1 - (fh.ascent + fh.descent)) / 2);
-				MovePenTo(destRect.left + 8, baseline);
-				column->DrawField(field, destRect, this);
+					SetHighColor(fMasterView->Color(row->fNextSelected
+						? B_COLOR_SELECTION_TEXT : B_COLOR_TEXT));
+					float baseline = floor(destRect.top + fh.ascent
+						+ (destRect.Height() + 1 - (fh.ascent + fh.descent)) / 2);
+					MovePenTo(destRect.left + 8, baseline);
+					column->DrawField(field, destRect, this);
 	#if CONSTRAIN_CLIPPING_REGION
-				PopState();
+					PopState();
 	#endif
-			}
+				}
 
-			if (fFocusRow == row && !fEditMode && fMasterView->IsFocus()
-				&& Window()->IsActive()) {
-				SetHighColor(fMasterView->Color(B_COLOR_ROW_DIVIDER));
-				StrokeRect(BRect(0, destRect.top, 10000.0, destRect.bottom));
-			}
+				if (fFocusRow == row && !fEditMode && fMasterView->IsFocus()
+					&& Window()->IsActive()) {
+					SetHighColor(fMasterView->Color(B_COLOR_ROW_DIVIDER));
+					StrokeRect(BRect(0, destRect.top, 10000.0, destRect.bottom));
+				}
 #endif
+			}
 		}
 	}
 }
@@ -2645,14 +2614,6 @@ OutlineView::ToggleFocusRowSelection(bool selectRange)
 
 
 void
-OutlineView::ToggleFocusRowOpen()
-{
-/*	if (fFocusRow)
-		fMasterView->ExpandOrCollapse(fFocusRow, !fFocusRow->fIsExpanded);*/
-}
-
-
-void
 OutlineView::RemoveRow(BRow* row)
 {
 	if (row == NULL)
@@ -3100,74 +3061,6 @@ OutlineView::DeepSortThreadEntry(void* _outlineView)
 void
 OutlineView::DeepSort()
 {
-	/*struct stack_entry {
-		bool isVisible;
-		BRowContainer* list;
-		int32 listIndex;
-	} stack[kMaxDepth];
-	int32 stackTop = 0;
-	
-
-	stack[stackTop].list = &fRows;
-	stack[stackTop].isVisible = true;
-	stack[stackTop].listIndex = 0;
-	fNumSorted = 0;
-
-	if (Window()->Lock() == false)
-		return;
-
-	bool doneSorting = false;
-	while (!doneSorting && !fSortCancelled) {
-
-		stack_entry* currentEntry = &stack[stackTop];
-
-		// xxx Can make the invalidate area smaller by finding the rect for the
-		// parent item and using that as the top of the invalid rect.
-
-		bool haveLock = SortList(currentEntry->list, currentEntry->isVisible);
-		if (!haveLock)
-			return ;	// window is gone.
-
-		// Fix focus rect.
-		InvalidateCachedPositions();
-		if (fCurrentState != INACTIVE)
-			fCurrentState = INACTIVE;	// sorry...
-		if (--stackTop < 0) {
-			doneSorting = true;
-			break;
-		}
-
-				currentEntry = &stack[stackTop];
-		// next list.
-		/*bool foundNextList = false;
-		while (!foundNextList && !fSortCancelled) {
-			for (int32 index = currentEntry->listIndex; index < currentEntry->list->CountItems();
-				index++) {
-				BRow* parentRow = currentEntry->list->ItemAt(index);
-				BRowContainer* childList = parentRow->fChildList;
-				if (childList != 0) {
-					currentEntry->listIndex = index + 1;
-					stackTop++;
-					ASSERT(stackTop < kMaxDepth);
-					stack[stackTop].listIndex = 0;
-					stack[stackTop].list = childList;
-					stack[stackTop].isVisible = (currentEntry->isVisible && parentRow->fIsExpanded);
-					foundNextList = true;
-					break;
-				}
-			}
-
-			if (!foundNextList) {
-				// back up
-				if (--stackTop < 0) {
-					doneSorting = true;
-					break;
-				}
-
-				currentEntry = &stack[stackTop];
-			}
-		}
-	}*/
 	bool haveLock = SortList(&fRows, true);
 		if (!haveLock)
 			return ;	// window is gone.

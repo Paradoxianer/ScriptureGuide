@@ -102,8 +102,6 @@ private:
 									int32 logicalFieldIndex) const;
 private:
 			BList				fFields;
-//			BRowContainer*		fChildList;
-//			bool				fIsExpanded;
 			float				fHeight;
 			BRow*				fNextSelected;
 			BRow*				fPrevSelected;
@@ -414,20 +412,15 @@ public:
 			void 				StartSorting();
 			float				GetColumnPreferredWidth(BColumn* column);
 
-	//		void				AddRow(BRow*, int32 index, BRow* TheRow);
 			void				AddRow(BRow*, int32 index);
 			BRow*				CurrentSelection(BRow* lastSelected) const;
 			void 				ToggleFocusRowSelection(bool selectRange);
-			void 				ToggleFocusRowOpen();
 			void 				ChangeFocusRow(bool up, bool updateSelection,
 									bool addToCurrentSelection);
 			void 				MoveFocusToVisibleRect();
-			//void 				ExpandOrCollapse(BRow* parent, bool expand);
 			void 				RemoveRow(BRow*);
 			BRowContainer*		RowList();
 			void				UpdateRow(BRow*);
-			/*bool				FindParent(BRow* row, BRow** _parent,
-									bool* _isVisible);*/
 			int32				IndexOf(BRow* row);
 			void				Deselect(BRow*);
 			void				AddToSelection(BRow*);
@@ -462,8 +455,6 @@ private:
 			void				SelectRange(BRow* start, BRow* end);
 			int32				CompareRows(BRow* row1, BRow* row2);
 			void				AddSorted(BRowContainer* list, BRow* row);
-			/*void				RecursiveDeleteRows(BRowContainer* list,
-									bool owner);*/
 			void				DeleteRows(BRowContainer* list, bool owner);
 			void				InvalidateCachedPositions();
 			bool				FindVisibleRect(BRow* row, BRect* _rect);
