@@ -400,8 +400,7 @@ public:
 			void				DeselectAll();
 			BRow*				FocusRow() const;
 			void				SetFocusRow(BRow* row, bool select);
-			BRow*				FindRow(float ypos, int32* _indent,
-									float* _top);
+			BRow*				FindRow(float ypos, float* _top);
 			bool				FindRect(const BRow* row, BRect* _rect);
 			void				ScrollTo(const BRow* row);
 

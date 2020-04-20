@@ -862,8 +862,7 @@ const BRow*
 BColumnListView::RowAt(BPoint point) const
 {
 	float top;
-	int32 indent;
-	return fOutlineView->FindRow(point.y, &indent, &top);
+	return fOutlineView->FindRow(point.y, &top);
 }
 
 
@@ -871,8 +870,7 @@ BRow*
 BColumnListView::RowAt(BPoint point)
 {
 	float top;
-	int32 indent;
-	return fOutlineView->FindRow(point.y, &indent, &top);
+	return fOutlineView->FindRow(point.y, &top);
 }
 
 
@@ -2130,11 +2128,11 @@ OutlineView::Draw(BRect invalidBounds)
 	}
 }
 
-//@ToDo remove _rowIndent and??? _top?
+
 BRow*
-OutlineView::FindRow(float ypos, int32* _rowIndent, float* _top)
+OutlineView::FindRow(float ypos, float* _top)
 {
-	if (_rowIndent && _top) {
+	if (_top) {
 		float line = 0.0;
 		BRow	*row	= NULL;
 		for (int32 i =0; i< fRows.CountItems();i++) {
@@ -2145,7 +2143,6 @@ OutlineView::FindRow(float ypos, int32* _rowIndent, float* _top)
 			float rowHeight = row->Height();
 			if (ypos <= line + rowHeight) {
 				*_top = line;
-				*_rowIndent = 0;
 				return row;
 			}
 
@@ -2183,11 +2180,9 @@ OutlineView::MouseDown(BPoint position)
 	// Check to see if the user is clicking on a widget to open a section
 	// of the list.
 	bool reset_click_count = false;
-	int32 indent;
 	float rowTop;
-	BRow* row = FindRow(position.y, &indent, &rowTop);
+	BRow* row = FindRow(position.y, &rowTop);
 	if (row != NULL) {
-
 		// Update fCurrentField
 		bool handle_field = false;
 		BField* new_field = 0;
@@ -2202,6 +2197,18 @@ OutlineView::MouseDown(BPoint position)
 					new_column = fMasterView->ColumnAt(c);
 					if (!new_column->IsVisible())
 						continue;
+					if (x+ new_column->Width() >= position.x) {
+						if (new_column->WantsEvents()) {
+							new_field = row->GetField(c);
+							new_row = row;
+							FindRect(new_row,&new_rect);
+							new_rect.left = x;
+							new_rect.right = new_rect.left
+								+ new_column->Width() - 1;
+							handle_field = true;
+						}
+						break;
+					}
 					x += new_column->Width();
 				}
 			}
@@ -2228,10 +2235,55 @@ OutlineView::MouseDown(BPoint position)
 			fTargetRowTop = rowTop;
 			FindVisibleRect(fFocusRow, &fFocusRowRect);
 
-		}
+			float leftWidgetBoundry = kLeftMargin;
+			Invalidate(fFocusRowRect);
+			fFocusRow = fTargetRow;
+			FindVisibleRect(fFocusRow, &fFocusRowRect);
 
-		SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS |
-			B_NO_POINTER_HISTORY);
+			ASSERT(fTargetRow != 0);
+
+			if ((modifiers() & B_CONTROL_KEY) == 0)
+				DeselectAll();
+
+			if ((modifiers() & B_SHIFT_KEY) != 0 && fFirstSelectedItem != 0
+				&& fSelectionMode == B_MULTIPLE_SELECTION_LIST) {
+				SelectRange(fFirstSelectedItem, fTargetRow);
+			}
+			else {
+				if (fTargetRow->fNextSelected != 0) {
+					// Unselect row
+					fTargetRow->fNextSelected->fPrevSelected
+						= fTargetRow->fPrevSelected;
+					fTargetRow->fPrevSelected->fNextSelected
+						= fTargetRow->fNextSelected;
+					fTargetRow->fPrevSelected = 0;
+					fTargetRow->fNextSelected = 0;
+					fFirstSelectedItem = NULL;
+				} else {
+					// Select row
+					if (fSelectionMode == B_SINGLE_SELECTION_LIST)
+						DeselectAll();
+
+					fTargetRow->fNextSelected
+						= fSelectionListDummyHead.fNextSelected;
+					fTargetRow->fPrevSelected
+						= &fSelectionListDummyHead;
+					fTargetRow->fNextSelected->fPrevSelected = fTargetRow;
+					fTargetRow->fPrevSelected->fNextSelected = fTargetRow;
+					fFirstSelectedItem = fTargetRow;
+				}
+
+				Invalidate(BRect(fVisibleRect.left, fTargetRowTop,
+					fVisibleRect.right,
+					fTargetRowTop + fTargetRow->Height()));
+			}
+
+			fCurrentState = ROW_CLICKED;
+			if (fLastSelectedItem != fTargetRow)
+				reset_click_count = true;
+			fLastSelectedItem = fTargetRow;
+			fMasterView->SelectionChanged();
+		}
 
 	} else if (fFocusRow != 0) {
 		// User clicked in open space, unhighlight focus row.
@@ -2264,8 +2316,7 @@ OutlineView::MouseMoved(BPoint position, uint32 /*transit*/,
 		BRect new_rect(0,0,0,0);
 		if (position.y >=0 ) {
 			float top;
-			int32 indent;
-			BRow* row = FindRow(position.y, &indent, &top);
+			BRow* row = FindRow(position.y, &top);
 			if (row && position.x >=0 ) {
 				float x=0;
 				for (int32 c=0;c<fMasterView->CountColumns();c++) {
@@ -2360,8 +2411,7 @@ OutlineView::MouseMoved(BPoint position, uint32 /*transit*/,
 				if (fTrackMouse /*&& message*/) {
 					if (fVisibleRect.Contains(position)) {
 						float top;
-						int32 indent;
-						BRow* target = FindRow(position.y, &indent, &top);
+						BRow* target = FindRow(position.y, &top);
 						if (target)
 							SetFocusRow(target, true);
 					}
@@ -2375,8 +2425,7 @@ OutlineView::MouseMoved(BPoint position, uint32 /*transit*/,
 					// Draw a highlight line...
 					if (fVisibleRect.Contains(position)) {
 						float top;
-						int32 indent;
-						BRow* target = FindRow(position.y, &indent, &top);
+						BRow* target = FindRow(position.y,  &top);
 						if (target == fRollOverRow)
 							break;
 						if (fRollOverRow) {
@@ -2462,12 +2511,11 @@ OutlineView::MessageReceived(BMessage* message)
 	}
 }
 
-
+//@ToDo fix this
 void
 OutlineView::ChangeFocusRow(bool up, bool updateSelection,
 	bool addToCurrentSelection)
 {
-	int32 indent;
 	float top;
 	float newRowPos = 0;
 	float verticalScroll = 0;
@@ -2484,7 +2532,7 @@ OutlineView::ChangeFocusRow(bool up, bool updateSelection,
 			// no row is currently focused, set this to the top of the window
 			// so we will select the first visible item in the list.
 
-	BRow* newRow = FindRow(newRowPos, &indent, &top);
+	BRow* newRow = FindRow(newRowPos, &top);
 	if (newRow) {
 		if (fFocusRow) {
 			fFocusRowRect.right = 10000;
@@ -2628,10 +2676,9 @@ OutlineView::RemoveRow(BRow* row)
 			Invalidate(invalid);
 	}
 	
-	int32 indent = 0;
 	float top = 0.0;
 
-	if (FindRow(fVisibleRect.top, &indent, &top) == NULL && ScrollBar(B_VERTICAL) != NULL) {
+	if (FindRow(fVisibleRect.top, &top) == NULL && ScrollBar(B_VERTICAL) != NULL) {
 		// after removing this row, no rows are actually visible any more,
 		// force a scroll to make them visible again
 		if (fItemsHeight > fVisibleRect.Height())
@@ -2707,8 +2754,8 @@ OutlineView::AddRow(BRow* row, int32 Index)
 		else
 			fRows.AddItem(row, Index);
 	}
-	fItemsHeight += dynamic_cast<BRow*>(row)->Height() + 1;
-
+	//fItemsHeight += dynamic_cast<BRow*>(row)->Height() + 1;
+	fItemsHeight += row->Height() + 1;
 	FixScrollBar(false);
 
 	BRect newRowRect;
