@@ -9,8 +9,8 @@
 
 #include <Application.h>
 #include <Catalog.h>
-#include <ColumnListView.h>
-#include <ColumnTypes.h>
+#include "ColumnListView.h"
+#include "ColumnTypes.h"
 #include <Invoker.h>
 #include <LayoutBuilder.h>
 #include <String.h>
