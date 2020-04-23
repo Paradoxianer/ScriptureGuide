@@ -283,6 +283,31 @@ void TitleView::SetMasterView(BColumnListView* masterView)
 }
 
 
+BPopUpMenu* TitleView::CreateContextMenu()
+{
+	if (fColumnPop == NULL)
+			fColumnPop = new BPopUpMenu("Columns", false, false);
+
+	fColumnPop->RemoveItems(0, fColumnPop->CountItems(), true);
+	BMessenger me(this);
+	for (int index = 0; index < fColumns->CountItems(); index++) {
+		BColumn* column = (BColumn*) fColumns->ItemAt(index);
+		if (column == NULL)
+			continue;
+			
+		BString name;
+		column->GetColumnName(&name);
+		BMessage* message = new BMessage(kToggleColumn);
+		message->AddInt32("be:field_num", column->LogicalFieldNum());
+		BMenuItem* item = new BMenuItem(name.String(), message);
+		item->SetMarked(column->IsVisible());
+		item->SetTarget(me);
+		fColumnPop->AddItem(item);
+	}
+	return fColumnPop;
+}
+
+
 void
 TitleView::ResizeSelectedColumn(BPoint position, bool preferred)
 {
@@ -615,25 +640,7 @@ TitleView::MouseDown(BPoint position)
 	if (buttons == B_SECONDARY_MOUSE_BUTTON
 		&& (fColumnFlags & B_ALLOW_COLUMN_POPUP)) {
 		// Right mouse button -- bring up menu to show/hide columns.
-		if (fColumnPop == NULL)
-			fColumnPop = new BPopUpMenu("Columns", false, false);
-
-		fColumnPop->RemoveItems(0, fColumnPop->CountItems(), true);
-		BMessenger me(this);
-		for (int index = 0; index < fColumns->CountItems(); index++) {
-			BColumn* column = (BColumn*) fColumns->ItemAt(index);
-			if (column == NULL)
-				continue;
-
-			BString name;
-			column->GetColumnName(&name);
-			BMessage* message = new BMessage(kToggleColumn);
-			message->AddInt32("be:field_num", column->LogicalFieldNum());
-			BMenuItem* item = new BMenuItem(name.String(), message);
-			item->SetMarked(column->IsVisible());
-			item->SetTarget(me);
-			fColumnPop->AddItem(item);
-		}
+		fColumnPop = CreateContextMenu();
 
 		BPoint screenPosition = ConvertToScreen(position);
 		BRect sticky(screenPosition, screenPosition);

@@ -54,6 +54,9 @@ public:
 			OutlineView* 		GetOutlineView(){return fOutlineView;}
 			void		 		SetMasterView(BColumnListView* masterView);
 			BColumnListView*	MasterView(){return fMasterView;}
+			
+	virtual	BPopUpMenu*			CreateContextMenu();
+
 
 private:
 			void				GetTitleRect(BColumn* column, BRect* _rect);
@@ -68,7 +71,8 @@ private:
 									BColumn* column, bool depressed);
 
 			float				_VirtualWidth() const;
-
+			
+			BPopUpMenu*			fColumnPop;
 			OutlineView*		fOutlineView;
 			BList*				fColumns;
 			BList*				fSortColumns;
@@ -88,7 +92,6 @@ private:
 				DRAG_COLUMN_OUTSIDE_TITLE
 			}					fCurrentState;
 
-			BPopUpMenu*			fColumnPop;
 			BColumnListView*	fMasterView;
 			bool				fEditMode;
 			int32				fColumnFlags;
