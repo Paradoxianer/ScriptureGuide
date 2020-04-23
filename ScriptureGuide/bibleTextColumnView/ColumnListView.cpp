@@ -1717,6 +1717,24 @@ BColumnListView::_GetChildViewRects(const BRect& bounds, BRect& titleRect,
 	}
 }
 
+void BColumnListView::SetTitleView(TitleView *newTitleView)
+{
+	if (newTitleView != fTitleView && newTitleView != NULL){
+		if (fTitleView != NULL) {
+			//@ToDo do we need to copy all stuff over??
+		}
+		BView sibling = fTitleView->NextSibling();
+		if (RemoveChild(fTitleView)){
+			BView tmpView = fTitleView;
+			fTitleView = newTitleView;
+			delete tmpView;
+			fTitleView->SetMasterView(this);
+			fTitleView->SetOutlineView(fOutlineView);
+			AddChild(fTitleView);
+		}
+	}
+}
+
 
 // #pragma mark -
 

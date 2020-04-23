@@ -341,6 +341,8 @@ protected:
 	virtual	void				LayoutInvalidated(bool descendants = false);
 	virtual	void				DoLayout();
 
+	virtual void				SetTitleView(TitleView *newTitleView);
+
 private:
 			void				_Init();
 			void				_UpdateColors();

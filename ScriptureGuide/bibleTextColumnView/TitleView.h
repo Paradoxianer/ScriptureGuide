@@ -50,6 +50,10 @@ public:
 									{ fEditMode = state; }
 
 			float				MarginWidth() const;
+			void		 		SetOutlineView(OutlineView* outlineView);
+			OutlineView* 		OutlineView(){return fOutlineView;}
+			void		 		SetMasterView(BColumnListView* masterView);
+			BColumnListView*	MasterView(){return fMasterView;}
 
 private:
 			void				GetTitleRect(BColumn* column, BRect* _rect);

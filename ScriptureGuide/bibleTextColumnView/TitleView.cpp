@@ -265,6 +265,24 @@ TitleView::MarginWidth() const
 }
 
 
+void TitleView::SetOutlineView(OutlineView* outlineView)
+{
+	if (outlineView){
+		fOutlineView=outlineView
+		//@ToDo what else do we need to update???
+	}
+}
+
+
+void TitleView::SetMasterView(BColumnListView* masterView)
+{
+	if (masterView){
+		fMasterView = masterView
+		//@ToDo what else do we need to update
+	}
+}
+
+
 void
 TitleView::ResizeSelectedColumn(BPoint position, bool preferred)
 {
