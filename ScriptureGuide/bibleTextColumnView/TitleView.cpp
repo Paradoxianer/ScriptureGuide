@@ -268,7 +268,7 @@ TitleView::MarginWidth() const
 void TitleView::SetOutlineView(OutlineView* outlineView)
 {
 	if (outlineView){
-		fOutlineView=outlineView
+		fOutlineView=outlineView;
 		//@ToDo what else do we need to update???
 	}
 }
@@ -277,7 +277,7 @@ void TitleView::SetOutlineView(OutlineView* outlineView)
 void TitleView::SetMasterView(BColumnListView* masterView)
 {
 	if (masterView){
-		fMasterView = masterView
+		fMasterView = masterView;
 		//@ToDo what else do we need to update
 	}
 }

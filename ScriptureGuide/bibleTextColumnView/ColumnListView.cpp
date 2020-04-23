@@ -1723,9 +1723,9 @@ void BColumnListView::SetTitleView(TitleView *newTitleView)
 		if (fTitleView != NULL) {
 			//@ToDo do we need to copy all stuff over??
 		}
-		BView sibling = fTitleView->NextSibling();
+		BView *sibling = fTitleView->NextSibling();
 		if (RemoveChild(fTitleView)){
-			BView tmpView = fTitleView;
+			BView *tmpView = fTitleView;
 			fTitleView = newTitleView;
 			delete tmpView;
 			fTitleView->SetMasterView(this);

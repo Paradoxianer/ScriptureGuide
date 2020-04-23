@@ -51,7 +51,7 @@ public:
 
 			float				MarginWidth() const;
 			void		 		SetOutlineView(OutlineView* outlineView);
-			OutlineView* 		OutlineView(){return fOutlineView;}
+			OutlineView* 		GetOutlineView(){return fOutlineView;}
 			void		 		SetMasterView(BColumnListView* masterView);
 			BColumnListView*	MasterView(){return fMasterView;}
 
