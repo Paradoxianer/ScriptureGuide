@@ -430,12 +430,6 @@ bool SGMainWindow::NeedsLineBreaks(void)
 }
 
 
-
-void SGMainWindow::FrameResized(float width, float height) 
-{
-}
-
-
 void SGMainWindow::MessageReceived(BMessage* msg) 
 {
 	switch (msg->what) 
@@ -813,6 +807,7 @@ void SGMainWindow::SetChapter(const int16 &chapter)
 	BString vText;	
 	vText << fCurrentVerse;
 	fVerseBox->SetText(vText.String());
+	bibleTextView->SetChapter(fCurrentChapter);
 }
 
 

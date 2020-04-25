@@ -45,7 +45,6 @@ public:
 	~SGMainWindow();
 	virtual bool QuitRequested();
 	virtual void MessageReceived(BMessage* message);
-	virtual void FrameResized(float width, float height);
 
 private:
 	void BuildGUI(void);
