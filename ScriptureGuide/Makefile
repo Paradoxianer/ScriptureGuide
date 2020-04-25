@@ -44,7 +44,8 @@ SRCS = \
 	 bibleTextColumnView/BibleTextField.cpp \
 	 bibleTextColumnView/ColumnListView.cpp \
 	 bibleTextColumnView/ColumnTypes.cpp \
-	 bibleTextColumnView/TitleView.cpp
+	 bibleTextColumnView/TitleView.cpp \
+	 bibleTextColumnView/BibleTitleView.h
 
 		
 #	Specify the resource definition files to use. Full or relative paths can be

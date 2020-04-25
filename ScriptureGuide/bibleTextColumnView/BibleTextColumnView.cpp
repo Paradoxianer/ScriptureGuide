@@ -10,6 +10,7 @@
 #include "BibleTextColumn.h"
 #include "BibleTextColumnView.h"
 #include "BibleTextField.h"
+#include "BibleTitleView.h"
 
 
 
@@ -21,6 +22,8 @@ BibleTextColumnView::BibleTextColumnView(char *name, SWMgr *fManager, VerseKey *
 	ModMap::iterator it;
 	SWModule* currentmodule = NULL;
 	BibleTextColumn *tmpColumn = NULL;
+	BibleTitleView  *btView = new BibleTitleView();
+	SetTitleView(btView);
 	int32 i =0;
 	for (it = fManager->Modules.begin(); it != fManager->Modules.end(); it++)
 	{
