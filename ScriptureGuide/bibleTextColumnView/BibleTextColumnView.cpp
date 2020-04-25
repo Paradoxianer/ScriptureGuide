@@ -20,7 +20,7 @@ BibleTextColumnView::BibleTextColumnView(char *name, SWMgr *fManager, VerseKey *
 	fManager(fManager),
 	fVerseKey(key)
 {
-	BLocale::Default()->GetLanguage(&language);	
+	BLocale::Default()->GetLanguage(&fLanguage);	
 	ModMap::iterator it;
 	SWModule* currentmodule = NULL;
 	BibleTextColumn *tmpColumn = NULL;
@@ -109,7 +109,7 @@ int BibleTextColumnView::GetVerse() const
 
 status_t BibleTextColumnView::SetBook(char* book)
 {
-	fVerseKey->setLocale(language.Code());
+	fVerseKey->setLocale(fLanguage.Code());
 	fVerseKey->setBookName(book);
 	
 	_InsertRowForKeys();

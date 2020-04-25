@@ -70,7 +70,11 @@ All rights reserved.
 
 #include "ObjectList.h"
 
-
+/*@ToDo: needs Cleanup for things like drawing Rows .. e.g. we dont need to draw the
+	tinted color on every even row since we will just need a plain background for 
+	the bibletextes.
+	Also to draw the higlight will be Task of the ParagraphLayoutStyle of ever Verse
+*/
 
 BField::BField()
 {

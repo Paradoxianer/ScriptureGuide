@@ -49,12 +49,16 @@ public:
 
 	void				Select(int start, int end);
 	
+	void				SetShowVerseNumber(bool showVerseNumber){fShowVerseNumber=showVerseNumber;}
+	bool				ShowVerseNumber(){return fShowVerseNumber;};
+	
 
 private:
 	void				_InsertRowForKeys();
 	SWMgr				*fManager;
-	VerseKey			*fVerseKey;	
-	BLanguage			language;
+	VerseKey			*fVerseKey;
+	bool				fShowVerseNumber;
+	BLanguage			fLanguage;
 };
 
 
