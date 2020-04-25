@@ -3,6 +3,7 @@
  * All rights reserved. Distributed under the terms of the MIT license.
  */
 
+
 #include <gbfplain.h>
 #include <versekey.h>
 
@@ -19,6 +20,7 @@ BibleTextColumnView::BibleTextColumnView(char *name, SWMgr *fManager, VerseKey *
 	fManager(fManager),
 	fVerseKey(key)
 {
+	BLocale::Default()->GetLanguage(&language);	
 	ModMap::iterator it;
 	SWModule* currentmodule = NULL;
 	BibleTextColumn *tmpColumn = NULL;
@@ -42,6 +44,17 @@ BibleTextColumnView::BibleTextColumnView(char *name, SWMgr *fManager, VerseKey *
 
 void BibleTextColumnView::_InsertRowForKeys()
 {
+	printf("BibleTextColumnView::_InsertRowForKeys(%s)\n",fVerseKey->getText());
+	//first delete all Rows
+	BRow *r = RowAt(0);
+	while (r != NULL)
+	{
+		RemoveRow(r);
+		//@ToDo check if we need to delete all Fields???
+		delete r;
+		r = RowAt(0);
+	}
+
 	BibleTextRow	*row			= NULL;
 	VerseKey		*key			= NULL;
 	int32			countColumns	= CountColumns();
@@ -96,11 +109,12 @@ int BibleTextColumnView::GetVerse() const
 
 status_t BibleTextColumnView::SetBook(char* book)
 {
-	/*((VerseKey*)fModule->getKey())->setBookName(book);
-	char error = fModule->popError();
-	printf("Error %c\n",error);*/
-	//ToDo return correct Error
-	;
+	fVerseKey->setLocale(language.Code());
+	fVerseKey->setBookName(book);
+	
+	_InsertRowForKeys();
+	Invalidate();
+	//ToDo return correct Error;
 	return B_OK;
 	
 }
@@ -113,23 +127,24 @@ status_t BibleTextColumnView::SetChapter(int iChapter)
 	printf("Error %c\n",error);
 	//ToDo return correct Error
 	;*/
+	fVerseKey->setChapter(iChapter);
+	_InsertRowForKeys();
+	Invalidate();
 	return B_OK;
 }
 
 
 status_t BibleTextColumnView::SetVerse(int iVerse)
 {
-	/*((VerseKey*)fModule->getKey())->setVerse(iVerse);
-	char error = fModule->popError();
-	printf("Error %c\n",error);
-	//ToDo return correct Error
-	;*/
+	AddToSelection(RowAt(iVerse));
+	Invalidate();
 	return B_OK;
 }
 
 
 status_t BibleTextColumnView::SetKey(const char* iKey)
 {
+
 	/*VerseKey key = new VerseKey();
 	key.setLocale(language.Code());
 	key.setText(iKey);

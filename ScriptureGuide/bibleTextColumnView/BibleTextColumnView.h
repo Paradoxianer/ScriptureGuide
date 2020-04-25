@@ -5,6 +5,7 @@
 #ifndef BIBLE_TEXT_COLUMN_VIEW_H
 #define BIBLE_TEXT_COLUMN_VIEW_H
 
+#include <Locale.h>
 #include <SupportDefs.h>
 
 #include <listkey.h>
@@ -53,6 +54,7 @@ private:
 	void				_InsertRowForKeys();
 	SWMgr				*fManager;
 	VerseKey			*fVerseKey;	
+	BLanguage			language;
 };
 
 

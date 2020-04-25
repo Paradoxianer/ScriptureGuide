@@ -118,12 +118,14 @@ void BibleTextColumn::MouseUp(BColumnListView* parent, BRow* row,
 status_t BibleTextColumn::SetModule(SWModule* mod)
 {
 	fModule=mod;
+	//@ToDo Update everything
 }
 
 
 status_t BibleTextColumn::SetModule(const char* modulName)
 {
 	fModule	= fManager->getModule(modulName);
+	//@ToDo Update everything
 }
 
 
