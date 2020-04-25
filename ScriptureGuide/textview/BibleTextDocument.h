@@ -26,8 +26,7 @@ using namespace std;
 
 class BibleTextDocument : public TextDocument {
 public:
-	/**ToDo implement LayoutMessenger to inform all others about layouting
-	*/
+
 						BibleTextDocument(const char *moduleName,const char* iKey);
 
 	const char*			GetKey();
