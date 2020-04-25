@@ -42,6 +42,8 @@
 
 #define CONFIGPATH MODULES_PATH
 
+//@ToDo: needs a massiv Cleanup since nearly the whole funktionality is already in BibleTextColumnListView
+
 SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 		uint16 selectVers, uint16 selectVersEnd )
  :	BWindow(frame, "Scripture Guide", B_DOCUMENT_WINDOW, 0),
@@ -212,39 +214,6 @@ void SGMainWindow::BuildGUI(void)
 	
 	fMenuBar->AddItem(menu);
 	
-	// We need to populate the module menu because the size of the field 
-	// depends on the average module name width. We average because the 
-	// KJV + Strongs + Morphology has a horribly long name while
-	// the rest are reasonable.
-	/*BMenu* modulemenu = new BMenu("text");
-	int32 count = fModManager->CountBibles();
-	
-	// Add Bibles
-	fBibleMenu = new BMenu(B_TRANSLATE("Bibles"));
-	for (int32 i = 0; i < count; i++)
-	{
-		BString modname = fModManager->BibleAt(i)->FullName();
-		
-		BMessage* biblemsg = new BMessage(SELECT_BIBLE);
-		biblemsg->AddInt32("index", i);
-		fBibleMenu->AddItem(new BMenuItem(modname.String(),biblemsg));
-	}
-	modulemenu->AddItem(fBibleMenu);
-
-	count = fModManager->CountCommentaries();
-	
-	// Add Commentaries
-	fCommentaryMenu = new BMenu(B_TRANSLATE("Commentaries"));
-	for (int32 i = 0; i < count; i++)
-	{
-		BString modname = fModManager->CommentaryAt(i)->FullName();
-		
-		BMessage* commmsg = new BMessage(SELECT_COMMENTARY);
-		commmsg->AddInt32("index",i);
-		fCommentaryMenu->AddItem(new BMenuItem(modname.String(),commmsg));
-	}
-	modulemenu->AddItem(fCommentaryMenu);*/
-	
 	// Add the toolbar view	
 	BBox* toolbar = new BBox("toolbar_view");
 	
@@ -292,22 +261,7 @@ void SGMainWindow::BuildGUI(void)
 	BRect textrect = textframe;
 	textrect.OffsetTo(B_ORIGIN);
 	
-	fVerseView = new BTextView(textframe, "text_view", textrect,
-				B_FOLLOW_ALL_SIDES, B_WILL_DRAW | B_PULSE_NEEDED);
-	fScrollView = new BScrollView("scroll_view", fVerseView,
-				B_FOLLOW_ALL_SIDES, 0, false, true, B_NO_BORDER);
-	
-	fVerseView->SetDoesUndo(false);
-	fVerseView->MakeFocus(true);
-	fVerseView->MakeEditable(false);
-	fVerseView->SetStylable(true);
-	fVerseView->SetWordWrap(true);
-
-	copyitem->SetTarget(fVerseView);
-	selectallitem->SetTarget(fVerseView);
-	
 	BToolBar *toolBar = new BToolBar();
-//	toolBar->AddView(fModuleField);
 	toolBar->AddView(bookfield);
 	toolBar->AddView(fChapterBox);
 	toolBar->AddView(fVerseBox);
@@ -323,113 +277,6 @@ void SGMainWindow::BuildGUI(void)
 			.Add(bibleTextView)
 		.End()
 	.End();
-}
-
-
-void SGMainWindow::InsertVerseNumber(int verse)
-{
-	BString string;
-	string << " " << verse << " ";
-	
-	BFont boldfont(be_bold_font);
-	boldfont.SetSize(fFontSize);
-	fVerseView->SetFontAndColor(&boldfont, B_FONT_ALL, &BLUE);
-	fVerseView->Insert(string.String());
-	fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL, &BLACK);
-}
-
-
-void SGMainWindow::InsertChapter(void)
-{
-	BString oldtxt("1"), newtxt("2");
-	BString currentbook(fBookMenu->FindMarked()->Label());
-	int32	highlightStart = 0;
-	int32	highlightEnd = 0;
-	
-	uint16 versecount = VersesInChapter(currentbook.String(),fCurrentChapter);
-	if (fCurrentModule == NULL)
-	{
-		fVerseView->Insert(B_TRANSLATE("No Modules installed\n\n Please use ScriptureGuideManager to download the books you want."));
-		be_roster->Launch("application/x-vnd.wgp.ScriptureGuideManager");
-		return;
-	}
-	if (fCurrentModule->Type() == TEXT_BIBLE) 
-	{
-		BString text(fCurrentModule->GetVerse(currentbook.String(),
-			fCurrentChapter, 1));
-
-		if (text.CountChars()<1)
-		{
-			// this condition will only happen if the module is only one particular
-			// testament.
-			fVerseView->Insert(B_TRANSLATE("This module does not have this section."));
-			return;
-		}
-		if ((fCurrentVerseEnd != 0) && (fCurrentVerseEnd < fCurrentVerse))
-			fCurrentVerseEnd = fCurrentVerse;
-		for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
-		{
-			// Get the verse for processing
-			text.SetTo(fCurrentModule->GetVerse(currentbook.String(),
-						fCurrentChapter, currentverse));
-			
-			if (text.CountChars() < 1)
-				continue;
-			
-			if ((fCurrentVerse!=0) && (fCurrentVerse == currentverse))
-				fVerseView->GetSelection(&highlightStart,&highlightStart);
-			// Remove <P> tags and 0xc2 0xb6 sequences to carriage returns. 
-			// The crazy hex sequence is actually the UTF-8 encoding for the 
-			// paragraph symbol. If we convert them to \n's, output looks funky
-			text.RemoveAll("\x0a\x0a");
-			text.RemoveAll("\xc2\xb6 ");
-			text.RemoveAll("<P> ");
-			
-			if (fIsLineBreak)
-				text += "\n";
-			
-			if (fShowVerseNumbers)
-				InsertVerseNumber(currentverse);
-			fVerseView->Insert(text.String());
-			if ((fCurrentVerseEnd!=0) && (fCurrentVerseEnd == currentverse))
-				fVerseView->GetSelection(&highlightEnd,&highlightEnd);
-
-		}
-	} else
-	{
-		for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
-		{
-			// for commentaries, avoid doubled output
-			oldtxt.SetTo(newtxt);
-			newtxt.SetTo(fCurrentModule->GetVerse(currentbook.String(),
-							fCurrentChapter, currentverse));
-			if (oldtxt != newtxt && newtxt.CountChars() > 0)
-			{
-				if (fShowVerseNumbers)
-					InsertVerseNumber(currentverse);
-				
-				// Remove <P> tags and 0xc2 0xb6 sequences to carriage returns. 
-				// The crazy hex sequence is actually the UTF-8 encoding for 
-				// the paragraph symbol. If we convert them to \n's, output looks funky
-				newtxt.RemoveAll("\x0a\x0a");
-				newtxt.RemoveAll("\xc2\xb6 ");
-				newtxt.RemoveAll("<P> ");
-				
-				fVerseView->Insert(newtxt.String());
-				
-				// add an extra line break after each verse to make better readability
-				fVerseView->Insert("\n");
-
-				if (fIsLineBreak)
-					fVerseView->Insert("\n");
-			}
-		}
-	}
-	if (fCurrentVerseEnd != 0)
-		fVerseView->Select(highlightStart, highlightEnd);
-	else
-		fVerseView->Select(highlightStart, highlightStart);
-	fVerseView->ScrollToSelection();
 }
 
 
@@ -583,12 +430,9 @@ bool SGMainWindow::NeedsLineBreaks(void)
 }
 
 
-// the window is resized, ajust the fVerseView and the toolbar
+
 void SGMainWindow::FrameResized(float width, float height) 
 {
-	BRect textrect = fVerseView->TextRect();
-	textrect.right = textrect.left + (width - B_V_SCROLL_BAR_WIDTH - 3.0);
-	fVerseView->SetTextRect(textrect);
 }
 
 
@@ -630,13 +474,10 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 				
 				fCurrentChapter = 1;
 
-				fVerseView->Delete(0, fVerseView->TextLength());
-			//	InsertChapter();
 				//ToDo implement SetBook as (const charÜ)
 				bibleTextView->SetBook((char *)currentItem->Label());
 				
 				fChapterBox->SetText("1");
-				fVerseView->MakeFocus();
 			}
 			break;
 		}
@@ -656,12 +497,7 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 				newItem->SetMarked(true);
 				
 				fCurrentChapter = 1;
-
-				fVerseView->Delete(0, fVerseView->TextLength());
-				InsertChapter();
-				
 				fChapterBox->SetText("1");
-				fVerseView->MakeFocus();
 			}
 			break;
 		}
@@ -670,14 +506,10 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fCurrentChapter = 1;
 			fCurrentVerse = 1;
 
-			//fVerseView->Delete(0, fVerseView->TextLength());
 			bibleTextView->SetBook((char *)fBookMenu->FindMarked()->Label());
 
-			//InsertChapter();
-			//fChapterBox->SetText("1");
-			//fVerseBox->SetText("1");
-
-			fVerseView->MakeFocus();
+			fChapterBox->SetText("1");
+			fVerseBox->SetText("1");
 			break;
 		}
 		case NEXT_CHAPTER:
@@ -712,11 +544,9 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		}
 		case MENU_OPTIONS_VERSENUMBERS:
 		{
-			fShowVerseNumbers = (fShowVerseNumbers) ? false : true;
+			fShowVerseNumbers = (fShowVerseNumbers) ? false : true;			
 			fShowVerseNumItem->SetMarked(fShowVerseNumbers);
-			fVerseView->Delete(0, fVerseView->TextLength());
-			fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL,&BLACK);
-			InsertChapter();
+			bibleTextView->SetShowVerseNumber(fShowVerseNumbers);
 			break;
 		}
 		case MENU_HELP_ABOUT:
@@ -839,10 +669,8 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fDisplayFont.SetSize(size);
 			fDisplayFont.SetFamilyAndStyle(family.String(),style.String());
 			
-			fVerseView->Delete(0, fVerseView->TextLength());
-			fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL, &BLACK);
-			InsertChapter();
-			fVerseView->MakeFocus();
+			//@ToDo Set Font and Color from the bibleTextColumnListView
+			
 			break;
 		}
 		case SELECT_VERSE :
@@ -907,76 +735,6 @@ void SGMainWindow::SetModuleFromString(const char* name)
 void SGMainWindow::SetModule(const TextType &module, const int32 &index)
 {
 	SavePrefsForModule();
-	
-/*	SGModule* sgmod;
-	if (module == TEXT_BIBLE)
-		sgmod = fModManager->BibleAt(index);
-	else
-	if (module == TEXT_COMMENTARY)
-		sgmod = fModManager->CommentaryAt(index);
-	else
-	{
-		// Currently-unsupported module. Should *never* happen.
-		return;
-	}
-	
-	if (!sgmod)
-		return;
-	
-	fModManager->SetModule(sgmod);
-	fCurrentModule = sgmod;
-	BMenuItem* menu = (BMenuItem*) fModuleField->Menu()->Superitem();
-	menu->SetLabel(sgmod->FullName());
-	
-	// make sure only the books available can be selected
-	BMenuItem* currentbook;
-	
-	bool onvalue = sgmod->HasOT();
-	for (int32 i = 0; i < 39; i++)
-	{
-		currentbook = fBookMenu->ItemAt(i);
-		if (!currentbook)
-			break;
-		currentbook->SetEnabled(onvalue);
-	}
-	
-	onvalue = sgmod->HasNT();
-	for (int32 i = 39; i < 66; i++)
-	{
-		currentbook = fBookMenu->ItemAt(i);
-		if (!currentbook)
-			break;
-		currentbook->SetEnabled(onvalue);
-	}
-	
-	BString title("Scripture Guide: ");
-	title << fCurrentModule->FullName();
-	SetTitle(title.String());
-	
-	fVerseView->Delete(0, fVerseView->TextLength());
-	
-	LoadPrefsForModule();
-	
-	if (sgmod->IsGreek())
-		fCurrentFont = &fGreekFont;
-	else if (sgmod->IsHebrew())
-		fCurrentFont = &fHebrewFont;
-	else
-		fCurrentFont = &fRomanFont;
-	
-	fCurrentFont->SetSize(fFontSize);
-	fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL, &BLACK);
-	
-	BString chapterString;
-	chapterString << fCurrentChapter;
-	fChapterBox->SetText(chapterString.String());
-	
-	BString verseString;
-	verseString << fCurrentChapter;
-	fVerseBox->SetText(verseString.String());
-	
-	InsertChapter();
-	fVerseView->MakeFocus();*/
 }
 
 void SGMainWindow::SetBook(const char* book)
@@ -992,8 +750,7 @@ void SGMainWindow::SetBook(const char* book)
 		}
 		bookItem->SetMarked(true);
 	}
-	InsertChapter();
-	fVerseView->MakeFocus();
+	//@ToDo change bibleTExtColumnView
 }
 
 
@@ -1049,8 +806,6 @@ void SGMainWindow::SetChapter(const int16 &chapter)
 		fCurrentChapter = chapter;
 	}
 	
-	fVerseView->Delete(0, fVerseView->TextLength());
-	InsertChapter();
 	
 	BString cText;
 	cText << fCurrentChapter;
@@ -1058,21 +813,16 @@ void SGMainWindow::SetChapter(const int16 &chapter)
 	BString vText;	
 	vText << fCurrentVerse;
 	fVerseBox->SetText(vText.String());
-	fVerseView->MakeFocus();
 }
 
 
 void SGMainWindow::SetVerse(const int16 &verse)
 {
 	fCurrentVerse = verse;
-	fVerseView->Delete(0, fVerseView->TextLength());
-	// ToDo make a better implemenation since now we redraw everything...
-	// just to scroll to the right verse..
-	InsertChapter();
-	BString vText;	
+	BString vText;
 	vText << fCurrentVerse;
 	fVerseBox->SetText(vText.String());
-	
+	bibleTextView->SetVerse(verse);
 }
 
 

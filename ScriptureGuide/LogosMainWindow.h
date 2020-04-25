@@ -20,7 +20,7 @@
 #include "LogosSearchWindow.h"
 #include "SwordBackend.h"
 
-
+//@ToDo: needs a massiv Cleanup since nearly the whole funktionality is already in BibleTextColumnListView
 
 class FontPanel;
 class SGModule;
@@ -49,8 +49,6 @@ public:
 
 private:
 	void BuildGUI(void);
-	void InsertVerseNumber(int verse);
-	void InsertChapter(void);
 	void LoadPrefsForModule(void);
 	void SavePrefsForModule(void);
 	bool NeedsLineBreaks(void);
@@ -80,9 +78,6 @@ private:
 
 	BButton			*fNoteButton;
 	
-	BTextView		*fVerseView;
-	
-	BScrollView		*fScrollView;
 	
 	FontPanel		*fFontPanel;
 	SGSearchWindow	*fSearchWindow;
