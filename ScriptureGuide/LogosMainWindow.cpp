@@ -64,7 +64,7 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	
 	if (fModManager->CountModules()==0)
 	{
-		// TODO: fail
+		// TODO: Alter or run Installer
 		return;
 	}
 	
@@ -216,7 +216,7 @@ void SGMainWindow::BuildGUI(void)
 	// depends on the average module name width. We average because the 
 	// KJV + Strongs + Morphology has a horribly long name while
 	// the rest are reasonable.
-	BMenu* modulemenu = new BMenu("text");
+	/*BMenu* modulemenu = new BMenu("text");
 	int32 count = fModManager->CountBibles();
 	
 	// Add Bibles
@@ -243,13 +243,13 @@ void SGMainWindow::BuildGUI(void)
 		commmsg->AddInt32("index",i);
 		fCommentaryMenu->AddItem(new BMenuItem(modname.String(),commmsg));
 	}
-	modulemenu->AddItem(fCommentaryMenu);
+	modulemenu->AddItem(fCommentaryMenu);*/
 	
 	// Add the toolbar view	
 	BBox* toolbar = new BBox("toolbar_view");
 	
-	fModuleField = new BMenuField("modulefield", B_TRANSLATE("Text:"), modulemenu);
-	fModuleField->SetDivider(be_plain_font->StringWidth("Text:") + 5);
+	/*fModuleField = new BMenuField("modulefield", B_TRANSLATE("Text:"), modulemenu);
+	fModuleField->SetDivider(be_plain_font->StringWidth("Text:") + 5);*/
 	
 	// Prepare the book menu
 	fBookMenu = new BMenu("book");
@@ -307,7 +307,7 @@ void SGMainWindow::BuildGUI(void)
 	selectallitem->SetTarget(fVerseView);
 	
 	BToolBar *toolBar = new BToolBar();
-	toolBar->AddView(fModuleField);
+//	toolBar->AddView(fModuleField);
 	toolBar->AddView(bookfield);
 	toolBar->AddView(fChapterBox);
 	toolBar->AddView(fVerseBox);
@@ -631,7 +631,9 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 				fCurrentChapter = 1;
 
 				fVerseView->Delete(0, fVerseView->TextLength());
-				InsertChapter();
+			//	InsertChapter();
+				//ToDo implement SetBook as (const charÜ)
+				bibleTextView->SetBook((char *)currentItem->Label());
 				
 				fChapterBox->SetText("1");
 				fVerseView->MakeFocus();
@@ -668,10 +670,12 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fCurrentChapter = 1;
 			fCurrentVerse = 1;
 
-			fVerseView->Delete(0, fVerseView->TextLength());
-			InsertChapter();
-			fChapterBox->SetText("1");
-			fVerseBox->SetText("1");
+			//fVerseView->Delete(0, fVerseView->TextLength());
+			bibleTextView->SetBook((char *)fBookMenu->FindMarked()->Label());
+
+			//InsertChapter();
+			//fChapterBox->SetText("1");
+			//fVerseBox->SetText("1");
 
 			fVerseView->MakeFocus();
 			break;
@@ -872,7 +876,7 @@ void SGMainWindow::SetModuleFromString(const char* name)
 	if (!name)
 		return;
 	
-	SGModule* current = NULL;
+	/*SGModule* current = NULL;
 	for (int32 i = 0; i < fModManager->CountBibles(); i++)
 	{
 		current = fModManager->BibleAt(i);
@@ -896,7 +900,7 @@ void SGMainWindow::SetModuleFromString(const char* name)
 	}
 	
 	// If we got here, something is wrong
-	SetModule(TEXT_BIBLE, 0);
+	SetModule(TEXT_BIBLE, 0);*/
 }
 
 
@@ -904,7 +908,7 @@ void SGMainWindow::SetModule(const TextType &module, const int32 &index)
 {
 	SavePrefsForModule();
 	
-	SGModule* sgmod;
+/*	SGModule* sgmod;
 	if (module == TEXT_BIBLE)
 		sgmod = fModManager->BibleAt(index);
 	else
@@ -972,7 +976,7 @@ void SGMainWindow::SetModule(const TextType &module, const int32 &index)
 	fVerseBox->SetText(verseString.String());
 	
 	InsertChapter();
-	fVerseView->MakeFocus();
+	fVerseView->MakeFocus();*/
 }
 
 void SGMainWindow::SetBook(const char* book)
