@@ -55,8 +55,15 @@ public:
 			void		 		SetMasterView(BColumnListView* masterView);
 			BColumnListView*	MasterView(){return fMasterView;}
 			
+			void				SetColumns(BList *columns){fColumns=columns;}
+			void				SetSortColumns(BList *sColumns){fSortColumns=sColumns;}
+			
 	virtual	BPopUpMenu*			CreateContextMenu();
 
+protected:
+			BPopUpMenu*			fColumnPop;
+			BList*				fColumns;
+		
 
 private:
 			void				GetTitleRect(BColumn* column, BRect* _rect);
@@ -72,9 +79,8 @@ private:
 
 			float				_VirtualWidth() const;
 			
-			BPopUpMenu*			fColumnPop;
+	
 			OutlineView*		fOutlineView;
-			BList*				fColumns;
 			BList*				fSortColumns;
 //			float				fColumnsWidth;
 			BRect				fVisibleRect;

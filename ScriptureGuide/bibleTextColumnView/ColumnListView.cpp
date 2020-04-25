@@ -1730,6 +1730,8 @@ void BColumnListView::SetTitleView(TitleView *newTitleView)
 			delete tmpView;
 			fTitleView->SetMasterView(this);
 			fTitleView->SetOutlineView(fOutlineView);
+			fTitleView->SetColumns(&fColumns);
+			fTitleView->SetSortColumns(&fSortColumns);
 			AddChild(fTitleView);
 		}
 	}
