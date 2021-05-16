@@ -93,6 +93,7 @@ void SGMApp::SetupPackageList(void)
 		BFile file(SG_PKGINFO_PATH "packagelist.txt",B_READ_ONLY);
 		off_t filesize;
 		BString filedata;
+		status_t err = B_OK;
 		
 		file.GetSize(&filesize);
 		
@@ -104,8 +105,12 @@ void SGMApp::SetupPackageList(void)
 		
 		char *data=new char[filesize+1];
 		
-		file.Seek(0,SEEK_SET);
-		file.Read(data,filesize);
+		err = file.Seek(0,SEEK_SET);
+		if (err !=B_OK)
+			printf ("Error: %s\n",strerror(err));
+		err = file.Read(data,filesize);
+		if (err !=B_OK)
+			printf ("Error: %s\n",strerror(err));
 		file.Unset();
 		
 		filedata.SetTo(data);
@@ -114,12 +119,20 @@ void SGMApp::SetupPackageList(void)
 		TokenizeWords(filedata.String(),&gFileNameList,"\n");
 		delete [] data;
 		
-		file.SetTo("packagesizes.txt",B_READ_ONLY);
-		file.GetSize(&filesize);
+		err = file.SetTo(SG_PKGINFO_PATH "packagesizes.txt",B_READ_ONLY);
+		if (err !=B_OK)
+			printf ("Error: %s\n",strerror(err));
+		err = file.GetSize(&filesize);
+		if (err !=B_OK)
+			printf ("Error: %s\n",strerror(err));
 		
 		data=new char[filesize+1];
-		file.Seek(0,SEEK_SET);
-		file.Read(data,filesize);
+		err = file.Seek(0,SEEK_SET);
+		if (err !=B_OK)
+			printf ("Error: %s\n",strerror(err));
+		err = file.Read(data,filesize);
+		if (err !=B_OK)
+			printf ("Error: %s\n",strerror(err));
 		file.Unset();
 		
 		filedata.SetTo(data);

@@ -295,7 +295,9 @@ int32 MainWindow::ApplyThread(void *data)
 		win->Unlock();
 	}
 	
-	
+	win->Lock();
+	win->fTextView->Insert("=====Finished====\n");
+	win->Unlock();
 	win->Lock();
 	win->fApplyButton->SetEnabled(true);
 	win->fApplyThread=-1;
