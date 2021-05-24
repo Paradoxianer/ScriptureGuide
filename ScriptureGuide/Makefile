@@ -30,22 +30,43 @@ APP_MIME_SIG = application/x-vnd.Scripture-Guide
 #	same name (source.c or source.cpp) are included from different directories.
 #	Also note that spaces in folder names do not work well with this Makefile.
 SRCS = \
-	 FontPanel.cpp \
-	 LogosApp.cpp \
-	 LogosMainWindow.cpp \
-	 LogosSearchWindow.cpp \
-	 Preferences.cpp \
-	 ResultListView.cpp \
-	 Spinner.cpp \
-	 SwordBackend.cpp \
-	 bibleTextColumnView/BibleTextRow.cpp \
-	 bibleTextColumnView/BibleTextColumn.cpp \
-	 bibleTextColumnView/BibleTextColumnView.cpp \
-	 bibleTextColumnView/BibleTextField.cpp \
-	 bibleTextColumnView/ColumnListView.cpp \
-	 bibleTextColumnView/ColumnTypes.cpp \
-	 bibleTextColumnView/TitleView.cpp \
-	 bibleTextColumnView/BibleTitleView.h
+	FontPanel.cpp \
+	LogosApp.cpp \
+	LogosMainWindow.cpp \
+	LogosSearchWindow.cpp \
+	Preferences.cpp \
+	ResultListView.cpp \
+	Spinner.cpp \
+	SwordBackend.cpp \
+	bibleTextColumnView/BibleTextRow.cpp \
+	bibleTextColumnView/BibleTextColumn.cpp \
+	bibleTextColumnView/BibleTextColumnView.cpp \
+	bibleTextColumnView/BibleTextField.cpp \
+	bibleTextColumnView/ColumnListView.cpp \
+	bibleTextColumnView/ColumnTypes.cpp \
+	bibleTextColumnView/TitleView.cpp \
+	bibleTextColumnView/	BibleTitleView.cpp \
+	textview/BibleTextDocument.cpp \
+	textview/BibleVerseLayout.cpp \
+	textview/Bullet.cpp \
+	textview/BulletData.cpp \
+	textview/CharacterStyle.cpp  \
+	textview/CharacterStyleData.cpp  \
+	textview/MarkupParser.cpp  \
+	textview/Paragraph.cpp  \
+	textview/ParagraphLayout.cpp  \
+	textview/ParagraphStyle.cpp  \
+	textview/ParagraphStyleData.cpp \
+	textview/TextDocument.cpp  \
+	textview/TextDocumentLayout.cpp  \
+	textview/TextDocumentView.cpp  \
+	textview/TextEditor.cpp  \
+	textview/TextListener.cpp  \
+	textview/TextSelection.cpp  \
+	textview/TextSpan.cpp  \
+	textview/TextView.cpp  \
+	textview/UndoableEditListener.cpp  \
+	textview_support/support.cpp
 
 		
 #	Specify the resource definition files to use. Full or relative paths can be
@@ -106,11 +127,11 @@ endif
 #	Additional paths paths to look for local headers. These use the form
 #	#include "header". Directories that contain the files in SRCS are
 #	automatically included.
-LOCAL_INCLUDE_PATHS =  .
+LOCAL_INCLUDE_PATHS =  . 
 
 #	Specify the level of optimization that you want. Specify either NONE (O0),
 #	SOME (O1), FULL (O2), or leave blank (for the default optimization level).
-OPTIMIZE := FULL
+OPTIMIZE := NONE
 
 # 	Specify the codes for languages you are going to support in this
 # 	application. The default "en" one must be provided too. "make catkeys"
