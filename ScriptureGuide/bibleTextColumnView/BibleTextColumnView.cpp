@@ -32,7 +32,7 @@ BibleTextColumnView::BibleTextColumnView(char *name, SWMgr *fManager, VerseKey *
 		currentmodule = (*it).second;
 		i++;
 		currentmodule->addRenderFilter(new GBFPlain());
-		tmpColumn = new BibleTextColumn(fManager, currentmodule, 100, 350, 2000);
+		tmpColumn = new BibleTextColumn(fManager, currentmodule, 100, 350, 8192);
 		AddColumn(tmpColumn,i);
 		if (i > 1)
 			SetColumnVisible(tmpColumn,false);

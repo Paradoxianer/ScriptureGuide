@@ -48,6 +48,7 @@ BibleTextColumn::BibleTextColumn(SWMgr *manager, const char *moduleName,
 	fShowVerseNumbers(true),
 	fManager(manager)
 {
+	printf("Module %s\n",moduleName);
 	SetModule(moduleName);
 	Init();
 }
