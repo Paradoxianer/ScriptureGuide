@@ -38,12 +38,13 @@ BibleTextDocument::BibleTextDocument(const char *moduleName, const char* iKey)
 	fNumberStyle->SetForegroundColor(BLUE);
 	fNumberStyle->SetBold(true);
 	fManager = new SWMgr(CONFIGPATH, true, new MarkupFilterMgr(FMT_GBF, ENC_UTF8));
-	SetModule(moduleName);
-	VerseKey key = new VerseKey();
+	fModule = fManager->getModule(moduleName);
+	/*VerseKey key = new VerseKey();
 	key.setLocale(language.Code());
 	key.setText(iKey);
 	const char error = fModule->SetKey(key);
-	printf("ERROR setting Key %c\n", error);
+	printf("ERROR setting Key %c\n", error);*/
+	_UpdateBibleText();
 }
 
 
