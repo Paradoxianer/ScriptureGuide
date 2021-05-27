@@ -1,40 +1,40 @@
 1	Spanish	application/x-vnd.Scripture-Guide	740233707
-Find Verse…	MainWindow		Find Verse…
-Program	MainWindow		Program
-Next Chapter	MainWindow		Next Chapter
-About Scripture Guide…	MainWindow		About Scripture Guide…
-This module does not have this section.	MainWindow		This module does not have this section.
-Previous Book	MainWindow		Previous Book
-Select All	MainWindow		Select All
-Quit	MainWindow		Quit
-Chapter	MainWindow		Capítulo
-Options	MainWindow		Opciones
-Copy Verses	MainWindow		Copy Verses
-Duplicate This Window…	MainWindow		Duplicar esta ventana...
-Choose Font...	MainWindow		Choose Font...
-Commentaries	MainWindow		Comentarios
-Close This Window	MainWindow		Cerrar esta ventana
-Show Verse Numbers	MainWindow		Show Verse Numbers
-Text:	MainWindow		Text:
-Navigation	MainWindow		Navegación
+About Scripture Guide…	MainWindow		Acerca de Scripture Guide…
 Bibles	MainWindow		Biblias
-Notes…	MainWindow		Notas…
-Next Book	MainWindow		Next Book
-Previous Chapter	MainWindow		Previous Chapter
 Book:	MainWindow		Libro:
-Verse	MainWindow		Verse
-No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.
-Font Name	FontPanel		Font Name
-Preview	FontPanel		Preview
-OK	FontPanel		Aceptar
-Font Size: 	FontPanel		Font Size: 
+Chapter	MainWindow		Capítulo
+Choose Font...	MainWindow		Elegir fuente…
+Close This Window	MainWindow		Cerrar esta ventana
+Commentaries	MainWindow		Comentarios
+Copy Verses	MainWindow		Copiar versículos
+Duplicate This Window…	MainWindow		Duplicar esta ventana...
+Find Verse…	MainWindow		Encontrar versículo…
+Navigation	MainWindow		Navegación
+Next Book	MainWindow		Libro siguiente
+Next Chapter	MainWindow		Capítulo siguiente
+No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		No hay módulos instalados\n\n Por favor utilice ScriptureGuideManager para descargar los libros que desee.
+Notes…	MainWindow		Notas…
+Options	MainWindow		Opciones
+Previous Book	MainWindow		Libro anterior
+Previous Chapter	MainWindow		Capítulo anterior
+Program	MainWindow		Programa
+Quit	MainWindow		Salir
+Select All	MainWindow		Seleccionar todo
+Show Verse Numbers	MainWindow		Mostrar números de versículo
+Text:	MainWindow		Texto:
+This module does not have this section.	MainWindow		Este módulo no tiene esta sección.
+Verse	MainWindow		Versículo
+End in 	SearchWindow		Terminar en 
+Find	SearchWindow		Encontrar
+Find Phrase	SearchWindow		Encontrar frase
+Find Words	SearchWindow		Encontrar palabras
+Find: 	SearchWindow		Encontrar: 
+Match Case	SearchWindow		Coincidir mayúsculas y minúsculas
 Regular Expression	SearchWindow		Expresión regular
 Search Progress:	SearchWindow		Progreso de la búsqueda:
-Find Phrase	SearchWindow		Find Phrase
-Match Case	SearchWindow		Match Case
-Search Results:	SearchWindow		Search Results:
-Find	SearchWindow		Find
-End in 	SearchWindow		End in 
-Start in 	SearchWindow		Start in 
-Find Words	SearchWindow		Find Words
-Find: 	SearchWindow		Find: 
+Search Results:	SearchWindow		Resultados de la búsqueda:
+Start in 	SearchWindow		Comenzar en
+Font Name	FontPanel		Nombre de fuente
+Font Size: 	FontPanel		Tamaño de fuente: 
+OK	FontPanel		Aceptar
+Preview	FontPanel		Vista preliminar

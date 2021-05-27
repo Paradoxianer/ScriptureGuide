@@ -1,40 +1,40 @@
 1	Romanian	application/x-vnd.Scripture-Guide	740233707
-Find Verse…	MainWindow		Caută verset…
-Program	MainWindow		Program
-Next Chapter	MainWindow		Capitolul următor
 About Scripture Guide…	MainWindow		Despre Scripture Guide…
-This module does not have this section.	MainWindow		Modulul selectat nu conține aceasta secțiune.
-Previous Book	MainWindow		Cartea precedentă
-Select All	MainWindow		Selectează tot
-Quit	MainWindow		Ieșire
+Bibles	MainWindow		Biblii
+Book:	MainWindow		Cartea:
 Chapter	MainWindow		Capitol
-Options	MainWindow		Opțiuni
+Choose Font...	MainWindow		Selectați font...
+Close This Window	MainWindow		Închide fereastra curentă
+Commentaries	MainWindow		Comentarii
 Copy Verses	MainWindow		Copiază versete
 Duplicate This Window…	MainWindow		Duplifică fereastra curentă…
-Choose Font...	MainWindow		Selectați font...
-Commentaries	MainWindow		Comentarii
-Close This Window	MainWindow		Închide fereastra curentă
+Find Verse…	MainWindow		Caută verset…
+Navigation	MainWindow		Navigare
+Next Book	MainWindow		Cartea următoare
+Next Chapter	MainWindow		Capitolul următor
+No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		Niciun modul instalat\n\n Folosiți ScriptureGuideManager pentru a descărca cărțile dorite.
+Notes…	MainWindow		Notițe…
+Options	MainWindow		Opțiuni
+Previous Book	MainWindow		Cartea precedentă
+Previous Chapter	MainWindow		Capitolul precedent
+Program	MainWindow		Program
+Quit	MainWindow		Ieșire
+Select All	MainWindow		Selectează tot
 Show Verse Numbers	MainWindow		Arată numerele versetelor
 Text:	MainWindow		Text:
-Navigation	MainWindow		Navigare
-Bibles	MainWindow		Biblii
-Notes…	MainWindow		Notițe…
-Next Book	MainWindow		Cartea următoare
-Previous Chapter	MainWindow		Capitolul precedent
-Book:	MainWindow		Cartea:
+This module does not have this section.	MainWindow		Modulul selectat nu conține aceasta secțiune.
 Verse	MainWindow		Verset
-No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		Niciun modul instalat\n\n Folosiți ScriptureGuideManager pentru a descărca cărțile dorite.
-Font Name	FontPanel		Font
-Preview	FontPanel		Previzualizare
-OK	FontPanel		OK
-Font Size: 	FontPanel		Dimensiunea fontului:
-Regular Expression	SearchWindow		Expresia regulară
-Search Progress:	SearchWindow		Progresul căutării:
-Find Phrase	SearchWindow		Caută fraza
-Match Case	SearchWindow		Respectând registru
-Search Results:	SearchWindow		Rezultatele căutării:
-Find	SearchWindow		Caută
 End in 	SearchWindow		Se termină cu
-Start in 	SearchWindow		Începe cu
+Find	SearchWindow		Caută
+Find Phrase	SearchWindow		Caută fraza
 Find Words	SearchWindow		Caută cuvinte
 Find: 	SearchWindow		Caută:
+Match Case	SearchWindow		Respectând registru
+Regular Expression	SearchWindow		Expresia regulară
+Search Progress:	SearchWindow		Progresul căutării:
+Search Results:	SearchWindow		Rezultatele căutării:
+Start in 	SearchWindow		Începe cu
+Font Name	FontPanel		Font
+Font Size: 	FontPanel		Dimensiunea fontului:
+OK	FontPanel		OK
+Preview	FontPanel		Previzualizare

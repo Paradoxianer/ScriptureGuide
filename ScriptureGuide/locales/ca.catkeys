@@ -1,0 +1,40 @@
+1	Catalan	application/x-vnd.Scripture-Guide	740233707
+About Scripture Guide…	MainWindow		Quant a l'Scripture Guide…
+Bibles	MainWindow		Bíblies
+Book:	MainWindow		Llibre:
+Chapter	MainWindow		Capítol
+Choose Font...	MainWindow		Trieu la lletra...
+Close This Window	MainWindow		Tanca aquesta finestra
+Commentaries	MainWindow		Comentaris
+Copy Verses	MainWindow		Copia els versos
+Duplicate This Window…	MainWindow		Duplica aquesta finestra
+Find Verse…	MainWindow		Troba un vers...
+Navigation	MainWindow		Navegació
+Next Book	MainWindow		Llibre següent
+Next Chapter	MainWindow		Capítol següent
+No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		No hi ha cap mòdul instal·lat\n\nUtilitzeu ScriptureGuideManager per descarregar els llibres que vulgueu.
+Notes…	MainWindow		Notes…
+Options	MainWindow		Opcions
+Previous Book	MainWindow		Llibre anterior
+Previous Chapter	MainWindow		Capítol anterior
+Program	MainWindow		Programa
+Quit	MainWindow		Surt
+Select All	MainWindow		Selecciona-ho tot
+Show Verse Numbers	MainWindow		Mostra els números de versos
+Text:	MainWindow		Text:
+This module does not have this section.	MainWindow		Aquest mòdul no té aquesta secció.
+Verse	MainWindow		Vers
+End in 	SearchWindow		Acaba a
+Find	SearchWindow		Troba
+Find Phrase	SearchWindow		Troba la frase
+Find Words	SearchWindow		Troba paraules
+Find: 	SearchWindow		Troba:
+Match Case	SearchWindow		Coincidència de caixa
+Regular Expression	SearchWindow		Expressió regular
+Search Progress:	SearchWindow		Progrés de la cerca:
+Search Results:	SearchWindow		Resultats de la cerca:
+Start in 	SearchWindow		Comença a
+Font Name	FontPanel		Nom de la lletra
+Font Size: 	FontPanel		Mida de la lletra:
+OK	FontPanel		D'acord
+Preview	FontPanel		Previsualització

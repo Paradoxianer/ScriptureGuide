@@ -1,0 +1,40 @@
+1	Portuguese	application/x-vnd.Scripture-Guide	740233707
+About Scripture Guide…	MainWindow		Acerca de Scripture Guide…
+Bibles	MainWindow		Bíblias
+Book:	MainWindow		Livro:
+Chapter	MainWindow		Capítulo
+Choose Font...	MainWindow		Escolher tipo de letra...
+Close This Window	MainWindow		Fechar esta janela
+Commentaries	MainWindow		Comentários
+Copy Verses	MainWindow		Copiar versículos
+Duplicate This Window…	MainWindow		Duplicar esta janela…
+Find Verse…	MainWindow		Procurar versículo…
+Navigation	MainWindow		Navegação
+Next Book	MainWindow		Livro seguinte
+Next Chapter	MainWindow		Capítulo seguinte
+No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		Nenhum módulo instalado\n\n Por favor, utilize o ScriptureGuideManager para descarregar os livros que pretende.
+Notes…	MainWindow		Notas…
+Options	MainWindow		Opções
+Previous Book	MainWindow		Livro anterior
+Previous Chapter	MainWindow		Capítulo anterior
+Program	MainWindow		Programa
+Quit	MainWindow		Sair
+Select All	MainWindow		Selecionar tudo
+Show Verse Numbers	MainWindow		Mostrar números dos versículos
+Text:	MainWindow		Texto:
+This module does not have this section.	MainWindow		Este módulo não tem esta secção.
+Verse	MainWindow		Versículo
+End in 	SearchWindow		Termina com
+Find	SearchWindow		Procurar
+Find Phrase	SearchWindow		Procurar frase
+Find Words	SearchWindow		Procurar palavras
+Find: 	SearchWindow		Procurar: 
+Match Case	SearchWindow		Correspondência de maiúsculas/minúsculas
+Regular Expression	SearchWindow		Expressão regular
+Search Progress:	SearchWindow		Progresso da busca:
+Search Results:	SearchWindow		Resultados da busca:
+Start in 	SearchWindow		Começa com 
+Font Name	FontPanel		Tipo de letra
+Font Size: 	FontPanel		Tamanho do texto: 
+OK	FontPanel		OK
+Preview	FontPanel		Pré-visualizar

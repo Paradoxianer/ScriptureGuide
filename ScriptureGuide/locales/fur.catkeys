@@ -1,0 +1,40 @@
+1	Friulian	application/x-vnd.Scripture-Guide	740233707
+About Scripture Guide…	MainWindow		Informazions su Scripture Guide…
+Bibles	MainWindow		Bibliis
+Book:	MainWindow		Libri:
+Chapter	MainWindow		Cjapitul
+Choose Font...	MainWindow		Sielç caratar...
+Close This Window	MainWindow		Siere chest barcon
+Commentaries	MainWindow		Comentaris
+Copy Verses	MainWindow		Copie viers
+Duplicate This Window…	MainWindow		Doplee chest barcon…
+Find Verse…	MainWindow		Cjate viers…
+Navigation	MainWindow		Navigazion
+Next Book	MainWindow		Prossim libri
+Next Chapter	MainWindow		Prossim cjapitul
+No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		Nissun modul instalât\n\n Par plasê dopre ScriptureGuideManager par discjariâ i libris che tu desideris.
+Notes…	MainWindow		Notis…
+Options	MainWindow		Opzions
+Previous Book	MainWindow		Libri precedent
+Previous Chapter	MainWindow		Cjapitul precedent
+Program	MainWindow		Program
+Quit	MainWindow		Jes
+Select All	MainWindow		Selezione dut
+Show Verse Numbers	MainWindow		Mostre numars dai viers
+Text:	MainWindow		Test:
+This module does not have this section.	MainWindow		Chest modul nol à cheste sezion.
+Verse	MainWindow		Viers
+End in 	SearchWindow		Finìs in 
+Find	SearchWindow		Cjate
+Find Phrase	SearchWindow		Cjate frase
+Find Words	SearchWindow		Cjate peraulis
+Find: 	SearchWindow		Cjate: 
+Match Case	SearchWindow		Corispondence maiusculis
+Regular Expression	SearchWindow		Espression regolâr
+Search Progress:	SearchWindow		Avanzament de ricercje:
+Search Results:	SearchWindow		Risultâts de ricercje:
+Start in 	SearchWindow		Scomence in 
+Font Name	FontPanel		Non caratar
+Font Size: 	FontPanel		Dimension caratar: 
+OK	FontPanel		Va ben
+Preview	FontPanel		Anteprime

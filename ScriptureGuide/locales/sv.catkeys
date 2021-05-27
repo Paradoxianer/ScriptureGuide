@@ -1,0 +1,40 @@
+1	Swedish	application/x-vnd.Scripture-Guide	740233707
+About Scripture Guide…	MainWindow		Om Scripture Guide…
+Bibles	MainWindow		Biblar
+Book:	MainWindow		Bok:
+Chapter	MainWindow		Kapitel
+Choose Font...	MainWindow		Välj typsnitt...
+Close This Window	MainWindow		Stäng det här fönstret
+Commentaries	MainWindow		Kommentarer
+Copy Verses	MainWindow		Kopiera vers
+Duplicate This Window…	MainWindow		Duplicera det här fönstret...
+Find Verse…	MainWindow		Hitta vers...
+Navigation	MainWindow		Navigering
+Next Book	MainWindow		Nästa bok
+Next Chapter	MainWindow		Nästa kapitel
+No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		Inga moduler installerade\n\n Använd ScriptureGuideManager för att ladda ner de böcker du vill ha.
+Notes…	MainWindow		Noter...
+Options	MainWindow		Alternativ
+Previous Book	MainWindow		Föregående bok
+Previous Chapter	MainWindow		Föregående kapitel
+Program	MainWindow		Program
+Quit	MainWindow		Avsluta
+Select All	MainWindow		Välj alla
+Show Verse Numbers	MainWindow		Visa versnummer
+Text:	MainWindow		Text:
+This module does not have this section.	MainWindow		Den här modulen har inte detta avsnitt.
+Verse	MainWindow		Vers
+End in 	SearchWindow		Slutar i
+Find	SearchWindow		Hitta
+Find Phrase	SearchWindow		Hitta fras
+Find Words	SearchWindow		Hitta ord
+Find: 	SearchWindow		Hitta:
+Match Case	SearchWindow		Liknande fall
+Regular Expression	SearchWindow		Vanligt uttryck
+Search Progress:	SearchWindow		Sökframsteg:
+Search Results:	SearchWindow		Sökresultat:
+Start in 	SearchWindow		Startar i
+Font Name	FontPanel		Teckensnitt Namn
+Font Size: 	FontPanel		Textstorlek:
+OK	FontPanel		OK
+Preview	FontPanel		Förhandsvisning

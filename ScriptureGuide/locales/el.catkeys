@@ -1,0 +1,40 @@
+1	Greek (Modern)	application/x-vnd.Scripture-Guide	740233707
+About Scripture Guide…	MainWindow		Σχετικά με το Scripture Guide…
+Bibles	MainWindow		Βίβλοι
+Book:	MainWindow		Βιβλίο:
+Chapter	MainWindow		Κεφάλαιο
+Choose Font...	MainWindow		Επιλογή Γραμματοσειράς...
+Close This Window	MainWindow		Κλείσιμο Παραθύρου
+Commentaries	MainWindow		Σχολιασμοί
+Copy Verses	MainWindow		Αντιγραφή Στίχων
+Duplicate This Window…	MainWindow		Duplicate This Window…
+Find Verse…	MainWindow		Εύρεση Στίχου...
+Navigation	MainWindow		Καθοδήγηση
+Next Book	MainWindow		Επόμενο Βιβλίο
+Next Chapter	MainWindow		Επόμενο Κεφάλαιο
+No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		Δεν έχουν εγκατασταθεί πρόσθετα\n\n Παρακαλώ χρησιμοποιήστε το ScriptureGuideManager για να κατεβάσετε τα βιβλία που θέλετε.
+Notes…	MainWindow		Σημειώσεις...
+Options	MainWindow		Ρυθμίσεις
+Previous Book	MainWindow		Προηγούμενο Βιβλίο
+Previous Chapter	MainWindow		Προηγούμενο Κεφάλαιο
+Program	MainWindow		Πρόγραμμα
+Quit	MainWindow		Έξοδος
+Select All	MainWindow		Επιλογή όλων
+Show Verse Numbers	MainWindow		Εμφάνιση Αριθμών Στίχων
+Text:	MainWindow		Κείμενο:
+This module does not have this section.	MainWindow		Αυτό το πρόσθετο δεν περιέχει αυτήν την ενότητα.
+Verse	MainWindow		Στίχος
+End in 	SearchWindow		Τέλος σε
+Find	SearchWindow		Find
+Find Phrase	SearchWindow		Find Phrase
+Find Words	SearchWindow		Find Words
+Find: 	SearchWindow		Find: 
+Match Case	SearchWindow		Match Case
+Regular Expression	SearchWindow		Regular Expression
+Search Progress:	SearchWindow		Search Progress:
+Search Results:	SearchWindow		Search Results:
+Start in 	SearchWindow		Start in 
+Font Name	FontPanel		Όνομα Γραμματοσειράς
+Font Size: 	FontPanel		Μέγεθος Γραμματοσειράς:
+OK	FontPanel		Εντάξει
+Preview	FontPanel		Προεπισκόπηση

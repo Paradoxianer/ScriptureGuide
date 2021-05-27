@@ -1,40 +1,40 @@
 1	German	application/x-vnd.Scripture-Guide	740233707
-Find Verse…	MainWindow		Vers finden…
-Program	MainWindow		Programm
-Next Chapter	MainWindow		nächstes Kapitel
 About Scripture Guide…	MainWindow		Über Scripture Guide…
-This module does not have this section.	MainWindow		Abschnitt in diesem Modul nicht vorhanden
-Previous Book	MainWindow		vorheriges Buch
-Select All	MainWindow		Alles Auswählen
-Quit	MainWindow		Beenden
+Bibles	MainWindow		Bibel
+Book:	MainWindow		Buch:
 Chapter	MainWindow		Kapitel
-Options	MainWindow		Einstellungen
+Choose Font...	MainWindow		Schrift...
+Close This Window	MainWindow		Fenster schließen
+Commentaries	MainWindow		Kommentare
 Copy Verses	MainWindow		Vers kopieren
 Duplicate This Window…	MainWindow		Fenster duplizieren
-Choose Font...	MainWindow		Schrift...
-Commentaries	MainWindow		Kommentare
-Close This Window	MainWindow		Fenster schließen
+Find Verse…	MainWindow		Vers finden…
+Navigation	MainWindow		Navigation
+Next Book	MainWindow		nächstes Buch
+Next Chapter	MainWindow		nächstes Kapitel
+No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		Es sind noch keine Module installiert\n\n Bitte benutze ScriptureGuideManager um die Bücher, die du benutzen möchtest, herunterzuladen.
+Notes…	MainWindow		Notizen...
+Options	MainWindow		Einstellungen
+Previous Book	MainWindow		vorheriges Buch
+Previous Chapter	MainWindow		vorheriges Kapitel
+Program	MainWindow		Programm
+Quit	MainWindow		Beenden
+Select All	MainWindow		Alles Auswählen
 Show Verse Numbers	MainWindow		Zeige Versnummerierung
 Text:	MainWindow		Text:
-Navigation	MainWindow		Navigation
-Bibles	MainWindow		Bibel
-Notes…	MainWindow		Notizen...
-Next Book	MainWindow		nächstes Buch
-Previous Chapter	MainWindow		vorheriges Kapitel
-Book:	MainWindow		Buch:
+This module does not have this section.	MainWindow		Abschnitt in diesem Modul nicht vorhanden
 Verse	MainWindow		Vers
-No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		Es sind noch keine Module installiert\n\n Bitte benutze ScriptureGuideManager um die Bücher, die du benutzen möchtest, herunterzuladen.
-Font Name	FontPanel		Schrift
-Preview	FontPanel		Vorschau
-OK	FontPanel		OK
-Font Size: 	FontPanel		Schriftgröße
-Regular Expression	SearchWindow		Regulärer Ausdruck
-Search Progress:	SearchWindow		Fortschritt Suche:
-Find Phrase	SearchWindow		Suche Phrase
-Match Case	SearchWindow		Großschreibung beachten
-Search Results:	SearchWindow		Ergebniss der Suche:
-Find	SearchWindow		Finde
 End in 	SearchWindow		End in
-Start in 	SearchWindow		Start in
+Find	SearchWindow		Finde
+Find Phrase	SearchWindow		Suche Phrase
 Find Words	SearchWindow		Suche Wörter
 Find: 	SearchWindow		Suche:
+Match Case	SearchWindow		Großschreibung beachten
+Regular Expression	SearchWindow		Regulärer Ausdruck
+Search Progress:	SearchWindow		Fortschritt Suche:
+Search Results:	SearchWindow		Ergebniss der Suche:
+Start in 	SearchWindow		Start in
+Font Name	FontPanel		Schrift
+Font Size: 	FontPanel		Schriftgröße
+OK	FontPanel		OK
+Preview	FontPanel		Vorschau
