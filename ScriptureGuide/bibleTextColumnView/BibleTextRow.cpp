@@ -21,11 +21,22 @@ float BibleTextRow::Height() const
 {
 	float height = BRow::Height();
 	BibleTextField *btField;
+	//@Todo Maybe nullify all Heigts from all Fields to make shure that no extra Lines are added
 	for (int i =0 ; i<CountFields();i++){
-		btField=(BibleTextField *)GetField(i);
-		if (btField->Height()>height)
-			height = btField->Height();
+		if (fList->IsColumnVisible(i){
+			btField=(BibleTextField *)GetField(i);
+			if (btField->Height()>height)
+				height = btField->Height();
+		}
 	}
+	//set all the heigts
+	for (int i =0 ; i<CountFields();i++){
+		if (fList->IsColumnVisible(i){
+			btField=(BibleTextField *)GetField(i);
+			btField->SetHeight(height);
+		}
+	}
+
 	return height;
 }
 
