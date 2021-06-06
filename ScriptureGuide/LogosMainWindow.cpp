@@ -36,6 +36,7 @@
 #include "LogosApp.h"
 #include "FontPanel.h"
 #include "Preferences.h"
+#include "BibleTextDocument.h"
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "MainWindow"
@@ -269,6 +270,8 @@ void SGMainWindow::BuildGUI(void)
 	toolBar->AddView(fNoteButton);
 	bibleTextView = new BibleTextColumnView("bibletextview",
 		new SWMgr(CONFIGPATH, true, new MarkupFilterMgr(FMT_GBF, ENC_UTF8)),new VerseKey("John 1:10-12"));
+	
+	
 	
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(fMenuBar, B_USE_DEFAULT_SPACING)
@@ -560,10 +563,15 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 				"al-popa (ru, ro)",
 				"Begasus",
 				"Briseur (fr)",
+				"Davidmp (ca)",
 				"extrowerk",
+				"Fredrik Modéen(sv)"
 				"korli",
+				"Panagiotis Vasilopoulos(el)"
 				"sword lib team",
-				"unspacyar (es)",
+				"tmtfx (fur)",
+				"unspacyar/cafeina (es)",
+				"Victor Domingos(pt)",
 				"zvacet (hr)",
 				NULL
 			};

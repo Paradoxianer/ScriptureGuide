@@ -20,6 +20,7 @@
 #include "LogosSearchWindow.h"
 #include "SwordBackend.h"
 
+
 //@ToDo: needs a massiv Cleanup since nearly the whole funktionality is already in BibleTextColumnListView
 
 class FontPanel;
