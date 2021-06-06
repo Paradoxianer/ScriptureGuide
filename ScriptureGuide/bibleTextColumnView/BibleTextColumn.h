@@ -23,6 +23,10 @@
 #include "ColumnListView.h"
 #include "ColumnTypes.h"
 
+#include "TextDocument.h"
+#include "TextDocumentLayout.h"
+#include "TextEditor.h"
+
 using namespace sword;
 using namespace std;
 
@@ -35,6 +39,7 @@ public:
 						BibleTextColumn(SWMgr *manager, const char *moduleName, 
 										float width, float minWidth,
 										float maxWidth, alignment align = B_ALIGN_LEFT);
+						~BibleTextColumn();
 										
 	//+++ BColumn Methods
 										
@@ -72,8 +77,51 @@ public:
 	void				SetShowVerseNumbers(bool showVerseNumber);
 	bool				GetShowVersenumbers()
 							{return fShowVerseNumbers;};
-	
 	// --- Config Settings Method
+	
+	// +++ Layout related Interface
+	
+	virtual	BSize		MinSize();
+	virtual	BSize		MaxSize();
+	virtual	BSize		PreferredSize();
+
+	virtual	bool		HasHeightForWidth();
+	virtual	void		GetHeightForWidth(float width, float* min,
+							float* max, float* preferred);
+	// --- Layout related Interface
+	
+	// +++ TextDocumentView interface
+	void				SetTextDocument(
+							const TextDocumentRef& document);
+
+	void				SetEditingEnabled(bool enabled);
+	void				SetTextEditor(
+							const TextEditorRef& editor);
+
+	void				SetInsets(float inset);
+	void				SetInsets(float horizontal, float vertical);
+	void				SetInsets(float left, float top, float right,
+							float bottom);
+
+	void				SetSelectionEnabled(bool enabled);
+	void				SetCaret(BPoint where, bool extendSelection);
+
+	void				SelectAll();
+	bool				HasSelection() const;
+	void				GetSelection(int32& start, int32& end) const;
+	// --- TextDocumentView interface
+	
+private:
+	float				_TextLayoutWidth(float viewWidth) const;
+
+	void				_ShowCaret(bool show);
+	void				_BlinkCaret();
+	void				_DrawCaret(int32 textOffset);
+	void				_DrawSelection();
+	void				_GetSelectionShape(BShape& shape,
+							int32 start, int32 end);
+
+	
 
 protected:
 	void				Init();
@@ -89,6 +137,23 @@ private:
 	bool				fShowVerseNumbers;
 	BTextView			*verseRenderer;
 	BBitmap				*verseBitmap;
+	
+	
+	TextDocumentRef		fTextDocument;
+	TextDocumentLayout	fTextDocumentLayout;
+	TextEditorRef		fTextEditor;
+
+	float				fInsetLeft;
+	float				fInsetTop;
+	float				fInsetRight;
+	float				fInsetBottom;
+
+	BRect				fCaretBounds;
+	BMessageRunner*		fCaretBlinker;
+	int32				fCaretBlinkToken;
+	bool				fSelectionEnabled;
+	bool				fShowCaret;
+	bool				fMouseDown;
 
 };
 
