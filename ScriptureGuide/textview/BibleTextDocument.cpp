@@ -285,6 +285,8 @@ void BibleTextDocument::_UpdateBibleText()
 			text.RemoveAll("\x0a\x0a");
 			text.RemoveAll("\xc2\xb6 ");
 			text.RemoveAll("<P> ");
+			text.RemoveAll("\n");
+
 			
 			if (fIsLineBreak)
 				text += "\n";
@@ -292,7 +294,7 @@ void BibleTextDocument::_UpdateBibleText()
 			if (fShowVerseNumbers)
 			{
 				BString string;
-				string << " " << currentverse << " ";
+				string << currentverse << " ";
 				paragraph.Append(TextSpan(string, *fNumberStyle));
 			}
 			paragraph.Append(TextSpan(text.String(),*fVerseStyle));
@@ -302,6 +304,22 @@ void BibleTextDocument::_UpdateBibleText()
 	fModule->setKey(oldKey);
 	//trigger update...
 	Insert(Length(),"");
+}
+
+
+// build the Bibletext with styles aka no NewLine
+void BibleTextDocument::_BuildContinusous()
+{
+}
+
+//build with Paragraphs
+void BibleTextDocument::_BuildWithNewLine()
+{
+}
+
+
+void BibleTextDocument::_BuildVerseNumber()
+{
 }
 
 

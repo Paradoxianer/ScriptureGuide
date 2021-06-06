@@ -15,6 +15,7 @@
 #include <versekey.h>
 #include <swkey.h>
 #include <swmodule.h>
+#include <swmgr.h>
 
 #include <map>
 
@@ -70,6 +71,11 @@ public:
 
 protected:
 	void				_UpdateBibleText();
+	void				_BuildWithNewLine();
+	void				_BuildContinusous();
+	void				_BuildVerseNumber();
+
+
 	
 private:
 	SWMgr				*fManager;
