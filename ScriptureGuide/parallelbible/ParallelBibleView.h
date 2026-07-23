@@ -99,6 +99,7 @@ public:
 	virtual	void				ScrollTo(BPoint where);
 			using BView::ScrollTo; // un-hide BView::ScrollTo(float, float)
 	virtual	void				MessageReceived(BMessage* message);
+	virtual	void				Draw(BRect updateRect);
 
 			BView*				HeaderView() const { return fHeaderView; }
 			float				HeaderHeight() const
@@ -154,6 +155,7 @@ private:
 			float				fInitialWidth;
 			float				fContentHeight;
 			float				fContentWidth;
+			std::vector<float>	fColumnDividerX;
 
 	static	const float			kMinColumnWidth;
 	static	const float			kColumnSpacing;

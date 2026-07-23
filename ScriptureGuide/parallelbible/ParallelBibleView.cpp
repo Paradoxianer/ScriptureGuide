@@ -176,6 +176,34 @@ ParallelBibleView::ScrollTo(BPoint where)
 }
 
 
+// A thin vertical line at each column boundary (see fColumnDividerX, kept
+// up to date by _PositionColumns()) -- without it, one column's white
+// background runs directly into the next with only kColumnSpacing of
+// this view's own panel-gray background between them, no real edge to
+// tell them apart at a glance.
+void
+ParallelBibleView::Draw(BRect updateRect)
+{
+	BView::Draw(updateRect);
+
+	if (fColumnDividerX.empty() || fContentHeight <= 0.0f)
+		return;
+
+	float top = updateRect.top;
+	float bottom = std::min(fContentHeight, updateRect.bottom);
+	if (top > bottom)
+		return;
+
+	SetHighColor(0, 0, 0);
+	for (size_t i = 0; i < fColumnDividerX.size(); i++) {
+		float x = fColumnDividerX[i];
+		if (x < updateRect.left || x > updateRect.right)
+			continue;
+		StrokeLine(BPoint(x, top), BPoint(x, bottom));
+	}
+}
+
+
 void
 ParallelBibleView::MessageReceived(BMessage* message)
 {
@@ -576,6 +604,7 @@ ParallelBibleView::_PositionColumns()
 	float width = _ColumnWidth();
 	float x = 0.0f;
 	float contentHeight = 0.0f;
+	fColumnDividerX.clear();
 
 	for (size_t i = 0; i < fTextViews.size(); i++) {
 		// The document may have been rebuilt more than once in a row (once
@@ -592,17 +621,22 @@ ParallelBibleView::_PositionColumns()
 		fTextViews[i]->ResizeTo(width, preferred);
 
 		if (i < fHeaderFields.size()) {
-			float fieldWidth = std::max(0.0f,
-				width - kRemoveButtonWidth - kColumnSpacing / 2.0f);
+			// The dropdown spans the full column width rather than
+			// leaving a gap for the "x" button beside it; the button
+			// instead sits on top of the dropdown's right edge. Children
+			// added later (see _RebuildHeader(): the button is always
+			// added right after its field) draw on top and get first
+			// claim on clicks in their own area, so this doesn't block
+			// opening the dropdown from anywhere else in it.
 			fHeaderFields[i]->MoveTo(x, 0.0f);
-			fHeaderFields[i]->ResizeTo(fieldWidth, kHeaderHeight);
-			fRemoveButtons[i]->MoveTo(x + fieldWidth + kColumnSpacing / 2.0f,
-				0.0f);
+			fHeaderFields[i]->ResizeTo(width, kHeaderHeight);
+			fRemoveButtons[i]->MoveTo(x + width - kRemoveButtonWidth, 0.0f);
 			fRemoveButtons[i]->ResizeTo(kRemoveButtonWidth, kHeaderHeight);
 		}
 
 		contentHeight = std::max(contentHeight, preferred);
 		x += width + kColumnSpacing;
+		fColumnDividerX.push_back(x - kColumnSpacing / 2.0f);
 	}
 
 	if (fNotes != NULL) {
@@ -629,12 +663,12 @@ ParallelBibleView::_PositionColumns()
 		}
 		if (fNotesLabel != NULL) {
 			fNotesLabel->MoveTo(x, 0.0f);
-			fNotesLabel->ResizeTo(
-				std::max(0.0f, notesWidth - kRemoveButtonWidth), kHeaderHeight);
+			fNotesLabel->ResizeTo(notesWidth, kHeaderHeight);
 		}
 
 		contentHeight = std::max(contentHeight, y);
 		x += notesWidth + kColumnSpacing;
+		fColumnDividerX.push_back(x - kColumnSpacing / 2.0f);
 	}
 
 	fAddColumnButton->MoveTo(x, 0.0f);
@@ -653,6 +687,10 @@ ParallelBibleView::_PositionColumns()
 	// shifting (mirrored from this view's own scroll position in
 	// ScrollTo()) is what reveals the overflow, not resizing the view.
 	_UpdateScrollBars();
+
+	// fColumnDividerX just changed; Draw() (which paints the divider
+	// lines) needs to run again to reflect the new positions.
+	Invalidate();
 }
 
 
