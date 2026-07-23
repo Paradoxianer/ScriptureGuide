@@ -37,9 +37,34 @@ SRCS = \
 	 Preferences.cpp  \
 	 ResultListView.cpp  \
 	 Spinner.cpp  \
-	 SwordBackend.cpp  
+	 SwordBackend.cpp  \
+	 \
+	 parallelbible/BibleTextDocument.cpp  \
+	 parallelbible/PersonalNotesModule.cpp  \
+	 parallelbible/VerseAligner.cpp  \
+	 parallelbible/ParallelBibleView.cpp  \
+	 \
+	 textview/Bullet.cpp  \
+	 textview/BulletData.cpp  \
+	 textview/CharacterStyle.cpp  \
+	 textview/CharacterStyleData.cpp  \
+	 textview/MarkupParser.cpp  \
+	 textview/Paragraph.cpp  \
+	 textview/ParagraphLayout.cpp  \
+	 textview/ParagraphStyle.cpp  \
+	 textview/ParagraphStyleData.cpp  \
+	 textview/TextDocument.cpp  \
+	 textview/TextDocumentLayout.cpp  \
+	 textview/TextDocumentView.cpp  \
+	 textview/TextEditor.cpp  \
+	 textview/TextListener.cpp  \
+	 textview/TextSelection.cpp  \
+	 textview/TextSpan.cpp  \
+	 textview/UndoableEditListener.cpp  \
+	 \
+	 textview_support/support.cpp
 
-		
+
 #	Specify the resource definition files to use. Full or relative paths can be
 #	used.
 RDEFS = \
@@ -96,7 +121,7 @@ endif
 #	Additional paths paths to look for local headers. These use the form
 #	#include "header". Directories that contain the files in SRCS are
 #	automatically included.
-LOCAL_INCLUDE_PATHS =  .
+LOCAL_INCLUDE_PATHS =  . parallelbible textview textview_support
 
 #	Specify the level of optimization that you want. Specify either NONE (O0),
 #	SOME (O1), FULL (O2), or leave blank (for the default optimization level).
