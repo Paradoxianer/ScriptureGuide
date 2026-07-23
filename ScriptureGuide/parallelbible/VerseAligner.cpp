@@ -12,9 +12,9 @@
 
 void
 VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
-	float columnWidth)
+	const std::vector<float>& columnWidths)
 {
-	if (columns.size() < 2)
+	if (columns.size() < 2 || columns.size() != columnWidths.size())
 		return;
 
 	// Measurements below must reflect each verse's natural, un-padded
@@ -56,7 +56,7 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 				continue;
 
 			ParagraphLayout layout;
-			layout.SetWidth(columnWidth);
+			layout.SetWidth(columnWidths[c]);
 			layout.SetParagraph(document->ParagraphAtIndex(index));
 
 			float height = layout.Height();

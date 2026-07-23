@@ -23,6 +23,7 @@ using namespace sword;
 class BButton;
 class BMenuField;
 class BPopUpMenu;
+class BStringView;
 
 
 // Displays one or more Bible translations side by side, each in its own
@@ -32,8 +33,14 @@ class BPopUpMenu;
 // is enough to scroll every column in sync. Each column has a header cell
 // (a BMenuField for Bible columns, listing every installed "Biblical
 // Texts" module, plus a small "x" button to remove that column; a plain
-// label + "x" for the notes column) plus a trailing "+" button to append
-// another column -- see issue #11.
+// "Notes" label + "x" for the notes column) plus a trailing "+" button to
+// append another column -- see issue #11. The notes column never claims
+// more than kMaxNotesWidthFraction of the total width (see
+// _NotesColumnWidth()) -- a fixed cap for now; issue #19 tracks turning
+// this into a real user-draggable divider. Every TextDocumentView gets
+// B_DOCUMENT_BACKGROUND_COLOR instead of the B_PANEL_BACKGROUND_COLOR its
+// class default constructs with, since these are reading/editing surfaces
+// (Bible text, personal notes), not a details panel.
 //
 // Meant to be embedded as the target of a BScrollView with both
 // scrollbars: vertical for scrolling the (equal-height, post-alignment)
@@ -77,6 +84,7 @@ public:
 	virtual	void				AttachedToWindow();
 	virtual	void				FrameResized(float width, float height);
 	virtual	void				ScrollTo(BPoint where);
+			using BView::ScrollTo; // un-hide BView::ScrollTo(float, float)
 	virtual	void				MessageReceived(BMessage* message);
 
 			BView*				HeaderView() const { return fHeaderView; }
@@ -103,7 +111,9 @@ private:
 			void				_PositionColumns();
 			void				_UpdateScrollBars();
 			void				_Realign();
+			void				_ScrollToVerse(int verse);
 			float				_ColumnWidth() const;
+			float				_NotesColumnWidth() const;
 			BPopUpMenu*			_BuildModuleMenu(int32 columnIndex,
 									const char* markedModuleName);
 
@@ -119,6 +129,7 @@ private:
 			PersonalNotesModule*	fNotes;
 			BReference<BibleTextDocument> fNotesDocument;
 			TextDocumentView*	fNotesView;
+			BStringView*		fNotesLabel;
 			BButton*			fRemoveNotesButton;
 
 			BView*				fHeaderView;
@@ -133,6 +144,7 @@ private:
 	static	const float			kColumnSpacing;
 	static	const float			kHeaderHeight;
 	static	const float			kRemoveButtonWidth;
+	static	const float			kMaxNotesWidthFraction;
 };
 
 #endif // PARALLEL_BIBLE_VIEW_H

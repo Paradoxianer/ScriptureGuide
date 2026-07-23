@@ -131,14 +131,17 @@ TestVerseAlignerIsIdempotent(SWModule* moduleA, SWModule* moduleB)
 	columns.push_back(&documentB);
 
 	const float width = 260.0f;
+	std::vector<float> widths;
+	widths.push_back(width);
+	widths.push_back(width);
 
-	VerseAligner::Align(columns, width);
+	VerseAligner::Align(columns, widths);
 	ParagraphLayout firstPass;
 	firstPass.SetWidth(width);
 	firstPass.SetParagraph(documentA.ParagraphAtIndex(0));
 	float firstHeight = firstPass.Height();
 
-	VerseAligner::Align(columns, width);
+	VerseAligner::Align(columns, widths);
 	ParagraphLayout secondPass;
 	secondPass.SetWidth(width);
 	secondPass.SetParagraph(documentA.ParagraphAtIndex(0));

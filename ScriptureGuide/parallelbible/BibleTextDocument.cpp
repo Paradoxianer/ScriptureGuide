@@ -76,7 +76,12 @@ BibleTextDocument::SetKey(const char* key)
 
 	VerseKey verseKey(fModule->getKeyText());
 	verseKey.setText(key);
-	verseKey.setVerse(1);
+	// Deliberately not forcing verse 1 here, unlike SetChapter()/Next/
+	// PrevChapter() (which always want the chapter's first verse):
+	// _Rebuild() below always renders the whole chapter regardless of
+	// which verse `key` names, so preserving it only affects Verse()
+	// afterward -- which is exactly what ParallelBibleView::SetKey() uses
+	// to scroll straight to the requested verse.
 	fModule->setKey(verseKey);
 
 	_Rebuild();

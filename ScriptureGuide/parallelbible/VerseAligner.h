@@ -16,12 +16,18 @@
 // table layout). As a consequence, every aligned column ends up with the
 // same total document height, so a single shared BScrollBar keeps them
 // all in sync without any further work.
+//
+// columnWidths is parallel to columns -- each column is measured at its
+// own width (the notes column is narrower than the Bible columns, see
+// ParallelBibleView::_NotesColumnWidth()), since a shared width would
+// measure at least one of them at the wrong wrap width and produce
+// alignment spacing that doesn't match what actually gets rendered.
 class VerseAligner {
 public:
 	static	void				Align(
 									const std::vector<BibleTextDocument*>&
 										columns,
-									float columnWidth);
+									const std::vector<float>& columnWidths);
 };
 
 #endif // VERSE_ALIGNER_H
