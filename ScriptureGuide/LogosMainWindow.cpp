@@ -166,42 +166,6 @@ void SGMainWindow::BuildGUI(void)
 		new BMessage(PREV_CHAPTER), B_LEFT_ARROW));
 	fMenuBar->AddItem(menu);
 	
-	// We need to populate the module menu because the size of the field 
-	// depends on the average module name width. We average because the 
-	// KJV + Strongs + Morphology has a horribly long name while
-	// the rest are reasonable.
-	BMenu* modulemenu = new BMenu("text");
-	int32 count = fModManager->CountBibles();
-	
-	// Add Bibles
-	fBibleMenu = new BMenu(B_TRANSLATE("Bibles"));
-	for (int32 i = 0; i < count; i++)
-	{
-		BString modname = fModManager->BibleAt(i)->FullName();
-		
-		BMessage* biblemsg = new BMessage(SELECT_BIBLE);
-		biblemsg->AddInt32("index", i);
-		fBibleMenu->AddItem(new BMenuItem(modname.String(),biblemsg));
-	}
-	modulemenu->AddItem(fBibleMenu);
-
-	count = fModManager->CountCommentaries();
-	
-	// Add Commentaries
-	fCommentaryMenu = new BMenu(B_TRANSLATE("Commentaries"));
-	for (int32 i = 0; i < count; i++)
-	{
-		BString modname = fModManager->CommentaryAt(i)->FullName();
-		
-		BMessage* commmsg = new BMessage(SELECT_COMMENTARY);
-		commmsg->AddInt32("index",i);
-		fCommentaryMenu->AddItem(new BMenuItem(modname.String(),commmsg));
-	}
-	modulemenu->AddItem(fCommentaryMenu);
-	
-	fModuleField = new BMenuField("modulefield", B_TRANSLATE("Text:"), modulemenu);
-	fModuleField->SetDivider(be_plain_font->StringWidth("Text:") + 5);
-	
 	// Prepare the book menu
 	fBookMenu = new BMenu("book");
 	BMenuField* bookfield = new BMenuField("bookfield", B_TRANSLATE("Book:"),
@@ -217,8 +181,11 @@ void SGMainWindow::BuildGUI(void)
 		fBookMenu->AddItem(new BMenuItem(booknames[i], new BMessage(SELECT_BOOK)));
 	fBookMenu->ItemAt(0)->SetMarked(true);
 	
-	// Prepare the notes button
-	BButton* fNoteButton = new BButton("note_button", B_TRANSLATE("Notes…"), new BMessage(MENU_EDIT_NOTE));
+	// Toggles the per-verse notes column (see ParallelBibleView) on and
+	// off -- superseded the old button's behavior of opening a single,
+	// unstructured Notes.txt file externally, now that there's a proper
+	// per-verse notes column built into the reading pane itself.
+	BButton* fNoteButton = new BButton("note_button", B_TRANSLATE("Notes"), new BMessage(MENU_EDIT_NOTE));
 	
 	// Prepare the Chapter intput box
 	BString alphaChars("qwertyuiop[]\\asdfghjkl;'zxcvbnm,./QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>?`~!@#$%^&*()-_=+");
@@ -247,7 +214,6 @@ void SGMainWindow::BuildGUI(void)
 		0, true, true, B_NO_BORDER);
 
 	BToolBar *toolBar = new BToolBar();
-	toolBar->AddView(fModuleField);
 	toolBar->AddView(bookfield);
 	toolBar->AddView(fChapterBox);
 	toolBar->AddView(fVerseBox);
@@ -257,7 +223,15 @@ void SGMainWindow::BuildGUI(void)
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(fMenuBar, B_USE_DEFAULT_SPACING)
 		.Add(toolBar)
-		.Add(fParallelView->HeaderView())
+		.AddGroup(B_HORIZONTAL, 0)
+			.Add(fParallelView->HeaderView())
+			// fScrollView reserves this much width on its right edge for
+			// its own vertical BScrollBar; fParallelView->HeaderView() is
+			// a plain sibling BView with no such reservation, so without
+			// this strut its row would be wider than fScrollView's actual
+			// content area and end up misaligned with it.
+			.AddStrut(B_V_SCROLL_BAR_WIDTH)
+		.End()
 		.Add(fScrollView)
 	.End();
 }
@@ -417,23 +391,6 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 {
 	switch (msg->what) 
 	{
-		case SELECT_BIBLE:
-		{
-			int32 index = 0;
-			if (msg->FindInt32("index", &index) != B_OK)
-				break;
-			SetModule(TEXT_BIBLE, index);
-			break;
-		}
-		case SELECT_COMMENTARY:
-		{
-			int32 index = 0;
-			if (msg->FindInt32("index", &index) != B_OK)
-				break;
-			SetModule(TEXT_COMMENTARY, index);
-			break;
-		}
-		
 		case NEXT_BOOK:
 		{
 			// We'll figure this out by using the books menu -- figuring it all out using
@@ -584,28 +541,7 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		}
 		case MENU_EDIT_NOTE:
 		{
-			BString notespath(NOTESPATH);
-			notespath += "Notes.txt";
-			
-			BEntry entry;
-			if (entry.SetTo(notespath.String())!=B_OK)
-			{
-				// Apparently the notes were blown away while the app was running, so 
-				// re-create them
-				create_directory(notespath.String(),0777);
-				
-				notespath += "Notes.txt";
-				BFile file(notespath.String(), B_READ_WRITE | B_CREATE_FILE);
-				const char notes[]="Scripture Guide Study Notes\n-------------------------------\n";
-				file.Write(notes, strlen(notes));				
-				file.Unset();
-				
-				break;
-			}
-			
-			entry_ref ref;
-			entry.GetRef(&ref);
-			be_roster->Launch(&ref);
+			fParallelView->SetNotesEnabled(!fParallelView->NotesEnabled());
 			break;
 		}
 
@@ -689,9 +625,7 @@ void SGMainWindow::SetModule(const TextType &module, const int32 &index)
 	
 	fModManager->SetModule(sgmod);
 	fCurrentModule = sgmod;
-	BMenuItem* menu = (BMenuItem*) fModuleField->Menu()->Superitem();
-	menu->SetLabel(sgmod->FullName());
-	
+
 	// make sure only the books available can be selected
 	BMenuItem* currentbook;
 	

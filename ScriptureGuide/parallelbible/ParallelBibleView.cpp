@@ -432,6 +432,13 @@ ParallelBibleView::_RebuildHeader()
 		BPopUpMenu* menu = _BuildModuleMenu((int32)i, fModules[i]->getName());
 		BMenuField* field = new BMenuField("columnHeader", NULL, menu);
 		field->SetDivider(0.0f);
+		// labelFromMarked (see _BuildModuleMenu()) only looks at the
+		// popup's direct items, not the category submenus the marked
+		// item actually lives in now, so the field would otherwise show
+		// the popup's own internal name ("translation") instead of the
+		// selected module -- set it explicitly instead.
+		if (field->MenuItem() != NULL)
+			field->MenuItem()->SetLabel(fModules[i]->getName());
 		fHeaderView->AddChild(field);
 		fHeaderFields.push_back(field);
 
@@ -745,13 +752,17 @@ ParallelBibleView::_ColumnWidth() const
 	float notesWidth = fNotes != NULL ? _NotesColumnWidth() : 0.0f;
 
 	// Equal share of what's left after the (separately capped, see
-	// _NotesColumnWidth()) notes column, but never below kMinColumnWidth;
-	// if that means the columns no longer all fit, _PositionColumns()'s
-	// resulting fContentWidth ends up wider than this view's own Bounds(),
-	// and the horizontal scrollbar (see _UpdateScrollBars()) is how the
-	// overflow columns stay reachable instead of just running off-screen.
+	// _NotesColumnWidth()) notes column and the trailing "+" button --
+	// without reserving the button's own width here, a single column
+	// would claim the entire viewport and push "+" off-screen, reachable
+	// only by a horizontal scroll nothing hints exists. If that means the
+	// columns no longer all fit, _PositionColumns()'s resulting
+	// fContentWidth ends up wider than this view's own Bounds(), and the
+	// horizontal scrollbar (see _UpdateScrollBars()) is how the overflow
+	// columns (and the button) stay reachable instead of just running
+	// off-screen.
 	float available = totalWidth - kColumnSpacing * (columnCount - 1)
-		- notesWidth;
+		- notesWidth - kHeaderHeight - kColumnSpacing;
 	float width = available / bibleCount;
 	if (width < kMinColumnWidth)
 		width = kMinColumnWidth;
@@ -786,14 +797,17 @@ ParallelBibleView::_NotesColumnWidth() const
 }
 
 
-// Builds a popup menu listing every installed "Biblical Texts" module,
-// labeled with its short module code (e.g. "KJV") rather than its full
-// description -- the latter is too long to be legible once truncated to
-// column width. columnIndex is embedded in each item's message so
-// MessageReceived() knows whether to AddColumn() (columnIndex < 0, used
-// by the trailing "+" button) or ReplaceColumn() (columnIndex >= 0, used
-// by a column's own header field). markedModuleName, if given, is checked
-// off to show the column's current selection.
+// Builds a popup menu listing every installed module, split into
+// per-category submenus (Biblical Texts, Commentaries -- matching the
+// categories the old toolbar's module field used to split into before
+// the main window/Parallel View merge), labeled with each module's short
+// code (e.g. "KJV") rather than its full description -- the latter is
+// too long to be legible once truncated to column width. columnIndex is
+// embedded in each item's message so MessageReceived() knows whether to
+// AddColumn() (columnIndex < 0, used by the trailing "+" button) or
+// ReplaceColumn() (columnIndex >= 0, used by a column's own header
+// field). markedModuleName, if given, is checked off to show the
+// column's current selection.
 BPopUpMenu*
 ParallelBibleView::_BuildModuleMenu(int32 columnIndex,
 	const char* markedModuleName)
@@ -806,14 +820,23 @@ ParallelBibleView::_BuildModuleMenu(int32 columnIndex,
 	// that marked item's label instead of this constructor's own `name`.
 	BPopUpMenu* menu = new BPopUpMenu("translation", true, true);
 
+	BMenu* bibleMenu = new BMenu(B_TRANSLATE("Biblical Texts"));
+	BMenu* commentaryMenu = new BMenu(B_TRANSLATE("Commentaries"));
+
 	const ModMap& modules = fManager->getModules();
 	for (ModMap::const_iterator it = modules.begin(); it != modules.end();
 			++it) {
 		SWModule* module = it->second;
-		if (module == NULL
-			|| strcmp(module->getType(), "Biblical Texts") != 0) {
+		if (module == NULL)
 			continue;
-		}
+
+		BMenu* category = NULL;
+		if (strcmp(module->getType(), "Biblical Texts") == 0)
+			category = bibleMenu;
+		else if (strcmp(module->getType(), "Commentaries") == 0)
+			category = commentaryMenu;
+		else
+			continue;
 
 		BMessage* message = new BMessage(PARALLEL_SELECT_MODULE);
 		message->AddInt32("index", columnIndex);
@@ -824,9 +847,22 @@ ParallelBibleView::_BuildModuleMenu(int32 columnIndex,
 			&& strcmp(module->getName(), markedModuleName) == 0) {
 			item->SetMarked(true);
 		}
-		menu->AddItem(item);
+		category->AddItem(item);
 	}
 
-	menu->SetTargetForItems(this);
+	// SetTargetForItems() doesn't descend into submenus, so each category
+	// needs its own call -- not just one on the top-level popup menu.
+	bibleMenu->SetTargetForItems(this);
+	commentaryMenu->SetTargetForItems(this);
+
+	if (bibleMenu->CountItems() > 0)
+		menu->AddItem(bibleMenu);
+	else
+		delete bibleMenu;
+	if (commentaryMenu->CountItems() > 0)
+		menu->AddItem(commentaryMenu);
+	else
+		delete commentaryMenu;
+
 	return menu;
 }

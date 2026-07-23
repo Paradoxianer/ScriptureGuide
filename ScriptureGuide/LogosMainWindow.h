@@ -58,15 +58,7 @@ private:
 
 	BMenuBar		*fMenuBar;
 
-	BMenuField		*fModuleField;
-
-	BMenuItem		*fShowVerseNumItem;
-
-	BMenu			*fBookMenu,
-					*fBibleMenu,
-					*fCommentaryMenu,
-					*fLexiconMenu,
-					*fGeneralMenu;
+	BMenu			*fBookMenu;
 
 	BTextControl	*fChapterBox;
 	BTextControl	*fVerseBox;
