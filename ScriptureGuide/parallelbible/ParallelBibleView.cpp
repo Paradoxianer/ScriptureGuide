@@ -10,6 +10,7 @@
 
 #include <Button.h>
 #include <Catalog.h>
+#include <Font.h>
 #include <Language.h>
 #include <Locale.h>
 #include <MenuField.h>
@@ -48,6 +49,7 @@ const float ParallelBibleView::kHeaderHeight = 24.0f;
 const float ParallelBibleView::kRemoveButtonWidth = 20.0f;
 const float ParallelBibleView::kMaxNotesWidthFraction = 1.0f / 3.0f;
 const float ParallelBibleView::kNoteVerseLabelWidth = 20.0f;
+const float ParallelBibleView::kBibleColumnInset = 4.0f;
 
 
 // A single verse's note editor -- see the class comment on ParallelBibleView
@@ -517,7 +519,7 @@ ParallelBibleView::_RebuildLayout()
 		// are about to change out from under it.
 		view->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 		view->SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
-		view->SetInsets(4.0f);
+		view->SetInsets(kBibleColumnInset);
 		view->SetSelectionEnabled(true);
 		view->SetTextDocument(fDocuments[i]);
 		AddChild(view);
@@ -565,9 +567,16 @@ ParallelBibleView::_RebuildHeader()
 		// "Notes", the plain top-level item) the marked item actually
 		// lives in now, so the field would otherwise show the popup's own
 		// internal name ("translation") instead of the selected module --
-		// set it explicitly instead.
-		if (field->MenuItem() != NULL)
-			field->MenuItem()->SetLabel(label);
+		// set it explicitly instead. A plain BMenuField draws no dropdown
+		// indicator of its own (unlike e.g. a desktop combo box), so a
+		// trailing arrow glyph is appended here -- right after the label
+		// text rather than at the field's far right edge, since that edge
+		// is where the remove button (added right below) sits.
+		if (field->MenuItem() != NULL) {
+			BString displayLabel(label);
+			displayLabel << " \xE2\x96\xBE"; // U+25BE, small down-pointing triangle
+			field->MenuItem()->SetLabel(displayLabel.String());
+		}
 		fHeaderView->AddChild(field);
 		fHeaderFields.push_back(field);
 
@@ -709,8 +718,33 @@ ParallelBibleView::_PositionColumns()
 			for (size_t v = 0; v < fNoteFields.size(); v++) {
 				float rowHeight = _RowHeight((int)(v + 1));
 
-				fNoteVerseLabels[v]->MoveTo(x, y);
-				fNoteVerseLabels[v]->ResizeTo(kNoteVerseLabelWidth, rowHeight);
+				// The Bible column's verse number is only ever drawn on
+				// the verse's first line, at the row's top -- so the
+				// label needs to line up with that regardless of how tall
+				// the row grows for wrapped verse text. Sizing the label
+				// to the *entire* row let BStringView's own (vertically
+				// centering) Draw() place the digit wherever the row's
+				// midpoint happened to fall, which drifted further from
+				// the top the taller (more wrapped) a verse's row was.
+				// Giving it a box exactly one font-line tall, anchored at
+				// the same y the row (and so the Bible column's own first
+				// line) starts at, keeps the two in sync at any row
+				// height instead. kBibleColumnInset accounts for the
+				// Bible TextDocumentView's own top inset (see
+				// _RebuildLayout()), which shifts its actual rendered
+				// text down from the view's row-relative y=0 by that much
+				// -- without it, every label sits a few pixels above its
+				// Bible-column counterpart.
+				BFont font;
+				fNoteVerseLabels[v]->GetFont(&font);
+				font_height fontHeight;
+				font.GetHeight(&fontHeight);
+				float lineHeight = fontHeight.ascent + fontHeight.descent
+					+ fontHeight.leading;
+
+				fNoteVerseLabels[v]->MoveTo(x, y + kBibleColumnInset);
+				fNoteVerseLabels[v]->ResizeTo(kNoteVerseLabelWidth,
+					lineHeight);
 
 				fNoteFields[v]->MoveTo(x + kNoteVerseLabelWidth, y);
 				fNoteFields[v]->ResizeTo(fieldWidth, rowHeight);

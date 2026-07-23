@@ -185,6 +185,7 @@ private:
 	static	const float			kRemoveButtonWidth;
 	static	const float			kMaxNotesWidthFraction;
 	static	const float			kNoteVerseLabelWidth;
+	static	const float			kBibleColumnInset;
 };
 
 #endif // PARALLEL_BIBLE_VIEW_H
