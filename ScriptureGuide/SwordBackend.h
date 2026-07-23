@@ -111,6 +111,9 @@ public:
 	status_t			SetModule(SGModule* mod);
  	SGModule*			CurrentModule(void);
 
+	sword::SWMgr*		Manager(void) const
+							{ return fManager; }
+
 private:
 	sword::SWMgr* 		fManager;
 	SGModule*			fModule;

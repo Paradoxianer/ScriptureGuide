@@ -33,8 +33,15 @@ class BGroupLayout;
 // scrollbar; this view does not create its own scrollbar.
 class ParallelBibleView : public BView {
 public:
+								// initialWidth seeds the first column-width
+								// calculation. It matters because this view
+								// is still unattached (Bounds() degenerate)
+								// while its window is being built, so pass
+								// the constructing window's own frame width,
+								// which unlike a layout-managed view's
+								// Bounds() is already valid at that point.
 								ParallelBibleView(const char* name,
-									SWMgr* manager);
+									SWMgr* manager, float initialWidth = 0);
 	virtual						~ParallelBibleView();
 
 	virtual	void				AttachedToWindow();
@@ -56,6 +63,8 @@ private:
 			void				_RebuildLayout();
 			void				_Realign();
 			float				_ColumnWidth() const;
+			void				_ApplyColumnWidth(TextDocumentView* view,
+									float width);
 
 private:
 			SWMgr*				fManager;
@@ -70,6 +79,7 @@ private:
 			TextDocumentView*	fNotesView;
 
 			BString				fCurrentKey;
+			float				fInitialWidth;
 
 	static	const float			kMinColumnWidth;
 };

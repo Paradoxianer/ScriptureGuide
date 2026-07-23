@@ -32,6 +32,7 @@
 #include "LogosApp.h"
 #include "FontPanel.h"
 #include "Preferences.h"
+#include "parallelbible/ParallelBibleWindow.h"
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "MainWindow"
@@ -203,7 +204,12 @@ void SGMainWindow::BuildGUI(void)
 	if (fShowVerseNumbers)
 		fShowVerseNumItem->SetMarked(true);
 	menu->AddItem(fShowVerseNumItem);
-	
+
+	menu->AddSeparatorItem();
+	fShowParallelItem = new BMenuItem(B_TRANSLATE("Parallel View…"),
+		new BMessage(MENU_OPTIONS_PARALLEL_VIEW));
+	menu->AddItem(fShowParallelItem);
+
 	fMenuBar->AddItem(menu);
 	
 	// We need to populate the module menu because the size of the field 
@@ -705,6 +711,18 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fVerseView->Delete(0, fVerseView->TextLength());
 			fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL,&BLACK);
 			InsertChapter();
+			break;
+		}
+		case MENU_OPTIONS_PARALLEL_VIEW:
+		{
+			BString currentBook(fBookMenu->FindMarked()->Label());
+			BString key;
+			key << currentBook << " " << fCurrentChapter << ":"
+				<< fCurrentVerse;
+			ParallelBibleWindow* win = new ParallelBibleWindow(
+				Frame().OffsetByCopy(20, 20), fModManager,
+				fCurrentModule->Name(), key.String());
+			win->Show();
 			break;
 		}
 		case MENU_HELP_ABOUT:

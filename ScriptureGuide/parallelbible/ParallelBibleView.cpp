@@ -5,6 +5,8 @@
 
 #include "ParallelBibleView.h"
 
+#include <cstdio>
+
 #include <GroupLayout.h>
 #include <LayoutItem.h>
 
@@ -53,13 +55,15 @@ private:
 };
 
 
-ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager)
+ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
+	float initialWidth)
 	:
 	BView(name, B_WILL_DRAW | B_FRAME_EVENTS, new BGroupLayout(B_HORIZONTAL)),
 	fManager(manager),
 	fGroupLayout(NULL),
 	fNotes(NULL),
-	fNotesView(NULL)
+	fNotesView(NULL),
+	fInitialWidth(initialWidth)
 {
 	fGroupLayout = (BGroupLayout*)GetLayout();
 }
@@ -85,13 +89,10 @@ ParallelBibleView::FrameResized(float width, float height)
 	BView::FrameResized(width, height);
 
 	float columnWidth = _ColumnWidth();
-	for (size_t i = 0; i < fTextViews.size(); i++) {
-		fTextViews[i]->SetExplicitMinSize(BSize(columnWidth, B_SIZE_UNSET));
-		fTextViews[i]->SetExplicitMaxSize(
-			BSize(columnWidth, B_SIZE_UNLIMITED));
-		fTextViews[i]->SetExplicitPreferredSize(
-			BSize(columnWidth, B_SIZE_UNSET));
-	}
+	for (size_t i = 0; i < fTextViews.size(); i++)
+		_ApplyColumnWidth(fTextViews[i], columnWidth);
+	if (fNotesView != NULL)
+		_ApplyColumnWidth(fNotesView, columnWidth);
 
 	_Realign();
 }
@@ -251,9 +252,7 @@ ParallelBibleView::_RebuildLayout()
 		TextDocumentView* view = new TextDocumentView("bibleColumn");
 		view->SetInsets(4.0f);
 		view->SetSelectionEnabled(true);
-		view->SetExplicitMinSize(BSize(width, B_SIZE_UNSET));
-		view->SetExplicitMaxSize(BSize(width, B_SIZE_UNLIMITED));
-		view->SetExplicitPreferredSize(BSize(width, B_SIZE_UNSET));
+		_ApplyColumnWidth(view, width);
 		view->SetTextDocument(fDocuments[i]);
 		fGroupLayout->AddView(view);
 		fTextViews.push_back(view);
@@ -264,15 +263,22 @@ ParallelBibleView::_RebuildLayout()
 		view->SetInsets(4.0f);
 		view->SetSelectionEnabled(true);
 		view->SetEditingEnabled(true);
-		view->SetExplicitMinSize(BSize(width, B_SIZE_UNSET));
-		view->SetExplicitMaxSize(BSize(width, B_SIZE_UNLIMITED));
-		view->SetExplicitPreferredSize(BSize(width, B_SIZE_UNSET));
+		_ApplyColumnWidth(view, width);
 		view->SetTextDocument(fNotesDocument);
 		fGroupLayout->AddView(view);
 		fNotesView = view;
 	}
 
 	_Realign();
+}
+
+
+void
+ParallelBibleView::_ApplyColumnWidth(TextDocumentView* view, float width)
+{
+	view->SetExplicitMinSize(BSize(width, B_SIZE_UNSET));
+	view->SetExplicitMaxSize(BSize(width, B_SIZE_UNLIMITED));
+	view->SetExplicitPreferredSize(BSize(width, B_SIZE_UNSET));
 }
 
 
@@ -288,22 +294,35 @@ ParallelBibleView::_Realign()
 	if (columns.size() >= 2)
 		VerseAligner::Align(columns, _ColumnWidth());
 
-	for (size_t i = 0; i < fTextViews.size(); i++)
+	for (size_t i = 0; i < fTextViews.size(); i++) {
 		fTextViews[i]->Relayout();
-	if (fNotesView != NULL)
+		fTextViews[i]->Invalidate();
+	}
+	if (fNotesView != NULL) {
 		fNotesView->Relayout();
+		fNotesView->Invalidate();
+	}
 }
 
 
 float
 ParallelBibleView::_ColumnWidth() const
 {
+	// Bounds() is degenerate until this view has been through a real
+	// layout pass (i.e. its window has actually been shown); fall back to
+	// the width the constructing window was created with.
+	float totalWidth = Bounds().Width();
+	if (totalWidth <= 0.0f)
+		totalWidth = fInitialWidth;
+	if (totalWidth <= 0.0f)
+		return kMinColumnWidth;
+
 	int32 columnCount = (int32)fModules.size() + (fNotesView != NULL ? 1 : 0);
 	if (columnCount == 0)
-		return Bounds().Width();
+		return totalWidth;
 
 	float spacing = fGroupLayout->Spacing();
-	float available = Bounds().Width() - spacing * (columnCount - 1);
+	float available = totalWidth - spacing * (columnCount - 1);
 	float width = available / columnCount;
 	if (width < kMinColumnWidth)
 		width = kMinColumnWidth;

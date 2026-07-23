@@ -74,10 +74,10 @@ BibleTextDocument::SetKey(const char* key)
 	if (fModule == NULL)
 		return B_NO_INIT;
 
-	VerseKey* verseKey = (VerseKey*)fModule->getKey();
-	verseKey->setText(key);
-	verseKey->setVerse(1);
-	fModule->setKey(*verseKey);
+	VerseKey verseKey(fModule->getKeyText());
+	verseKey.setText(key);
+	verseKey.setVerse(1);
+	fModule->setKey(verseKey);
 
 	_Rebuild();
 	return B_OK;
@@ -90,12 +90,12 @@ BibleTextDocument::SetChapter(const char* book, int chapter)
 	if (fModule == NULL)
 		return B_NO_INIT;
 
-	VerseKey* verseKey = (VerseKey*)fModule->getKey();
+	VerseKey verseKey(fModule->getKeyText());
 	if (book != NULL)
-		verseKey->setBookName(book);
-	verseKey->setChapter(chapter);
-	verseKey->setVerse(1);
-	fModule->setKey(*verseKey);
+		verseKey.setBookName(book);
+	verseKey.setChapter(chapter);
+	verseKey.setVerse(1);
+	fModule->setKey(verseKey);
 
 	_Rebuild();
 	return B_OK;
@@ -108,10 +108,10 @@ BibleTextDocument::NextChapter()
 	if (fModule == NULL)
 		return B_NO_INIT;
 
-	VerseKey* verseKey = (VerseKey*)fModule->getKey();
-	verseKey->setChapter(verseKey->getChapter() + 1);
-	verseKey->setVerse(1);
-	fModule->setKey(*verseKey);
+	VerseKey verseKey(fModule->getKeyText());
+	verseKey.setChapter(verseKey.getChapter() + 1);
+	verseKey.setVerse(1);
+	fModule->setKey(verseKey);
 
 	_Rebuild();
 	return B_OK;
@@ -124,10 +124,10 @@ BibleTextDocument::PrevChapter()
 	if (fModule == NULL)
 		return B_NO_INIT;
 
-	VerseKey* verseKey = (VerseKey*)fModule->getKey();
-	verseKey->setChapter(verseKey->getChapter() - 1);
-	verseKey->setVerse(1);
-	fModule->setKey(*verseKey);
+	VerseKey verseKey(fModule->getKeyText());
+	verseKey.setChapter(verseKey.getChapter() - 1);
+	verseKey.setVerse(1);
+	fModule->setKey(verseKey);
 
 	_Rebuild();
 	return B_OK;
@@ -199,13 +199,19 @@ BibleTextDocument::_Rebuild()
 		return;
 	}
 
-	VerseKey* verseKey = (VerseKey*)fModule->getKey();
-	VerseKey savedKey(*verseKey);
+	// Build independent VerseKey objects from the module's current key
+	// text rather than aliasing fModule->getKey() directly: passing the
+	// module's own live key object back into setKey() crashes deep inside
+	// SWORD (ListKey's copy constructor), since setKey() replaces its
+	// internal key before cloning from what was just passed in.
+	BString savedKeyText(fModule->getKeyText());
+	VerseKey savedKey(savedKeyText.String());
 
-	int verseCount = verseKey->getVerseMax();
+	VerseKey iterKey(savedKeyText.String());
+	int verseCount = iterKey.getVerseMax();
 	for (int verse = 1; verse <= verseCount; verse++) {
-		verseKey->setVerse(verse);
-		fModule->setKey(*verseKey);
+		iterKey.setVerse(verse);
+		fModule->setKey(iterKey);
 
 		BString text(fModule->renderText());
 		if (text.CountChars() < 1 && fSkipEmptyVerses)
