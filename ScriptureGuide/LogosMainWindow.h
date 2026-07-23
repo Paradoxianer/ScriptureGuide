@@ -2,7 +2,6 @@
 #define SGMAINWINDOW_H
 
 
-#include <Font.h>
 #include <Menu.h>
 #include <MenuItem.h>
 #include <MenuField.h>
@@ -18,10 +17,9 @@
 
 #include "LogosSearchWindow.h"
 #include "SwordBackend.h"
+#include "parallelbible/ParallelBibleView.h"
 
 
-
-class FontPanel;
 class SGModule;
 
 #define M_WINDOW_CLOSED 'wcls'
@@ -36,7 +34,7 @@ public:
 	virtual filter_result Filter(BMessage* msg, BHandler **target);
 };
 
-class SGMainWindow : public BWindow 
+class SGMainWindow : public BWindow
 {
 public:
 	SGMainWindow(BRect frame, const char* module, const char* key,
@@ -44,64 +42,55 @@ public:
 	~SGMainWindow();
 	virtual bool QuitRequested();
 	virtual void MessageReceived(BMessage* message);
-	virtual void FrameResized(float width, float height);
 
 private:
 	void BuildGUI(void);
-	void InsertVerseNumber(int verse);
-	void InsertChapter(void);
 	void LoadPrefsForModule(void);
 	void SavePrefsForModule(void);
 	bool NeedsLineBreaks(void);
-	
+
 	void SetModule(const TextType &module, const int32 &index);
 	void SetModuleFromString(const char* name);
-	void SetBook(const char* name);	
+	void SetBook(const char* name);
 	void SetChapter(const int16 &chapter);
 	void SetVerse(const int16 &verse);
+	void UpdateParallelKey(void);
 
 	BMenuBar		*fMenuBar;
-	
+
 	BMenuField		*fModuleField;
-	
-	BMenuItem		*fShowParallelItem,
-					*fShowVerseNumItem,
-					*fShowParallelContextItem;
+
+	BMenuItem		*fShowVerseNumItem;
 
 	BMenu			*fBookMenu,
 					*fBibleMenu,
 					*fCommentaryMenu,
 					*fLexiconMenu,
 					*fGeneralMenu;
-	
+
 	BTextControl	*fChapterBox;
 	BTextControl	*fVerseBox;
 
 	BButton			*fNoteButton;
-	
-	BTextView		*fVerseView;
-	BScrollView		*fScrollView;
-	
-	FontPanel		*fFontPanel;
+
+	ParallelBibleView	*fParallelView;
+	BScrollView			*fScrollView;
+
 	SGSearchWindow	*fSearchWindow;
-	
-	
+
+
 	SwordBackend	*fModManager;
 	SGModule		*fCurrentModule;
 	uint16			fCurrentChapter;
 	uint16			fCurrentVerse;
-	uint16			fCurrentVerseEnd;	
-	
+	uint16			fCurrentVerseEnd;
+
 	int16			fFontSize;
-	BFont			*fCurrentFont;
-	BFont			fDisplayFont,
-					fGreekFont,
-					fHebrewFont,
-					fRomanFont;
-	
+	BFont			fDisplayFont;
+
 	bool			fIsLineBreak,
 					fShowVerseNumbers;
-	
+
 	BMessenger		*fFindMessenger;
 };
 

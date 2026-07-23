@@ -74,8 +74,10 @@ class NoteFieldView;
 // clipped/backed views where a single control was expected. Instead,
 // HeaderView() returns a plain BView this class builds and keeps
 // positioned, but does not itself add as a child; the caller (see
-// ParallelBibleWindow) places it directly above the BScrollView that
-// wraps this view, outside the scrolled hierarchy entirely, and this view
+// SGMainWindow, which embeds this view directly as its own reading pane
+// rather than hosting it in a separate window) places it directly above
+// the BScrollView that wraps this view, outside the scrolled hierarchy
+// entirely, and this view
 // mirrors its own horizontal scroll position onto it by overriding
 // ScrollTo() -- the one hook every scroll path (drag, wheel, programmatic)
 // ultimately funnels through.

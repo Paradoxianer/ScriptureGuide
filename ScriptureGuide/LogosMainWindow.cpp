@@ -30,9 +30,7 @@
 
 #include "constants.h"
 #include "LogosApp.h"
-#include "FontPanel.h"
 #include "Preferences.h"
-#include "parallelbible/ParallelBibleWindow.h"
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "MainWindow"
@@ -40,11 +38,9 @@
 SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 		uint16 selectVers, uint16 selectVersEnd )
  :	BWindow(frame, "Scripture Guide", B_DOCUMENT_WINDOW, 0),
- 	fFontPanel(NULL),
  	fModManager(NULL),
  	fCurrentModule(NULL),
  	fCurrentChapter(1),
- 	fCurrentFont(NULL),
  	fFindMessenger(NULL),
 	fSearchWindow(NULL)
 {
@@ -105,49 +101,35 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 		} else
 			return; // Shoud never happen.
 	}
-	
+
+	// SetModuleFromString() above already added the parallel view's first
+	// column via SetModule() when it found a match; the fallback branches
+	// just above it set fCurrentModule directly instead, so make sure a
+	// column still exists either way.
+	if (fParallelView->CountColumns() == 0 && fCurrentModule != NULL)
+		fParallelView->AddColumn(fCurrentModule->Name());
+
 	// Load the preferences for the individual module
 	LoadPrefsForModule();
-	
-		
+
+
 	BMenuItem* item = fBookMenu->FindItem(BookFromKey(key));
 	if (item)
 		item->SetMarked(true);
-	
+
 	if (key)
 	{
 		fCurrentChapter = ChapterFromKey(key);
 		fCurrentVerse = VerseFromKey(key);
 		SetChapter(fCurrentChapter);
 		SetVerse(fCurrentVerse);
-	}	
-	
-	fCurrentFont = &fDisplayFont;
-	
-	fRomanFont.SetSize(fFontSize);
-	fGreekFont.SetSize(fFontSize);
-	fHebrewFont.SetSize(fFontSize);
-	
-	// Attempt to set the supported Greek and Hebrew fonts. 
-	// In this case, the BeBook is wrong -- SetFamilyandFace 
-	// is declared in Font.h as returning a status_t.
-	// Ideally, there should be a better way of choosing non-Latin fonts, 
-	// but we'll live with this for now. :)
-	font_family fam;
-	sprintf((char*)fam, "%s", GREEK);
-	if (fGreekFont.SetFamilyAndFace(fam, B_REGULAR_FACE)!=B_OK)
-		fGreekFont = *be_plain_font;
-	
-	sprintf((char*)fam,"%s",HEBREW);
-	if (fHebrewFont.SetFamilyAndFace(fam, B_REGULAR_FACE)!=B_OK)
-		fHebrewFont=*be_plain_font;
+	}
 }
 
 
-SGMainWindow::~SGMainWindow() 
+SGMainWindow::~SGMainWindow()
 {
 	delete fModManager;
-	delete fFontPanel;
 }
 
 
@@ -182,34 +164,6 @@ void SGMainWindow::BuildGUI(void)
 		new BMessage(NEXT_CHAPTER), B_RIGHT_ARROW));
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Previous Chapter"),
 		new BMessage(PREV_CHAPTER), B_LEFT_ARROW));
-	menu->AddSeparatorItem();
-	
-	BMenuItem* copyitem = new BMenuItem(B_TRANSLATE("Copy Verses"),
-		new BMessage(B_COPY), 'C');
-	menu->AddItem(copyitem);
-	
-	BMenuItem* selectallitem = new BMenuItem(B_TRANSLATE("Select All"),
-		new BMessage(B_SELECT_ALL), 'A');
-	menu->AddItem(selectallitem);
-	fMenuBar->AddItem(menu);
-	
-	menu = new BMenu(B_TRANSLATE("Options"));
-	
-	menu->AddItem(new BMenuItem(B_TRANSLATE("Choose Font..."),
-		new BMessage(SELECT_FONT)));
-	menu->AddSeparatorItem();
-	
-	fShowVerseNumItem = new BMenuItem(B_TRANSLATE("Show Verse Numbers"),
-		new BMessage(MENU_OPTIONS_VERSENUMBERS));
-	if (fShowVerseNumbers)
-		fShowVerseNumItem->SetMarked(true);
-	menu->AddItem(fShowVerseNumItem);
-
-	menu->AddSeparatorItem();
-	fShowParallelItem = new BMenuItem(B_TRANSLATE("Parallel View…"),
-		new BMessage(MENU_OPTIONS_PARALLEL_VIEW));
-	menu->AddItem(fShowParallelItem);
-
 	fMenuBar->AddItem(menu);
 	
 	// We need to populate the module menu because the size of the field 
@@ -244,9 +198,6 @@ void SGMainWindow::BuildGUI(void)
 		fCommentaryMenu->AddItem(new BMenuItem(modname.String(),commmsg));
 	}
 	modulemenu->AddItem(fCommentaryMenu);
-	
-	// Add the toolbar view	
-	BBox* toolbar = new BBox("toolbar_view");
 	
 	fModuleField = new BMenuField("modulefield", B_TRANSLATE("Text:"), modulemenu);
 	fModuleField->SetDivider(be_plain_font->StringWidth("Text:") + 5);
@@ -285,27 +236,16 @@ void SGMainWindow::BuildGUI(void)
 		verseView->DisallowChar(c);
 	}
 	
-	// prepare the TextFrame
-	BRect textframe = Bounds();
-	textframe.top = toolbar->Frame().bottom + 1;
-	textframe.right -= B_V_SCROLL_BAR_WIDTH;
-	BRect textrect = textframe;
-	textrect.OffsetTo(B_ORIGIN);
-	
-	fVerseView = new BTextView(textframe, "text_view", textrect,
-				B_FOLLOW_ALL_SIDES, B_WILL_DRAW | B_PULSE_NEEDED);
-	fScrollView = new BScrollView("scroll_view", fVerseView,
-				B_FOLLOW_ALL_SIDES, 0, false, true, B_NO_BORDER);
-	
-	fVerseView->SetDoesUndo(false);
-	fVerseView->MakeFocus(true);
-	fVerseView->MakeEditable(false);
-	fVerseView->SetStylable(true);
-	fVerseView->SetWordWrap(true);
+	// Parallel View is now what the main window's own reading pane is --
+	// with a single column it reads just like the old BTextView pane did,
+	// and the "+" button in its header is how the user adds more columns
+	// (see issue #11), instead of a separate window (see the "keep it
+	// simple" discussion that led to this merge).
+	fParallelView = new ParallelBibleView("parallelView",
+		fModManager->Manager(), Frame().Width());
+	fScrollView = new BScrollView("scroll_view", fParallelView,
+		0, true, true, B_NO_BORDER);
 
-	copyitem->SetTarget(fVerseView);
-	selectallitem->SetTarget(fVerseView);
-	
 	BToolBar *toolBar = new BToolBar();
 	toolBar->AddView(fModuleField);
 	toolBar->AddView(bookfield);
@@ -313,121 +253,13 @@ void SGMainWindow::BuildGUI(void)
 	toolBar->AddView(fVerseBox);
 	toolBar->AddGlue();
 	toolBar->AddView(fNoteButton);
-	
+
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(fMenuBar, B_USE_DEFAULT_SPACING)
 		.Add(toolBar)
-		.AddSplit(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
-			.Add(fScrollView)
-		.End()
+		.Add(fParallelView->HeaderView())
+		.Add(fScrollView)
 	.End();
-}
-
-
-void SGMainWindow::InsertVerseNumber(int verse)
-{
-	BString string;
-	string << " " << verse << " ";
-	
-	BFont boldfont(be_bold_font);
-	boldfont.SetSize(fFontSize);
-	fVerseView->SetFontAndColor(&boldfont, B_FONT_ALL, &BLUE);
-	fVerseView->Insert(string.String());
-	fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL, &BLACK);
-}
-
-
-void SGMainWindow::InsertChapter(void)
-{
-	BString oldtxt("1"), newtxt("2");
-	BString currentbook(fBookMenu->FindMarked()->Label());
-	int32	highlightStart = 0;
-	int32	highlightEnd = 0;
-	
-	uint16 versecount = VersesInChapter(currentbook.String(),fCurrentChapter);
-	if (fCurrentModule == NULL)
-	{
-		fVerseView->Insert(B_TRANSLATE("No Modules installed\n\n Please use ScriptureGuideManager to download the books you want."));
-		be_roster->Launch("application/x-vnd.wgp.ScriptureGuideManager");
-		return;
-	}
-	if (fCurrentModule->Type() == TEXT_BIBLE) 
-	{
-		BString text(fCurrentModule->GetVerse(currentbook.String(),
-			fCurrentChapter, 1));
-
-		if (text.CountChars()<1)
-		{
-			// this condition will only happen if the module is only one particular
-			// testament.
-			fVerseView->Insert(B_TRANSLATE("This module does not have this section."));
-			return;
-		}
-		if ((fCurrentVerseEnd != 0) && (fCurrentVerseEnd < fCurrentVerse))
-			fCurrentVerseEnd = fCurrentVerse;
-		for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
-		{
-			// Get the verse for processing
-			text.SetTo(fCurrentModule->GetVerse(currentbook.String(),
-						fCurrentChapter, currentverse));
-			
-			if (text.CountChars() < 1)
-				continue;
-			
-			if ((fCurrentVerse!=0) && (fCurrentVerse == currentverse))
-				fVerseView->GetSelection(&highlightStart,&highlightStart);
-			// Remove <P> tags and 0xc2 0xb6 sequences to carriage returns. 
-			// The crazy hex sequence is actually the UTF-8 encoding for the 
-			// paragraph symbol. If we convert them to \n's, output looks funky
-			text.RemoveAll("\x0a\x0a");
-			text.RemoveAll("\xc2\xb6 ");
-			text.RemoveAll("<P> ");
-			
-			if (fIsLineBreak)
-				text += "\n";
-			
-			if (fShowVerseNumbers)
-				InsertVerseNumber(currentverse);
-			fVerseView->Insert(text.String());
-			if ((fCurrentVerseEnd!=0) && (fCurrentVerseEnd == currentverse))
-				fVerseView->GetSelection(&highlightEnd,&highlightEnd);
-
-		}
-	} else
-	{
-		for (uint16 currentverse = 1; currentverse <= versecount; currentverse++)
-		{
-			// for commentaries, avoid doubled output
-			oldtxt.SetTo(newtxt);
-			newtxt.SetTo(fCurrentModule->GetVerse(currentbook.String(),
-							fCurrentChapter, currentverse));
-			if (oldtxt != newtxt && newtxt.CountChars() > 0)
-			{
-				if (fShowVerseNumbers)
-					InsertVerseNumber(currentverse);
-				
-				// Remove <P> tags and 0xc2 0xb6 sequences to carriage returns. 
-				// The crazy hex sequence is actually the UTF-8 encoding for 
-				// the paragraph symbol. If we convert them to \n's, output looks funky
-				newtxt.RemoveAll("\x0a\x0a");
-				newtxt.RemoveAll("\xc2\xb6 ");
-				newtxt.RemoveAll("<P> ");
-				
-				fVerseView->Insert(newtxt.String());
-				
-				// add an extra line break after each verse to make better readability
-				fVerseView->Insert("\n");
-
-				if (fIsLineBreak)
-					fVerseView->Insert("\n");
-			}
-		}
-	}
-	if (fCurrentVerseEnd != 0)
-		fVerseView->Select(highlightStart, highlightEnd);
-	else
-		fVerseView->Select(highlightStart, highlightStart);
-	fVerseView->ScrollToSelection();
 }
 
 
@@ -581,16 +413,7 @@ bool SGMainWindow::NeedsLineBreaks(void)
 }
 
 
-// the window is resized, ajust the fVerseView and the toolbar
-void SGMainWindow::FrameResized(float width, float height) 
-{
-	BRect textrect = fVerseView->TextRect();
-	textrect.right = textrect.left + (width - B_V_SCROLL_BAR_WIDTH - 3.0);
-	fVerseView->SetTextRect(textrect);
-}
-
-
-void SGMainWindow::MessageReceived(BMessage* msg) 
+void SGMainWindow::MessageReceived(BMessage* msg)
 {
 	switch (msg->what) 
 	{
@@ -622,17 +445,15 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			if (index < fBookMenu->CountItems() - 1)
 			{
 				currentItem->SetMarked(false);
-				
+
 				BMenuItem* newItem = fBookMenu->ItemAt(++index);
 				newItem->SetMarked(true);
-				
-				fCurrentChapter = 1;
 
-				fVerseView->Delete(0, fVerseView->TextLength());
-				InsertChapter();
-				
+				fCurrentChapter = 1;
+				fCurrentVerse = 1;
+				UpdateParallelKey();
+
 				fChapterBox->SetText("1");
-				fVerseView->MakeFocus();
 			}
 			break;
 		}
@@ -647,17 +468,15 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			if (index > 0)
 			{
 				currentItem->SetMarked(false);
-				
+
 				BMenuItem* newItem = fBookMenu->ItemAt(--index);
 				newItem->SetMarked(true);
-				
-				fCurrentChapter = 1;
 
-				fVerseView->Delete(0, fVerseView->TextLength());
-				InsertChapter();
-				
+				fCurrentChapter = 1;
+				fCurrentVerse = 1;
+				UpdateParallelKey();
+
 				fChapterBox->SetText("1");
-				fVerseView->MakeFocus();
 			}
 			break;
 		}
@@ -665,13 +484,10 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		{
 			fCurrentChapter = 1;
 			fCurrentVerse = 1;
+			UpdateParallelKey();
 
-			fVerseView->Delete(0, fVerseView->TextLength());
-			InsertChapter();
 			fChapterBox->SetText("1");
 			fVerseBox->SetText("1");
-
-			fVerseView->MakeFocus();
 			break;
 		}
 		case NEXT_CHAPTER:
@@ -702,27 +518,6 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		{
 			
 			PostMessage(B_QUIT_REQUESTED);
-			break;
-		}
-		case MENU_OPTIONS_VERSENUMBERS:
-		{
-			fShowVerseNumbers = (fShowVerseNumbers) ? false : true;
-			fShowVerseNumItem->SetMarked(fShowVerseNumbers);
-			fVerseView->Delete(0, fVerseView->TextLength());
-			fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL,&BLACK);
-			InsertChapter();
-			break;
-		}
-		case MENU_OPTIONS_PARALLEL_VIEW:
-		{
-			BString currentBook(fBookMenu->FindMarked()->Label());
-			BString key;
-			key << currentBook << " " << fCurrentChapter << ":"
-				<< fCurrentVerse;
-			ParallelBibleWindow* win = new ParallelBibleWindow(
-				Frame().OffsetByCopy(20, 20), fModManager,
-				fCurrentModule->Name(), key.String());
-			win->Show();
 			break;
 		}
 		case MENU_HELP_ABOUT:
@@ -814,43 +609,6 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			break;
 		}
 
-		// Called when the user selects 'Choose Font...' from menu
-		case SELECT_FONT:
-		{
-			if (fFontPanel)
-				delete fFontPanel;
-							
-			fFontPanel = new FontPanel(this, NULL, fFontSize);
-			fFontPanel->SelectFont(fDisplayFont);
-			fFontPanel->Show();
-			break;
-		}
-		
-		// called when the user selects a font from the panel
-		case M_FONT_SELECTED:
-		{
-			BString family;
-			BString style;
-			float size;
-			
-			if (msg->FindString("family",&family) != B_OK
-				|| msg->FindString("style",&style) != B_OK
-				|| msg->FindFloat("size",&size) != B_OK)
-				break;
-			
-			fFontSize = (int)size;
-			fCurrentFont->SetSize(size);
-			fCurrentFont->SetFamilyAndStyle(family.String(),style.String());
-			
-			fDisplayFont.SetSize(size);
-			fDisplayFont.SetFamilyAndStyle(family.String(),style.String());
-			
-			fVerseView->Delete(0, fVerseView->TextLength());
-			fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL, &BLACK);
-			InsertChapter();
-			fVerseView->MakeFocus();
-			break;
-		}
 		case SELECT_VERSE :
 		{
 			int num = atoi(fVerseBox->Text());
@@ -958,31 +716,23 @@ void SGMainWindow::SetModule(const TextType &module, const int32 &index)
 	BString title("Scripture Guide: ");
 	title << fCurrentModule->FullName();
 	SetTitle(title.String());
-	
-	fVerseView->Delete(0, fVerseView->TextLength());
-	
+
 	LoadPrefsForModule();
-	
-	if (sgmod->IsGreek())
-		fCurrentFont = &fGreekFont;
-	else if (sgmod->IsHebrew())
-		fCurrentFont = &fHebrewFont;
+
+	if (fParallelView->CountColumns() == 0)
+		fParallelView->AddColumn(sgmod->Name());
 	else
-		fCurrentFont = &fRomanFont;
-	
-	fCurrentFont->SetSize(fFontSize);
-	fVerseView->SetFontAndColor(fCurrentFont, B_FONT_ALL, &BLACK);
-	
+		fParallelView->ReplaceColumn(0, sgmod->Name());
+
 	BString chapterString;
 	chapterString << fCurrentChapter;
 	fChapterBox->SetText(chapterString.String());
-	
+
 	BString verseString;
 	verseString << fCurrentChapter;
 	fVerseBox->SetText(verseString.String());
-	
-	InsertChapter();
-	fVerseView->MakeFocus();
+
+	UpdateParallelKey();
 }
 
 void SGMainWindow::SetBook(const char* book)
@@ -998,8 +748,21 @@ void SGMainWindow::SetBook(const char* book)
 		}
 		bookItem->SetMarked(true);
 	}
-	InsertChapter();
-	fVerseView->MakeFocus();
+	UpdateParallelKey();
+}
+
+
+void
+SGMainWindow::UpdateParallelKey(void)
+{
+	if (fParallelView == NULL || fBookMenu->FindMarked() == NULL)
+		return;
+
+	uint16 verse = fCurrentVerse != 0 ? fCurrentVerse : 1;
+	BString key;
+	key << fBookMenu->FindMarked()->Label() << " " << fCurrentChapter << ":"
+		<< verse;
+	fParallelView->SetKey(key.String());
 }
 
 
@@ -1055,30 +818,24 @@ void SGMainWindow::SetChapter(const int16 &chapter)
 		fCurrentChapter = chapter;
 	}
 	
-	fVerseView->Delete(0, fVerseView->TextLength());
-	InsertChapter();
-	
+	UpdateParallelKey();
+
 	BString cText;
 	cText << fCurrentChapter;
 	fChapterBox->SetText(cText.String());
-	BString vText;	
+	BString vText;
 	vText << fCurrentVerse;
 	fVerseBox->SetText(vText.String());
-	fVerseView->MakeFocus();
 }
 
 
 void SGMainWindow::SetVerse(const int16 &verse)
 {
 	fCurrentVerse = verse;
-	fVerseView->Delete(0, fVerseView->TextLength());
-	// ToDo make a better implemenation since now we redraw everything...
-	// just to scroll to the right verse..
-	InsertChapter();
-	BString vText;	
+	UpdateParallelKey();
+	BString vText;
 	vText << fCurrentVerse;
 	fVerseBox->SetText(vText.String());
-	
 }
 
 
@@ -1089,11 +846,6 @@ bool SGMainWindow::QuitRequested()
 		fFindMessenger->SendMessage(B_QUIT_REQUESTED);
 		delete fFindMessenger;
 		fFindMessenger = NULL;
-	}
-	if (fFontPanel)
-	{
-		if (fFontPanel->Window()->LockLooper())
-			fFontPanel->Window()->Quit();
 	}
 	if(fSearchWindow)
 	{

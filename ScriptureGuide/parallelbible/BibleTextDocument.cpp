@@ -5,12 +5,29 @@
 
 #include "BibleTextDocument.h"
 
+#include <Language.h>
+#include <Locale.h>
 #include <String.h>
 
 #include <Catalog.h>
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "BibleTextDocument"
+
+
+// VerseKey::setText()/setBookName() only recognize localized book names
+// (e.g. German "1. Mose" for Genesis) if the key's locale has been set
+// first -- otherwise they fail silently and the key is left unchanged.
+// fCurrentKey (see ParallelBibleView) ultimately comes from the main
+// window's book menu, which is localized, so every VerseKey built from
+// caller-supplied key text needs this before setText()/setBookName().
+static void
+SetVerseKeyLocale(VerseKey& key)
+{
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+	key.setLocale(language.Code());
+}
 
 
 BibleTextDocument::BibleTextDocument(SWModule* module)
@@ -75,6 +92,7 @@ BibleTextDocument::SetKey(const char* key)
 		return B_NO_INIT;
 
 	VerseKey verseKey(fModule->getKeyText());
+	SetVerseKeyLocale(verseKey);
 	verseKey.setText(key);
 	// Deliberately not forcing verse 1 here, unlike SetChapter()/Next/
 	// PrevChapter() (which always want the chapter's first verse):
@@ -96,8 +114,10 @@ BibleTextDocument::SetChapter(const char* book, int chapter)
 		return B_NO_INIT;
 
 	VerseKey verseKey(fModule->getKeyText());
-	if (book != NULL)
+	if (book != NULL) {
+		SetVerseKeyLocale(verseKey);
 		verseKey.setBookName(book);
+	}
 	verseKey.setChapter(chapter);
 	verseKey.setVerse(1);
 	fModule->setKey(verseKey);

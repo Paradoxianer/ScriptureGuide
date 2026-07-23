@@ -10,6 +10,8 @@
 
 #include <Button.h>
 #include <Catalog.h>
+#include <Language.h>
+#include <Locale.h>
 #include <MenuField.h>
 #include <MenuItem.h>
 #include <PopUpMenu.h>
@@ -25,6 +27,20 @@
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "ParallelBibleView"
+
+
+// See the identical helper in BibleTextDocument.cpp: VerseKey::setText()
+// only recognizes localized book names (e.g. German "1. Mose") if the
+// key's locale has been set first, otherwise it fails silently and the
+// key is left unchanged. fCurrentKey here ultimately comes from the main
+// window's (localized) book menu.
+static void
+SetVerseKeyLocale(VerseKey& key)
+{
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+	key.setLocale(language.Code());
+}
 
 const float ParallelBibleView::kMinColumnWidth = 150.0f;
 const float ParallelBibleView::kColumnSpacing = 8.0f;
@@ -74,6 +90,7 @@ private:
 	void _Save()
 	{
 		VerseKey key;
+		SetVerseKeyLocale(key);
 		key.setText(fChapterKey.String());
 		key.setVerse(fVerse);
 		fNotes->SetNote(key.getText(), Text());
@@ -124,8 +141,8 @@ ParallelBibleView::~ParallelBibleView()
 	delete fNotes;
 
 	// HeaderView() is meant to be adopted into the caller's own layout
-	// (see ParallelBibleWindow); if that never happened, this view still
-	// owns it and must not leak it.
+	// (see SGMainWindow); if that never happened, this view still owns
+	// it and must not leak it.
 	if (fHeaderView->Parent() == NULL)
 		delete fHeaderView;
 }
@@ -317,6 +334,7 @@ ParallelBibleView::SetKey(const char* key)
 	_Realign();
 
 	VerseKey verseKey;
+	SetVerseKeyLocale(verseKey);
 	verseKey.setText(fCurrentKey.String());
 	_ScrollToVerse(verseKey.getVerse());
 
@@ -488,11 +506,13 @@ ParallelBibleView::_RebuildNoteFields()
 		return;
 
 	VerseKey chapterKey;
+	SetVerseKeyLocale(chapterKey);
 	chapterKey.setText(fCurrentKey.String());
 	int verseCount = chapterKey.getVerseMax();
 
 	for (int verse = 1; verse <= verseCount; verse++) {
 		VerseKey verseKey;
+		SetVerseKeyLocale(verseKey);
 		verseKey.setText(fCurrentKey.String());
 		verseKey.setVerse(verse);
 
