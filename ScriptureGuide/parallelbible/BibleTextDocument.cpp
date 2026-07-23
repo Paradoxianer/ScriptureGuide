@@ -192,14 +192,27 @@ BibleTextDocument::SetVerseSpacing(const std::map<int, float>& spacing)
 void
 BibleTextDocument::_Rebuild()
 {
-	// Length() sums each paragraph's *text* length, which is 0 for a
-	// paragraph holding only an empty span (e.g. a not-yet-written note).
-	// A document that is entirely such paragraphs would report Length()
-	// == 0 despite having real paragraphs to clear, so guard on the
-	// paragraph count instead -- otherwise nothing gets removed here and
-	// every rebuild appends another full set on top of the last one.
-	if (CountParagraphs() > 0)
-		Remove(0, Length());
+	// Remove(0, Length()) -- clearing by replacing the entire document
+	// with empty text -- reliably leaves exactly one empty placeholder
+	// paragraph behind at index 0 instead of reaching zero paragraphs
+	// (the underlying TextDocument::Replace()/_Remove() guarantees "at
+	// least one paragraph always exists", the same way an empty text
+	// file conceptually still has one empty line). That placeholder is
+	// harmless on its own, but our verse loop below always Append()s
+	// rather than replacing it, so every verse's paragraph ends up one
+	// index higher than fParagraphVerse (built alongside the very same
+	// Append() calls) expects -- verse 1 silently maps to index 1, not
+	// 0, and whatever the true index-0 paragraph is (the leftover
+	// placeholder) gets misread as verse 1's content instead.
+	//
+	// Resetting the inherited TextDocument state directly sidesteps
+	// Remove()'s placeholder guarantee entirely: a fresh, default-
+	// constructed TextDocument's fParagraphs is a genuinely empty
+	// vector, and TextDocument::operator=() is a plain field copy, not
+	// the Insert/Remove machinery that leaves the placeholder behind.
+	// BibleTextDocument's own members (fModule, fShowVerseNumbers, etc.)
+	// are untouched since only the base-class subobject is reassigned.
+	TextDocument::operator=(TextDocument());
 	fParagraphVerse.clear();
 
 	if (fModule == NULL) {

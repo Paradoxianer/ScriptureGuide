@@ -15,6 +15,7 @@
 #include <PopUpMenu.h>
 #include <ScrollBar.h>
 #include <StringView.h>
+#include <TextView.h>
 
 #include <versekey.h>
 
@@ -30,48 +31,56 @@ const float ParallelBibleView::kColumnSpacing = 8.0f;
 const float ParallelBibleView::kHeaderHeight = 24.0f;
 const float ParallelBibleView::kRemoveButtonWidth = 20.0f;
 const float ParallelBibleView::kMaxNotesWidthFraction = 1.0f / 3.0f;
+const float ParallelBibleView::kNoteVerseLabelWidth = 20.0f;
 
 
-// Persists edits made in the notes column back into the personal SWORD
-// module, one verse (== one paragraph) at a time.
-class NotesWriteBackListener : public TextListener {
+// A single verse's note editor -- see the class comment on ParallelBibleView
+// for why the notes column is a stack of these instead of one flowing
+// document. Auto-saves on every edit (rather than e.g. only on focus loss)
+// so nothing is lost if the window closes with a field still focused;
+// writing a short note to the local, file-backed RawCom module on every
+// keystroke is cheap.
+class NoteFieldView : public BTextView {
 public:
-	NotesWriteBackListener(BibleTextDocument* document,
-		PersonalNotesModule* notes, const BString& chapterKey)
+	NoteFieldView(int verse, PersonalNotesModule* notes,
+		const BString& chapterKey)
 		:
-		fDocument(document),
+		BTextView("noteField"),
+		fVerse(verse),
 		fNotes(notes),
 		fChapterKey(chapterKey)
 	{
+		SetWordWrap(true);
+		SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+		SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+		SetInsets(2.0f, 2.0f, 2.0f, 2.0f);
 	}
 
-	virtual void TextChanged(const TextChangedEvent& event)
+protected:
+	virtual void InsertText(const char* text, int32 length, int32 offset,
+		const text_run_array* runs)
 	{
-		// _Rebuild() fires this notification mid-flight, once for the
-		// Remove() that empties the document and once for the Append()
-		// calls that repopulate it -- the paragraph range from the first
-		// can already be out of bounds by the time this runs, since the
-		// document may have fewer (or different) paragraphs than the
-		// event's range implies once the whole rebuild has settled.
-		int32 first = event.FirstChangedParagraph();
-		int32 last = std::min(first + event.ChangedParagraphCount(),
-			fDocument->CountParagraphs());
-		for (int32 i = first; i < last; i++) {
-			int verse = fDocument->VerseForParagraphIndex(i);
-			if (verse < 0)
-				continue;
+		BTextView::InsertText(text, length, offset, runs);
+		_Save();
+	}
 
-			VerseKey key;
-			key.setText(fChapterKey.String());
-			key.setVerse(verse);
-
-			BString text = fDocument->ParagraphAtIndex(i).Text();
-			fNotes->SetNote(key.getText(), text.String());
-		}
+	virtual void DeleteText(int32 fromOffset, int32 toOffset)
+	{
+		BTextView::DeleteText(fromOffset, toOffset);
+		_Save();
 	}
 
 private:
-	BibleTextDocument*		fDocument;
+	void _Save()
+	{
+		VerseKey key;
+		key.setText(fChapterKey.String());
+		key.setVerse(fVerse);
+		fNotes->SetNote(key.getText(), Text());
+	}
+
+private:
+	int						fVerse;
 	PersonalNotesModule*	fNotes;
 	BString					fChapterKey;
 };
@@ -83,7 +92,6 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	BView(name, B_WILL_DRAW | B_FRAME_EVENTS),
 	fManager(manager),
 	fNotes(NULL),
-	fNotesView(NULL),
 	fNotesLabel(NULL),
 	fRemoveNotesButton(NULL),
 	fHeaderView(NULL),
@@ -287,25 +295,7 @@ ParallelBibleView::SetNotesEnabled(bool enabled)
 			fNotes = NULL;
 			return status;
 		}
-
-		fNotesDocument = BReference<BibleTextDocument>(
-			new BibleTextDocument(fNotes->Module()), true);
-		// Without verse numbers, an empty note is just a blank line with
-		// no indication of which verse it belongs to -- the user would
-		// have to eyeball its vertical position against the aligned
-		// Bible column next to it. SetSkipEmptyVerses(false) keeps one
-		// paragraph per verse even when there's no note yet, matching the
-		// Bible columns line for line, same as the numbers do.
-		fNotesDocument->SetShowVerseNumbers(true);
-		fNotesDocument->SetSkipEmptyVerses(false);
-		if (!fCurrentKey.IsEmpty())
-			fNotesDocument->SetKey(fCurrentKey.String());
-
-		fNotesDocument->AddListener(TextListenerRef(
-			new NotesWriteBackListener(fNotesDocument.Get(), fNotes,
-				fCurrentKey), true));
 	} else {
-		fNotesDocument = BReference<BibleTextDocument>();
 		delete fNotes;
 		fNotes = NULL;
 	}
@@ -322,18 +312,13 @@ ParallelBibleView::SetKey(const char* key)
 
 	for (size_t i = 0; i < fDocuments.size(); i++)
 		fDocuments[i]->SetKey(key);
-	if (fNotesDocument.Get() != NULL)
-		fNotesDocument->SetKey(key);
 
+	_RebuildNoteFields();
 	_Realign();
 
-	// BibleTextDocument::SetKey() (unlike SetChapter()/Next/PrevChapter())
-	// preserves whatever verse `key` asked for instead of forcing verse 1,
-	// specifically so this can jump straight to it.
-	if (!fDocuments.empty())
-		_ScrollToVerse(fDocuments[0]->Verse());
-	else if (fNotesDocument.Get() != NULL)
-		_ScrollToVerse(fNotesDocument->Verse());
+	VerseKey verseKey;
+	verseKey.setText(fCurrentKey.String());
+	_ScrollToVerse(verseKey.getVerse());
 
 	return B_OK;
 }
@@ -344,14 +329,11 @@ ParallelBibleView::NextChapter()
 {
 	for (size_t i = 0; i < fDocuments.size(); i++)
 		fDocuments[i]->NextChapter();
-	if (fNotesDocument.Get() != NULL)
-		fNotesDocument->NextChapter();
 
 	if (!fDocuments.empty())
 		fCurrentKey = fDocuments[0]->Key();
-	else if (fNotesDocument.Get() != NULL)
-		fCurrentKey = fNotesDocument->Key();
 
+	_RebuildNoteFields();
 	_Realign();
 	// A new chapter always starts at verse 1 (both *Chapter() methods
 	// force that); reset the viewport too, or a scroll position from the
@@ -366,14 +348,11 @@ ParallelBibleView::PrevChapter()
 {
 	for (size_t i = 0; i < fDocuments.size(); i++)
 		fDocuments[i]->PrevChapter();
-	if (fNotesDocument.Get() != NULL)
-		fNotesDocument->PrevChapter();
 
 	if (!fDocuments.empty())
 		fCurrentKey = fDocuments[0]->Key();
-	else if (fNotesDocument.Get() != NULL)
-		fCurrentKey = fNotesDocument->Key();
 
+	_RebuildNoteFields();
 	_Realign();
 	ScrollTo(Bounds().left, 0.0f);
 	return B_OK;
@@ -388,12 +367,6 @@ ParallelBibleView::_RebuildLayout()
 		delete fTextViews[i];
 	}
 	fTextViews.clear();
-
-	if (fNotesView != NULL) {
-		fNotesView->RemoveSelf();
-		delete fNotesView;
-		fNotesView = NULL;
-	}
 
 	for (size_t i = 0; i < fDocuments.size(); i++) {
 		TextDocumentView* view = new TextDocumentView("bibleColumn");
@@ -413,27 +386,16 @@ ParallelBibleView::_RebuildLayout()
 		fTextViews.push_back(view);
 	}
 
-	if (fNotesDocument.Get() != NULL) {
-		TextDocumentView* view = new TextDocumentView("notesColumn");
-		view->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
-		view->SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
-		view->SetInsets(4.0f);
-		view->SetSelectionEnabled(true);
-		view->SetEditingEnabled(true);
-		view->SetTextDocument(fNotesDocument);
-		AddChild(view);
-		fNotesView = view;
-	}
-
 	_RebuildHeader();
+	_RebuildNoteFields();
 	_Realign();
 }
 
 
 // Rebuilds the header row's per-column BMenuFields + remove buttons (Bible
-// columns) and the notes column's remove button. Positioning happens in
-// _PositionColumns(), which uses the exact same x-offsets as the content
-// columns so header cells and columns always line up.
+// columns) and the notes column's label + remove button. Positioning
+// happens in _PositionColumns(), which uses the exact same x-offsets as
+// the content columns so header cells and columns always line up.
 void
 ParallelBibleView::_RebuildHeader()
 {
@@ -474,7 +436,7 @@ ParallelBibleView::_RebuildHeader()
 		delete fRemoveNotesButton;
 		fRemoveNotesButton = NULL;
 	}
-	if (fNotesDocument.Get() != NULL) {
+	if (fNotes != NULL) {
 		// Otherwise there is nothing distinguishing the notes column's
 		// header cell from a Bible column's -- it would be a bare "x"
 		// with no indication of what it belongs to or that it's editable.
@@ -495,6 +457,60 @@ ParallelBibleView::_RebuildHeader()
 }
 
 
+// Rebuilds the notes column's per-verse fields for the current chapter
+// (fCurrentKey): one NoteFieldView + verse-number label per verse, loaded
+// with whatever note (if any) is already stored for it. Called whenever
+// the chapter changes (SetKey()/NextChapter()/PrevChapter()) as well as
+// from _RebuildLayout() (column/notes-enabled changes) -- the verse count
+// and content can differ per chapter, unlike the Bible TextDocumentViews,
+// which refresh their own content in place via BibleTextDocument::
+// SetKey() without needing their wrapper view recreated.
+//
+// Only creates/loads the fields; _PositionColumns() (via _Realign(), which
+// every caller of this also calls) does the actual sizing, since a field's
+// height depends on Bible-column alignment that hasn't necessarily run yet
+// at this point.
+void
+ParallelBibleView::_RebuildNoteFields()
+{
+	for (size_t i = 0; i < fNoteFields.size(); i++) {
+		fNoteFields[i]->RemoveSelf();
+		delete fNoteFields[i];
+	}
+	fNoteFields.clear();
+	for (size_t i = 0; i < fNoteVerseLabels.size(); i++) {
+		fNoteVerseLabels[i]->RemoveSelf();
+		delete fNoteVerseLabels[i];
+	}
+	fNoteVerseLabels.clear();
+
+	if (fNotes == NULL || fCurrentKey.IsEmpty())
+		return;
+
+	VerseKey chapterKey;
+	chapterKey.setText(fCurrentKey.String());
+	int verseCount = chapterKey.getVerseMax();
+
+	for (int verse = 1; verse <= verseCount; verse++) {
+		VerseKey verseKey;
+		verseKey.setText(fCurrentKey.String());
+		verseKey.setVerse(verse);
+
+		BString verseLabel;
+		verseLabel << verse;
+		BStringView* label = new BStringView("noteVerseLabel",
+			verseLabel.String());
+		AddChild(label);
+		fNoteVerseLabels.push_back(label);
+
+		NoteFieldView* field = new NoteFieldView(verse, fNotes, fCurrentKey);
+		field->SetText(fNotes->GetNote(verseKey.getText()).String());
+		AddChild(field);
+		fNoteFields.push_back(field);
+	}
+}
+
+
 void
 ParallelBibleView::_Realign()
 {
@@ -503,10 +519,6 @@ ParallelBibleView::_Realign()
 	for (size_t i = 0; i < fDocuments.size(); i++) {
 		columns.push_back(fDocuments[i].Get());
 		widths.push_back(_ColumnWidth());
-	}
-	if (fNotesDocument.Get() != NULL) {
-		columns.push_back(fNotesDocument.Get());
-		widths.push_back(_NotesColumnWidth());
 	}
 
 	if (columns.size() >= 2)
@@ -518,58 +530,19 @@ ParallelBibleView::_Realign()
 		fTextViews[i]->Relayout();
 		fTextViews[i]->Invalidate();
 	}
-	if (fNotesView != NULL) {
-		fNotesView->Relayout();
-		fNotesView->Invalidate();
-	}
-}
-
-
-// Scrolls so the given verse's paragraph is at the top of the viewport.
-// Columns are aligned per verse (see VerseAligner), so every column's
-// target paragraph starts at the same y regardless of which one this
-// measures from -- fDocuments[0] if there's a Bible column, since that's
-// also what SetKey() reads Verse() from. Mirrors the same technique
-// VerseAligner itself uses: a standalone ParagraphLayout can measure a
-// paragraph's height without a live TextDocumentView.
-void
-ParallelBibleView::_ScrollToVerse(int verse)
-{
-	if (verse <= 1)
-		return; // already at the top after a fresh chapter render
-
-	BibleTextDocument* document = !fDocuments.empty()
-		? fDocuments[0].Get() : fNotesDocument.Get();
-	if (document == NULL)
-		return;
-
-	int32 targetIndex = document->ParagraphIndexForVerse(verse);
-	if (targetIndex <= 0)
-		return;
-
-	float width = document == fNotesDocument.Get()
-		? _NotesColumnWidth() : _ColumnWidth();
-
-	float y = 0.0f;
-	for (int32 i = 0; i < targetIndex; i++) {
-		ParagraphLayout layout;
-		layout.SetWidth(width);
-		layout.SetParagraph(document->ParagraphAtIndex(i));
-		y += layout.Height();
-	}
-
-	ScrollTo(Bounds().left, y);
 }
 
 
 // Positions and sizes every column view directly (MoveTo/ResizeTo) instead
 // of delegating to a BGroupLayout -- see the header comment for why. Each
-// column gets its full natural content height (as reported by its own
-// GetHeightForWidth()), which may well exceed this view's own Frame();
+// Bible column gets its full natural content height (as reported by its
+// own GetHeightForWidth()), which may well exceed this view's own Frame();
 // that is fine, since this view's Bounds() acts as the scrolled viewport
 // into that taller content, driven by _UpdateScrollBars() below, exactly
 // the way TextDocumentView does for itself when it is the direct
-// BScrollView target.
+// BScrollView target. Each note field's height comes from _RowHeight(),
+// which reads back the (already-aligned, if there's more than one Bible
+// column) height of that verse's paragraph in the first Bible column.
 void
 ParallelBibleView::_PositionColumns()
 {
@@ -591,28 +564,36 @@ ParallelBibleView::_PositionColumns()
 		fTextViews[i]->MoveTo(x, 0.0f);
 		fTextViews[i]->ResizeTo(width, preferred);
 
-		float fieldWidth = std::max(0.0f,
-			width - kRemoveButtonWidth - kColumnSpacing / 2.0f);
-		fHeaderFields[i]->MoveTo(x, 0.0f);
-		fHeaderFields[i]->ResizeTo(fieldWidth, kHeaderHeight);
-		fRemoveButtons[i]->MoveTo(x + fieldWidth + kColumnSpacing / 2.0f,
-			0.0f);
-		fRemoveButtons[i]->ResizeTo(kRemoveButtonWidth, kHeaderHeight);
+		if (i < fHeaderFields.size()) {
+			float fieldWidth = std::max(0.0f,
+				width - kRemoveButtonWidth - kColumnSpacing / 2.0f);
+			fHeaderFields[i]->MoveTo(x, 0.0f);
+			fHeaderFields[i]->ResizeTo(fieldWidth, kHeaderHeight);
+			fRemoveButtons[i]->MoveTo(x + fieldWidth + kColumnSpacing / 2.0f,
+				0.0f);
+			fRemoveButtons[i]->ResizeTo(kRemoveButtonWidth, kHeaderHeight);
+		}
 
 		contentHeight = std::max(contentHeight, preferred);
 		x += width + kColumnSpacing;
 	}
 
-	if (fNotesView != NULL) {
+	if (fNotes != NULL) {
 		float notesWidth = _NotesColumnWidth();
+		float fieldWidth = std::max(0.0f, notesWidth - kNoteVerseLabelWidth);
 
-		fNotesView->Relayout();
+		float y = 0.0f;
+		for (size_t i = 0; i < fNoteFields.size(); i++) {
+			float rowHeight = _RowHeight((int)(i + 1));
 
-		float min, max, preferred;
-		fNotesView->GetHeightForWidth(notesWidth, &min, &max, &preferred);
+			fNoteVerseLabels[i]->MoveTo(x, y);
+			fNoteVerseLabels[i]->ResizeTo(kNoteVerseLabelWidth, rowHeight);
 
-		fNotesView->MoveTo(x, 0.0f);
-		fNotesView->ResizeTo(notesWidth, preferred);
+			fNoteFields[i]->MoveTo(x + kNoteVerseLabelWidth, y);
+			fNoteFields[i]->ResizeTo(fieldWidth, rowHeight);
+
+			y += rowHeight;
+		}
 
 		if (fRemoveNotesButton != NULL) {
 			fRemoveNotesButton->MoveTo(
@@ -625,7 +606,7 @@ ParallelBibleView::_PositionColumns()
 				std::max(0.0f, notesWidth - kRemoveButtonWidth), kHeaderHeight);
 		}
 
-		contentHeight = std::max(contentHeight, preferred);
+		contentHeight = std::max(contentHeight, y);
 		x += notesWidth + kColumnSpacing;
 	}
 
@@ -634,7 +615,7 @@ ParallelBibleView::_PositionColumns()
 	x += kHeaderHeight + kColumnSpacing;
 
 	fContentHeight = contentHeight;
-	int32 columnCount = (int32)fTextViews.size() + (fNotesView != NULL ? 1 : 0);
+	int32 columnCount = (int32)fTextViews.size() + (fNotes != NULL ? 1 : 0);
 	fContentWidth = columnCount == 0 ? 0.0f : (x - kColumnSpacing);
 
 	// fHeaderView's own Frame() is left to the window's layout (matching
@@ -679,6 +660,51 @@ ParallelBibleView::_UpdateScrollBars()
 }
 
 
+// Scrolls so the given verse's row is at the top of the viewport. Bible
+// columns are aligned per verse (see VerseAligner) and note fields are
+// sized to match (see _RowHeight()), so summing row heights up to the
+// target verse lands correctly regardless of which columns are open.
+void
+ParallelBibleView::_ScrollToVerse(int verse)
+{
+	if (verse <= 1)
+		return; // already at the top after a fresh chapter render
+
+	float y = 0.0f;
+	for (int v = 1; v < verse; v++)
+		y += _RowHeight(v);
+
+	ScrollTo(Bounds().left, y);
+}
+
+
+// The height of the given verse's row, shared by note-field sizing
+// (_PositionColumns()) and scroll-target calculation (_ScrollToVerse()).
+// Reads it back from the first Bible column's paragraph for that verse --
+// which, if VerseAligner::Align() has run (2+ Bible columns), already
+// reflects the tallest column's height for that verse, exactly the row
+// height every other column needs to match. Mirrors the technique
+// VerseAligner itself uses: a standalone ParagraphLayout can measure a
+// paragraph's height without a live TextDocumentView. Falls back to
+// kHeaderHeight when there's no Bible column to measure against (a notes-
+// only view) or the verse was skipped from that column's document.
+float
+ParallelBibleView::_RowHeight(int verse) const
+{
+	if (!fDocuments.empty()) {
+		BibleTextDocument* document = fDocuments[0].Get();
+		int32 index = document->ParagraphIndexForVerse(verse);
+		if (index >= 0) {
+			ParagraphLayout layout;
+			layout.SetWidth(_ColumnWidth());
+			layout.SetParagraph(document->ParagraphAtIndex(index));
+			return layout.Height();
+		}
+	}
+	return kHeaderHeight;
+}
+
+
 float
 ParallelBibleView::_ColumnWidth() const
 {
@@ -695,8 +721,8 @@ ParallelBibleView::_ColumnWidth() const
 	if (bibleCount == 0)
 		return totalWidth;
 
-	int32 columnCount = bibleCount + (fNotesView != NULL ? 1 : 0);
-	float notesWidth = fNotesView != NULL ? _NotesColumnWidth() : 0.0f;
+	int32 columnCount = bibleCount + (fNotes != NULL ? 1 : 0);
+	float notesWidth = fNotes != NULL ? _NotesColumnWidth() : 0.0f;
 
 	// Equal share of what's left after the (separately capped, see
 	// _NotesColumnWidth()) notes column, but never below kMinColumnWidth;
@@ -720,7 +746,7 @@ ParallelBibleView::_ColumnWidth() const
 float
 ParallelBibleView::_NotesColumnWidth() const
 {
-	if (fNotesView == NULL)
+	if (fNotes == NULL)
 		return 0.0f;
 
 	float totalWidth = Bounds().Width();

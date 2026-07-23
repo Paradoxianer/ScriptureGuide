@@ -24,23 +24,34 @@ class BButton;
 class BMenuField;
 class BPopUpMenu;
 class BStringView;
+class NoteFieldView;
 
 
 // Displays one or more Bible translations side by side, each in its own
-// TextDocumentView, plus an optional editable notes column backed by a
-// personal SWORD module (see PersonalNotesModule). All columns are kept
+// TextDocumentView, plus an optional notes column backed by a personal
+// SWORD module (see PersonalNotesModule). Unlike the Bible columns (one
+// flowing TextDocumentView each), the notes column is a separate small
+// BTextView-derived NoteFieldView per verse, each exactly as tall as that
+// verse's row -- the point being that each verse gets its own distinct,
+// obviously-editable input field rather than one continuous document a
+// user has to click into the right spot of. Bible columns are kept
 // vertically aligned per verse (see VerseAligner) so a single BScrollBar
-// is enough to scroll every column in sync. Each column has a header cell
-// (a BMenuField for Bible columns, listing every installed "Biblical
-// Texts" module, plus a small "x" button to remove that column; a plain
-// "Notes" label + "x" for the notes column) plus a trailing "+" button to
-// append another column -- see issue #11. The notes column never claims
-// more than kMaxNotesWidthFraction of the total width (see
-// _NotesColumnWidth()) -- a fixed cap for now; issue #19 tracks turning
-// this into a real user-draggable divider. Every TextDocumentView gets
-// B_DOCUMENT_BACKGROUND_COLOR instead of the B_PANEL_BACKGROUND_COLOR its
-// class default constructs with, since these are reading/editing surfaces
-// (Bible text, personal notes), not a details panel.
+// is enough to scroll every column, and the note fields, in sync; a note
+// field's height is simply read back from its corresponding Bible
+// column's post-alignment paragraph height (see _RebuildNoteFields()),
+// not something VerseAligner needs to know about separately.
+//
+// Each column has a header cell (a BMenuField for Bible columns, listing
+// every installed "Biblical Texts" module, plus a small "x" button to
+// remove that column; a plain "Notes" label + "x" for the notes column)
+// plus a trailing "+" button to append another column -- see issue #11.
+// The notes column never claims more than kMaxNotesWidthFraction of the
+// total width (see _NotesColumnWidth()) -- a fixed cap for now; issue #19
+// tracks turning this into a real user-draggable divider. Every
+// TextDocumentView/NoteFieldView gets B_DOCUMENT_BACKGROUND_COLOR instead
+// of the B_PANEL_BACKGROUND_COLOR TextDocumentView's class default
+// constructs with, since these are reading/editing surfaces, not a
+// details panel.
 //
 // Meant to be embedded as the target of a BScrollView with both
 // scrollbars: vertical for scrolling the (equal-height, post-alignment)
@@ -99,7 +110,7 @@ public:
 
 			status_t			SetNotesEnabled(bool enabled);
 			bool				NotesEnabled() const
-									{ return fNotesView != NULL; }
+									{ return fNotes != NULL; }
 
 			status_t			SetKey(const char* key);
 			status_t			NextChapter();
@@ -108,10 +119,12 @@ public:
 private:
 			void				_RebuildLayout();
 			void				_RebuildHeader();
+			void				_RebuildNoteFields();
 			void				_PositionColumns();
 			void				_UpdateScrollBars();
 			void				_Realign();
 			void				_ScrollToVerse(int verse);
+			float				_RowHeight(int verse) const;
 			float				_ColumnWidth() const;
 			float				_NotesColumnWidth() const;
 			BPopUpMenu*			_BuildModuleMenu(int32 columnIndex,
@@ -127,8 +140,8 @@ private:
 			std::vector<BButton*>	fRemoveButtons;
 
 			PersonalNotesModule*	fNotes;
-			BReference<BibleTextDocument> fNotesDocument;
-			TextDocumentView*	fNotesView;
+			std::vector<BStringView*> fNoteVerseLabels;
+			std::vector<NoteFieldView*> fNoteFields;
 			BStringView*		fNotesLabel;
 			BButton*			fRemoveNotesButton;
 
@@ -145,6 +158,7 @@ private:
 	static	const float			kHeaderHeight;
 	static	const float			kRemoveButtonWidth;
 	static	const float			kMaxNotesWidthFraction;
+	static	const float			kNoteVerseLabelWidth;
 };
 
 #endif // PARALLEL_BIBLE_VIEW_H
