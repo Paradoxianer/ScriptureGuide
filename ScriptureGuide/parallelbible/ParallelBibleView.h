@@ -31,8 +31,9 @@ class BPopUpMenu;
 // vertically aligned per verse (see VerseAligner) so a single BScrollBar
 // is enough to scroll every column in sync. Each column has a header cell
 // (a BMenuField for Bible columns, listing every installed "Biblical
-// Texts" module; a plain label for the notes column) plus a trailing "+"
-// button to append another column -- see issue #11.
+// Texts" module, plus a small "x" button to remove that column; a plain
+// label + "x" for the notes column) plus a trailing "+" button to append
+// another column -- see issue #11.
 //
 // Meant to be embedded as the target of a BScrollView with both
 // scrollbars: vertical for scrolling the (equal-height, post-alignment)
@@ -47,23 +48,19 @@ class BPopUpMenu;
 // columns in one horizontal group, only the last-added one ever received a
 // Draw() call. Driving frames directly sidesteps that entirely.
 //
-// The header row needs to follow horizontal scrolling but must stay
-// pinned while the columns scroll vertically, so this view is split into
-// two nested children instead of positioning everything directly: this
-// view itself (fParallelView, the BScrollView's target) owns only the
-// horizontal scroll (its Bounds() origin.x moves, .y never does); it
-// contains fHeaderContainer (the header cells, at a fixed y) and
-// fContentView (the actual TextDocumentView columns), and it is
-// fContentView -- not this view -- whose vertical scrollbar target is set
-// explicitly in AttachedToWindow(), so only fContentView's Bounds()
-// origin.y moves. Both children live in this view's coordinate space, so
-// they automatically move together when this view's own horizontal
-// Bounds() origin shifts -- no manual header/content sync code needed.
-// Because none of this is layout-managed, and because none of the child
-// TextDocumentViews are directly wrapped by their own BScrollView (this
-// view is, so ScrollBar() inside a child returns NULL and its own
-// _UpdateScrollBars() is a no-op), this view mirrors TextDocumentView's
-// scrollbar-sync pattern for itself.
+// The header row is its own top-level BView, NOT a child of this one --
+// it needs to follow horizontal scrolling but must never move during
+// vertical scrolling, and nesting it as a nother scrolled child (tried in
+// an earlier version of this class) made the vertical BScrollBar span the
+// header's height too, and put a visible seam between two separately
+// clipped/backed views where a single control was expected. Instead,
+// HeaderView() returns a plain BView this class builds and keeps
+// positioned, but does not itself add as a child; the caller (see
+// ParallelBibleWindow) places it directly above the BScrollView that
+// wraps this view, outside the scrolled hierarchy entirely, and this view
+// mirrors its own horizontal scroll position onto it by overriding
+// ScrollTo() -- the one hook every scroll path (drag, wheel, programmatic)
+// ultimately funnels through.
 class ParallelBibleView : public BView {
 public:
 								// initialWidth seeds the first column-width
@@ -79,7 +76,12 @@ public:
 
 	virtual	void				AttachedToWindow();
 	virtual	void				FrameResized(float width, float height);
+	virtual	void				ScrollTo(BPoint where);
 	virtual	void				MessageReceived(BMessage* message);
+
+			BView*				HeaderView() const { return fHeaderView; }
+			float				HeaderHeight() const
+									{ return kHeaderHeight; }
 
 			status_t			AddColumn(const char* moduleName);
 			status_t			ReplaceColumn(int32 index,
@@ -112,13 +114,14 @@ private:
 			std::vector<BReference<BibleTextDocument> > fDocuments;
 			std::vector<TextDocumentView*> fTextViews;
 			std::vector<BMenuField*> fHeaderFields;
+			std::vector<BButton*>	fRemoveButtons;
 
 			PersonalNotesModule*	fNotes;
 			BReference<BibleTextDocument> fNotesDocument;
 			TextDocumentView*	fNotesView;
+			BButton*			fRemoveNotesButton;
 
-			BView*				fHeaderContainer;
-			BView*				fContentView;
+			BView*				fHeaderView;
 			BButton*			fAddColumnButton;
 
 			BString				fCurrentKey;
@@ -129,6 +132,7 @@ private:
 	static	const float			kMinColumnWidth;
 	static	const float			kColumnSpacing;
 	static	const float			kHeaderHeight;
+	static	const float			kRemoveButtonWidth;
 };
 
 #endif // PARALLEL_BIBLE_VIEW_H

@@ -22,6 +22,7 @@
 const float ParallelBibleView::kMinColumnWidth = 150.0f;
 const float ParallelBibleView::kColumnSpacing = 8.0f;
 const float ParallelBibleView::kHeaderHeight = 24.0f;
+const float ParallelBibleView::kRemoveButtonWidth = 20.0f;
 
 
 // Persists edits made in the notes column back into the personal SWORD
@@ -76,8 +77,8 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fManager(manager),
 	fNotes(NULL),
 	fNotesView(NULL),
-	fHeaderContainer(NULL),
-	fContentView(NULL),
+	fRemoveNotesButton(NULL),
+	fHeaderView(NULL),
 	fAddColumnButton(NULL),
 	fInitialWidth(initialWidth),
 	fContentHeight(0.0f),
@@ -85,24 +86,32 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 {
 	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 
-	fHeaderContainer = new BView("parallelHeader", B_WILL_DRAW);
-	fHeaderContainer->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
-	AddChild(fHeaderContainer);
-
-	fContentView = new BView("parallelContent", B_WILL_DRAW | B_FRAME_EVENTS);
-	fContentView->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
-	AddChild(fContentView);
+	// Not added as a child of this view -- see the class comment on why
+	// the header lives outside the scrolled hierarchy. HeaderView() hands
+	// this to the caller, who places it in their own layout; ownership
+	// passes to whatever parent it ends up with (see ~ParallelBibleView()
+	// for the fallback if that never happens).
+	fHeaderView = new BView("parallelHeader", B_WILL_DRAW);
+	fHeaderView->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+	fHeaderView->SetExplicitMinSize(BSize(B_SIZE_UNSET, kHeaderHeight));
+	fHeaderView->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, kHeaderHeight));
 
 	fAddColumnButton = new BButton("addColumn", "+",
 		new BMessage(PARALLEL_ADD_COLUMN_MENU));
 	fAddColumnButton->SetTarget(this);
-	fHeaderContainer->AddChild(fAddColumnButton);
+	fHeaderView->AddChild(fAddColumnButton);
 }
 
 
 ParallelBibleView::~ParallelBibleView()
 {
 	delete fNotes;
+
+	// HeaderView() is meant to be adopted into the caller's own layout
+	// (see ParallelBibleWindow); if that never happened, this view still
+	// owns it and must not leak it.
+	if (fHeaderView->Parent() == NULL)
+		delete fHeaderView;
 }
 
 
@@ -110,15 +119,6 @@ void
 ParallelBibleView::AttachedToWindow()
 {
 	BView::AttachedToWindow();
-
-	// The vertical scrollbar is wired to this view by BScrollView's
-	// default single-target construction; redirect it to fContentView so
-	// vertical scrolling never moves fHeaderContainer (see header comment
-	// on why the header/content split exists in the first place).
-	BScrollBar* verticalScrollBar = ScrollBar(B_VERTICAL);
-	if (verticalScrollBar != NULL)
-		verticalScrollBar->SetTarget(fContentView);
-
 	_RebuildLayout();
 }
 
@@ -128,6 +128,18 @@ ParallelBibleView::FrameResized(float width, float height)
 {
 	BView::FrameResized(width, height);
 	_Realign();
+}
+
+
+// The one hook every scroll path (drag, mouse wheel, a scrollbar's
+// programmatic SetValue()) funnels through -- see the class comment.
+// Mirrors only the horizontal component onto the header, which has no
+// vertical scroll position of its own.
+void
+ParallelBibleView::ScrollTo(BPoint where)
+{
+	BView::ScrollTo(where);
+	fHeaderView->ScrollTo(where.x, 0.0f);
 }
 
 
@@ -158,11 +170,23 @@ ParallelBibleView::MessageReceived(BMessage* message)
 				// fire-and-forget popup, so it must clean itself up.
 				menu->SetAsyncAutoDestruct(true);
 				BPoint where = fAddColumnButton->Frame().LeftBottom();
-				ConvertToScreen(&where);
+				fHeaderView->ConvertToScreen(&where);
 				menu->Go(where, true, true, true);
 			}
 			break;
 		}
+
+		case PARALLEL_REMOVE_COLUMN:
+		{
+			int32 index;
+			if (message->FindInt32("index", &index) == B_OK)
+				RemoveColumn(index);
+			break;
+		}
+
+		case PARALLEL_REMOVE_NOTES:
+			SetNotesEnabled(false);
+			break;
 
 		default:
 			BView::MessageReceived(message);
@@ -348,7 +372,7 @@ ParallelBibleView::_RebuildLayout()
 		view->SetInsets(4.0f);
 		view->SetSelectionEnabled(true);
 		view->SetTextDocument(fDocuments[i]);
-		fContentView->AddChild(view);
+		AddChild(view);
 		fTextViews.push_back(view);
 	}
 
@@ -358,7 +382,7 @@ ParallelBibleView::_RebuildLayout()
 		view->SetSelectionEnabled(true);
 		view->SetEditingEnabled(true);
 		view->SetTextDocument(fNotesDocument);
-		fContentView->AddChild(view);
+		AddChild(view);
 		fNotesView = view;
 	}
 
@@ -367,8 +391,8 @@ ParallelBibleView::_RebuildLayout()
 }
 
 
-// Rebuilds the header row's per-column BMenuFields (Bible columns) and
-// the notes column's plain label. Positioning happens in
+// Rebuilds the header row's per-column BMenuFields + remove buttons (Bible
+// columns) and the notes column's remove button. Positioning happens in
 // _PositionColumns(), which uses the exact same x-offsets as the content
 // columns so header cells and columns always line up.
 void
@@ -379,21 +403,45 @@ ParallelBibleView::_RebuildHeader()
 		delete fHeaderFields[i];
 	}
 	fHeaderFields.clear();
+	for (size_t i = 0; i < fRemoveButtons.size(); i++) {
+		fRemoveButtons[i]->RemoveSelf();
+		delete fRemoveButtons[i];
+	}
+	fRemoveButtons.clear();
 
 	for (size_t i = 0; i < fModules.size(); i++) {
 		BPopUpMenu* menu = _BuildModuleMenu((int32)i, fModules[i]->getName());
 		BMenuField* field = new BMenuField("columnHeader", NULL, menu);
 		field->SetDivider(0.0f);
-		fHeaderContainer->AddChild(field);
+		fHeaderView->AddChild(field);
 		fHeaderFields.push_back(field);
+
+		BMessage* removeMessage = new BMessage(PARALLEL_REMOVE_COLUMN);
+		removeMessage->AddInt32("index", (int32)i);
+		BButton* removeButton = new BButton("removeColumn", "x",
+			removeMessage);
+		removeButton->SetTarget(this);
+		fHeaderView->AddChild(removeButton);
+		fRemoveButtons.push_back(removeButton);
 	}
 
-	// The add-column button is a permanent child added in the constructor;
-	// just make sure it stays the frontmost/last child so it draws above
-	// nothing else in particular, but mainly so _PositionColumns() can
-	// place it after the last header field.
+	if (fRemoveNotesButton != NULL) {
+		fRemoveNotesButton->RemoveSelf();
+		delete fRemoveNotesButton;
+		fRemoveNotesButton = NULL;
+	}
+	if (fNotesDocument.Get() != NULL) {
+		fRemoveNotesButton = new BButton("removeNotes", "x",
+			new BMessage(PARALLEL_REMOVE_NOTES));
+		fRemoveNotesButton->SetTarget(this);
+		fHeaderView->AddChild(fRemoveNotesButton);
+	}
+
+	// The add-column button is a permanent child of fHeaderView, added in
+	// the constructor; just make sure it stays the last child so
+	// _PositionColumns() can place it after everything else.
 	fAddColumnButton->RemoveSelf();
-	fHeaderContainer->AddChild(fAddColumnButton);
+	fHeaderView->AddChild(fAddColumnButton);
 }
 
 
@@ -425,10 +473,10 @@ ParallelBibleView::_Realign()
 // Positions and sizes every column view directly (MoveTo/ResizeTo) instead
 // of delegating to a BGroupLayout -- see the header comment for why. Each
 // column gets its full natural content height (as reported by its own
-// GetHeightForWidth()), which may well exceed fContentView's own Frame();
-// that is fine, since fContentView's Bounds() acts as the scrolled
-// viewport into that taller content, driven by _UpdateScrollBars() below,
-// exactly the way TextDocumentView does for itself when it is the direct
+// GetHeightForWidth()), which may well exceed this view's own Frame();
+// that is fine, since this view's Bounds() acts as the scrolled viewport
+// into that taller content, driven by _UpdateScrollBars() below, exactly
+// the way TextDocumentView does for itself when it is the direct
 // BScrollView target.
 void
 ParallelBibleView::_PositionColumns()
@@ -437,32 +485,44 @@ ParallelBibleView::_PositionColumns()
 	float x = 0.0f;
 	float contentHeight = 0.0f;
 
-	std::vector<TextDocumentView*> views(fTextViews);
-	if (fNotesView != NULL)
-		views.push_back(fNotesView);
-
-	std::vector<BView*> headers(fHeaderFields.begin(), fHeaderFields.end());
-	// One header cell per Bible column; the notes column (if present, and
-	// therefore the last entry in `views`) has no corresponding entry in
-	// `headers` since it doesn't get a module picker -- see _RebuildHeader().
-
-	for (size_t i = 0; i < views.size(); i++) {
+	for (size_t i = 0; i < fTextViews.size(); i++) {
 		// The document may have been rebuilt more than once in a row (once
 		// per SetVerseSpacing() call inside VerseAligner::Align()); force a
 		// fresh measurement rather than risk GetHeightForWidth() reading a
 		// TextDocumentLayout copy whose cache wasn't invalidated for the
 		// most recent of those rebuilds.
-		views[i]->Relayout();
+		fTextViews[i]->Relayout();
 
 		float min, max, preferred;
-		views[i]->GetHeightForWidth(width, &min, &max, &preferred);
+		fTextViews[i]->GetHeightForWidth(width, &min, &max, &preferred);
 
-		views[i]->MoveTo(x, 0.0f);
-		views[i]->ResizeTo(width, preferred);
+		fTextViews[i]->MoveTo(x, 0.0f);
+		fTextViews[i]->ResizeTo(width, preferred);
 
-		if (i < headers.size()) {
-			headers[i]->MoveTo(x, 0.0f);
-			headers[i]->ResizeTo(width, kHeaderHeight);
+		float fieldWidth = std::max(0.0f,
+			width - kRemoveButtonWidth - kColumnSpacing / 2.0f);
+		fHeaderFields[i]->MoveTo(x, 0.0f);
+		fHeaderFields[i]->ResizeTo(fieldWidth, kHeaderHeight);
+		fRemoveButtons[i]->MoveTo(x + fieldWidth + kColumnSpacing / 2.0f,
+			0.0f);
+		fRemoveButtons[i]->ResizeTo(kRemoveButtonWidth, kHeaderHeight);
+
+		contentHeight = std::max(contentHeight, preferred);
+		x += width + kColumnSpacing;
+	}
+
+	if (fNotesView != NULL) {
+		fNotesView->Relayout();
+
+		float min, max, preferred;
+		fNotesView->GetHeightForWidth(width, &min, &max, &preferred);
+
+		fNotesView->MoveTo(x, 0.0f);
+		fNotesView->ResizeTo(width, preferred);
+
+		if (fRemoveNotesButton != NULL) {
+			fRemoveNotesButton->MoveTo(x + width - kRemoveButtonWidth, 0.0f);
+			fRemoveNotesButton->ResizeTo(kRemoveButtonWidth, kHeaderHeight);
 		}
 
 		contentHeight = std::max(contentHeight, preferred);
@@ -474,17 +534,16 @@ ParallelBibleView::_PositionColumns()
 	x += kHeaderHeight + kColumnSpacing;
 
 	fContentHeight = contentHeight;
-	fContentWidth = views.empty() ? 0.0f : (x - kColumnSpacing);
+	int32 columnCount = (int32)fTextViews.size() + (fNotesView != NULL ? 1 : 0);
+	fContentWidth = columnCount == 0 ? 0.0f : (x - kColumnSpacing);
 
-	float viewportWidth = std::max(fContentWidth, Bounds().Width());
-	float viewportHeight = std::max(0.0f, Bounds().Height() - kHeaderHeight);
-
-	fHeaderContainer->MoveTo(0.0f, 0.0f);
-	fHeaderContainer->ResizeTo(viewportWidth, kHeaderHeight);
-
-	fContentView->MoveTo(0.0f, kHeaderHeight);
-	fContentView->ResizeTo(viewportWidth, viewportHeight);
-
+	// fHeaderView's own Frame() is left to the window's layout (matching
+	// the scroll viewport, same as this view's own Frame() is left to the
+	// BScrollView that wraps it); its header cells, like this view's
+	// TextDocumentView columns, are positioned above via MoveTo() up to
+	// fContentWidth, which can exceed that Frame() -- Bounds()-origin
+	// shifting (mirrored from this view's own scroll position in
+	// ScrollTo()) is what reveals the overflow, not resizing the view.
 	_UpdateScrollBars();
 }
 
@@ -492,6 +551,19 @@ ParallelBibleView::_PositionColumns()
 void
 ParallelBibleView::_UpdateScrollBars()
 {
+	BScrollBar* verticalScrollBar = ScrollBar(B_VERTICAL);
+	if (verticalScrollBar != NULL) {
+		float viewHeight = Bounds().Height();
+		float maxRange = fContentHeight - viewHeight;
+		if (maxRange < 0.0f)
+			maxRange = 0.0f;
+
+		verticalScrollBar->SetRange(0.0f, maxRange);
+		verticalScrollBar->SetProportion(
+			fContentHeight > 0.0f ? viewHeight / fContentHeight : 1.0f);
+		verticalScrollBar->SetSteps(20.0f, viewHeight);
+	}
+
 	BScrollBar* horizontalScrollBar = ScrollBar(B_HORIZONTAL);
 	if (horizontalScrollBar != NULL) {
 		float viewWidth = Bounds().Width();
@@ -503,19 +575,6 @@ ParallelBibleView::_UpdateScrollBars()
 		horizontalScrollBar->SetProportion(
 			fContentWidth > 0.0f ? viewWidth / fContentWidth : 1.0f);
 		horizontalScrollBar->SetSteps(20.0f, viewWidth);
-	}
-
-	BScrollBar* verticalScrollBar = ScrollBar(B_VERTICAL);
-	if (verticalScrollBar != NULL) {
-		float viewHeight = std::max(0.0f, Bounds().Height() - kHeaderHeight);
-		float maxRange = fContentHeight - viewHeight;
-		if (maxRange < 0.0f)
-			maxRange = 0.0f;
-
-		verticalScrollBar->SetRange(0.0f, maxRange);
-		verticalScrollBar->SetProportion(
-			fContentHeight > 0.0f ? viewHeight / fContentHeight : 1.0f);
-		verticalScrollBar->SetSteps(20.0f, viewHeight);
 	}
 }
 
@@ -549,12 +608,14 @@ ParallelBibleView::_ColumnWidth() const
 }
 
 
-// Builds a popup menu listing every installed "Biblical Texts" module.
-// columnIndex is embedded in each item's message so MessageReceived()
-// knows whether to AddColumn() (columnIndex < 0, used by the trailing "+"
-// button) or ReplaceColumn() (columnIndex >= 0, used by a column's own
-// header field). markedModuleName, if given, is checked off to show the
-// column's current selection.
+// Builds a popup menu listing every installed "Biblical Texts" module,
+// labeled with its short module code (e.g. "KJV") rather than its full
+// description -- the latter is too long to be legible once truncated to
+// column width. columnIndex is embedded in each item's message so
+// MessageReceived() knows whether to AddColumn() (columnIndex < 0, used
+// by the trailing "+" button) or ReplaceColumn() (columnIndex >= 0, used
+// by a column's own header field). markedModuleName, if given, is checked
+// off to show the column's current selection.
 BPopUpMenu*
 ParallelBibleView::_BuildModuleMenu(int32 columnIndex,
 	const char* markedModuleName)
@@ -580,7 +641,7 @@ ParallelBibleView::_BuildModuleMenu(int32 columnIndex,
 		message->AddInt32("index", columnIndex);
 		message->AddString("module", module->getName());
 
-		BMenuItem* item = new BMenuItem(module->getDescription(), message);
+		BMenuItem* item = new BMenuItem(module->getName(), message);
 		if (markedModuleName != NULL
 			&& strcmp(module->getName(), markedModuleName) == 0) {
 			item->SetMarked(true);

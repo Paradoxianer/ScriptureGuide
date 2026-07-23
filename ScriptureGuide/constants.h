@@ -59,6 +59,8 @@ const uint32 PARALLEL_ADD_COLUMN		= 'PVac';
 const uint32 PARALLEL_TOGGLE_NOTES		= 'PVtn';
 const uint32 PARALLEL_SELECT_MODULE	= 'PVsm';
 const uint32 PARALLEL_ADD_COLUMN_MENU	= 'PVam';
+const uint32 PARALLEL_REMOVE_COLUMN	= 'PVrc';
+const uint32 PARALLEL_REMOVE_NOTES		= 'PVrn';
 
 const uint32 MENU_HELP_LOGOS			= 'MHlo';
 const uint32 MENU_HELP_HOWTO			= 'MHho';
