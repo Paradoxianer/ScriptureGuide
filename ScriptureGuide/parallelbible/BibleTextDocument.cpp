@@ -187,7 +187,13 @@ BibleTextDocument::SetVerseSpacing(const std::map<int, float>& spacing)
 void
 BibleTextDocument::_Rebuild()
 {
-	if (Length() > 0)
+	// Length() sums each paragraph's *text* length, which is 0 for a
+	// paragraph holding only an empty span (e.g. a not-yet-written note).
+	// A document that is entirely such paragraphs would report Length()
+	// == 0 despite having real paragraphs to clear, so guard on the
+	// paragraph count instead -- otherwise nothing gets removed here and
+	// every rebuild appends another full set on top of the last one.
+	if (CountParagraphs() > 0)
 		Remove(0, Length());
 	fParagraphVerse.clear();
 
@@ -234,6 +240,16 @@ BibleTextDocument::_Rebuild()
 			BString number;
 			number << " " << verse << " ";
 			paragraph.Append(TextSpan(number, fVerseNumberStyle));
+		} else if (text.IsEmpty()) {
+			// A paragraph whose only span is empty makes the whole
+			// document's Length() undercount how many paragraphs actually
+			// exist (Length() sums *text* length, not paragraph count),
+			// which breaks Remove(0, Length())'s ability to clear them on
+			// the next rebuild (see _Rebuild()'s CountParagraphs() check
+			// above -- Remove() itself still no-ops on a zero length). A
+			// single space keeps every paragraph's length nonzero and
+			// still reads as an empty, clickable line to type a note into.
+			text = " ";
 		}
 		paragraph.Append(TextSpan(text, fVerseTextStyle));
 		Append(paragraph);

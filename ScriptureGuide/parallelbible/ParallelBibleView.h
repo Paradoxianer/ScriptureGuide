@@ -20,8 +20,6 @@
 
 using namespace sword;
 
-class BGroupLayout;
-
 
 // Displays one or more Bible translations side by side, each in its own
 // TextDocumentView, plus an optional editable notes column backed by a
@@ -30,7 +28,17 @@ class BGroupLayout;
 // is enough to scroll every column in sync.
 //
 // Meant to be embedded as the target of a BScrollView with a vertical
-// scrollbar; this view does not create its own scrollbar.
+// scrollbar. Columns are positioned and sized manually (MoveTo/ResizeTo)
+// rather than through a BGroupLayout: BGroupLayout/BTwoDimensionalLayout
+// does not correctly distribute space to more than one simultaneous
+// HasHeightForWidth() child (see issue #13) -- with several TextDocumentView
+// columns in one horizontal group, only the last-added one ever received a
+// Draw() call. Driving frames directly sidesteps that entirely. Because
+// this view is therefore not itself layout-managed, and because each child
+// TextDocumentView is not directly wrapped by its own BScrollView (this
+// view is, so ScrollBar() inside a child returns NULL and its own
+// _UpdateScrollBars() is a no-op), this view mirrors TextDocumentView's
+// scrollbar-sync pattern for itself.
 class ParallelBibleView : public BView {
 public:
 								// initialWidth seeds the first column-width
@@ -38,8 +46,8 @@ public:
 								// is still unattached (Bounds() degenerate)
 								// while its window is being built, so pass
 								// the constructing window's own frame width,
-								// which unlike a layout-managed view's
-								// Bounds() is already valid at that point.
+								// which unlike this view's own Bounds() is
+								// already valid at that point.
 								ParallelBibleView(const char* name,
 									SWMgr* manager, float initialWidth = 0);
 	virtual						~ParallelBibleView();
@@ -61,14 +69,13 @@ public:
 
 private:
 			void				_RebuildLayout();
+			void				_PositionColumns();
+			void				_UpdateScrollBars();
 			void				_Realign();
 			float				_ColumnWidth() const;
-			void				_ApplyColumnWidth(TextDocumentView* view,
-									float width);
 
 private:
 			SWMgr*				fManager;
-			BGroupLayout*		fGroupLayout;
 
 			std::vector<SWModule*>	fModules;
 			std::vector<BReference<BibleTextDocument> > fDocuments;
@@ -80,8 +87,10 @@ private:
 
 			BString				fCurrentKey;
 			float				fInitialWidth;
+			float				fContentHeight;
 
 	static	const float			kMinColumnWidth;
+	static	const float			kColumnSpacing;
 };
 
 #endif // PARALLEL_BIBLE_VIEW_H

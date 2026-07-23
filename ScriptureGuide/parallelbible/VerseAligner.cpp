@@ -17,6 +17,16 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 	if (columns.size() < 2)
 		return;
 
+	// Measurements below must reflect each verse's natural, un-padded
+	// height. A paragraph's current ParagraphStyle may already carry
+	// SpacingBottom from a previous Align() pass (e.g. after a resize);
+	// measuring that directly would treat padding as content and pile
+	// more padding on top of it every time this runs. Clear first.
+	for (size_t c = 0; c < columns.size(); c++) {
+		if (columns[c] != NULL)
+			columns[c]->SetVerseSpacing(std::map<int, float>());
+	}
+
 	int maxVerse = 0;
 	for (size_t c = 0; c < columns.size(); c++) {
 		BibleTextDocument* document = columns[c];

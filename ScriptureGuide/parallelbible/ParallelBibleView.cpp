@@ -5,16 +5,16 @@
 
 #include "ParallelBibleView.h"
 
-#include <cstdio>
+#include <algorithm>
 
-#include <GroupLayout.h>
-#include <LayoutItem.h>
+#include <ScrollBar.h>
 
 #include <versekey.h>
 
 #include "VerseAligner.h"
 
 const float ParallelBibleView::kMinColumnWidth = 150.0f;
+const float ParallelBibleView::kColumnSpacing = 8.0f;
 
 
 // Persists edits made in the notes column back into the personal SWORD
@@ -32,9 +32,16 @@ public:
 
 	virtual void TextChanged(const TextChangedEvent& event)
 	{
+		// _Rebuild() fires this notification mid-flight, once for the
+		// Remove() that empties the document and once for the Append()
+		// calls that repopulate it -- the paragraph range from the first
+		// can already be out of bounds by the time this runs, since the
+		// document may have fewer (or different) paragraphs than the
+		// event's range implies once the whole rebuild has settled.
 		int32 first = event.FirstChangedParagraph();
-		int32 count = event.ChangedParagraphCount();
-		for (int32 i = first; i < first + count; i++) {
+		int32 last = std::min(first + event.ChangedParagraphCount(),
+			fDocument->CountParagraphs());
+		for (int32 i = first; i < last; i++) {
 			int verse = fDocument->VerseForParagraphIndex(i);
 			if (verse < 0)
 				continue;
@@ -58,14 +65,14 @@ private:
 ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	float initialWidth)
 	:
-	BView(name, B_WILL_DRAW | B_FRAME_EVENTS, new BGroupLayout(B_HORIZONTAL)),
+	BView(name, B_WILL_DRAW | B_FRAME_EVENTS),
 	fManager(manager),
-	fGroupLayout(NULL),
 	fNotes(NULL),
 	fNotesView(NULL),
-	fInitialWidth(initialWidth)
+	fInitialWidth(initialWidth),
+	fContentHeight(0.0f)
 {
-	fGroupLayout = (BGroupLayout*)GetLayout();
+	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 }
 
 
@@ -87,13 +94,6 @@ void
 ParallelBibleView::FrameResized(float width, float height)
 {
 	BView::FrameResized(width, height);
-
-	float columnWidth = _ColumnWidth();
-	for (size_t i = 0; i < fTextViews.size(); i++)
-		_ApplyColumnWidth(fTextViews[i], columnWidth);
-	if (fNotesView != NULL)
-		_ApplyColumnWidth(fNotesView, columnWidth);
-
 	_Realign();
 }
 
@@ -234,27 +234,24 @@ ParallelBibleView::PrevChapter()
 void
 ParallelBibleView::_RebuildLayout()
 {
-	while (fGroupLayout->CountItems() > 0) {
-		BLayoutItem* item = fGroupLayout->RemoveItem((int32)0);
-		BView* view = item->View();
-		delete item;
-		if (view != NULL) {
-			view->RemoveSelf();
-			delete view;
-		}
+	for (size_t i = 0; i < fTextViews.size(); i++) {
+		fTextViews[i]->RemoveSelf();
+		delete fTextViews[i];
 	}
 	fTextViews.clear();
-	fNotesView = NULL;
 
-	float width = _ColumnWidth();
+	if (fNotesView != NULL) {
+		fNotesView->RemoveSelf();
+		delete fNotesView;
+		fNotesView = NULL;
+	}
 
 	for (size_t i = 0; i < fDocuments.size(); i++) {
 		TextDocumentView* view = new TextDocumentView("bibleColumn");
 		view->SetInsets(4.0f);
 		view->SetSelectionEnabled(true);
-		_ApplyColumnWidth(view, width);
 		view->SetTextDocument(fDocuments[i]);
-		fGroupLayout->AddView(view);
+		AddChild(view);
 		fTextViews.push_back(view);
 	}
 
@@ -263,22 +260,12 @@ ParallelBibleView::_RebuildLayout()
 		view->SetInsets(4.0f);
 		view->SetSelectionEnabled(true);
 		view->SetEditingEnabled(true);
-		_ApplyColumnWidth(view, width);
 		view->SetTextDocument(fNotesDocument);
-		fGroupLayout->AddView(view);
+		AddChild(view);
 		fNotesView = view;
 	}
 
 	_Realign();
-}
-
-
-void
-ParallelBibleView::_ApplyColumnWidth(TextDocumentView* view, float width)
-{
-	view->SetExplicitMinSize(BSize(width, B_SIZE_UNSET));
-	view->SetExplicitMaxSize(BSize(width, B_SIZE_UNLIMITED));
-	view->SetExplicitPreferredSize(BSize(width, B_SIZE_UNSET));
 }
 
 
@@ -294,6 +281,8 @@ ParallelBibleView::_Realign()
 	if (columns.size() >= 2)
 		VerseAligner::Align(columns, _ColumnWidth());
 
+	_PositionColumns();
+
 	for (size_t i = 0; i < fTextViews.size(); i++) {
 		fTextViews[i]->Relayout();
 		fTextViews[i]->Invalidate();
@@ -305,12 +294,73 @@ ParallelBibleView::_Realign()
 }
 
 
+// Positions and sizes every column view directly (MoveTo/ResizeTo) instead
+// of delegating to a BGroupLayout -- see the header comment for why. Each
+// column gets its full natural content height (as reported by its own
+// GetHeightForWidth()), which may well exceed this view's own Frame(); that
+// is fine, since this view's Bounds() acts as the scrolled viewport into
+// that taller content, driven by _UpdateScrollBars() below, exactly the
+// way TextDocumentView does for itself when it is the direct BScrollView
+// target.
+void
+ParallelBibleView::_PositionColumns()
+{
+	float width = _ColumnWidth();
+	float x = 0.0f;
+	float contentHeight = 0.0f;
+
+	std::vector<TextDocumentView*> views(fTextViews);
+	if (fNotesView != NULL)
+		views.push_back(fNotesView);
+
+	for (size_t i = 0; i < views.size(); i++) {
+		// The document may have been rebuilt more than once in a row (once
+		// per SetVerseSpacing() call inside VerseAligner::Align()); force a
+		// fresh measurement rather than risk GetHeightForWidth() reading a
+		// TextDocumentLayout copy whose cache wasn't invalidated for the
+		// most recent of those rebuilds.
+		views[i]->Relayout();
+
+		float min, max, preferred;
+		views[i]->GetHeightForWidth(width, &min, &max, &preferred);
+
+		views[i]->MoveTo(x, 0.0f);
+		views[i]->ResizeTo(width, preferred);
+
+		contentHeight = std::max(contentHeight, preferred);
+		x += width + kColumnSpacing;
+	}
+
+	fContentHeight = contentHeight;
+	_UpdateScrollBars();
+}
+
+
+void
+ParallelBibleView::_UpdateScrollBars()
+{
+	BScrollBar* verticalScrollBar = ScrollBar(B_VERTICAL);
+	if (verticalScrollBar == NULL)
+		return;
+
+	float viewHeight = Bounds().Height();
+	float maxRange = fContentHeight - viewHeight;
+	if (maxRange < 0.0f)
+		maxRange = 0.0f;
+
+	verticalScrollBar->SetRange(0.0f, maxRange);
+	verticalScrollBar->SetProportion(
+		fContentHeight > 0.0f ? viewHeight / fContentHeight : 1.0f);
+	verticalScrollBar->SetSteps(20.0f, viewHeight);
+}
+
+
 float
 ParallelBibleView::_ColumnWidth() const
 {
-	// Bounds() is degenerate until this view has been through a real
-	// layout pass (i.e. its window has actually been shown); fall back to
-	// the width the constructing window was created with.
+	// Bounds() is degenerate until this view has actually been placed
+	// inside its (shown) window's BScrollView; fall back to the width the
+	// constructing window was created with.
 	float totalWidth = Bounds().Width();
 	if (totalWidth <= 0.0f)
 		totalWidth = fInitialWidth;
@@ -321,8 +371,7 @@ ParallelBibleView::_ColumnWidth() const
 	if (columnCount == 0)
 		return totalWidth;
 
-	float spacing = fGroupLayout->Spacing();
-	float available = totalWidth - spacing * (columnCount - 1);
+	float available = totalWidth - kColumnSpacing * (columnCount - 1);
 	float width = available / columnCount;
 	if (width < kMinColumnWidth)
 		width = kMinColumnWidth;
