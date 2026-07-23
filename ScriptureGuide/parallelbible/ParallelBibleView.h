@@ -27,8 +27,13 @@ using namespace sword;
 // vertically aligned per verse (see VerseAligner) so a single BScrollBar
 // is enough to scroll every column in sync.
 //
-// Meant to be embedded as the target of a BScrollView with a vertical
-// scrollbar. Columns are positioned and sized manually (MoveTo/ResizeTo)
+// Meant to be embedded as the target of a BScrollView with both
+// scrollbars: vertical for scrolling the (equal-height, post-alignment)
+// columns together, horizontal for when there isn't enough width to give
+// every column at least kMinColumnWidth (columns never shrink below that,
+// so excess columns run off the right edge instead -- reachable by
+// scrolling right rather than becoming unreachable). Columns are
+// positioned and sized manually (MoveTo/ResizeTo)
 // rather than through a BGroupLayout: BGroupLayout/BTwoDimensionalLayout
 // does not correctly distribute space to more than one simultaneous
 // HasHeightForWidth() child (see issue #13) -- with several TextDocumentView
@@ -88,6 +93,7 @@ private:
 			BString				fCurrentKey;
 			float				fInitialWidth;
 			float				fContentHeight;
+			float				fContentWidth;
 
 	static	const float			kMinColumnWidth;
 	static	const float			kColumnSpacing;

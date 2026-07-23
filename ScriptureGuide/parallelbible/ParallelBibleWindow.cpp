@@ -99,7 +99,7 @@ ParallelBibleWindow::_BuildGUI(const char* moduleName, const char* key)
 		fModManager->Manager(), Frame().Width());
 
 	fScrollView = new BScrollView("parallel_scroll", fParallelView,
-		0, false, true, B_NO_BORDER);
+		0, true, true, B_NO_BORDER);
 
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(fMenuBar, B_USE_DEFAULT_SPACING)

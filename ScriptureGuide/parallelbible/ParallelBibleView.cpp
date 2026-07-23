@@ -70,7 +70,8 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fNotes(NULL),
 	fNotesView(NULL),
 	fInitialWidth(initialWidth),
-	fContentHeight(0.0f)
+	fContentHeight(0.0f),
+	fContentWidth(0.0f)
 {
 	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 }
@@ -332,6 +333,7 @@ ParallelBibleView::_PositionColumns()
 	}
 
 	fContentHeight = contentHeight;
+	fContentWidth = views.empty() ? 0.0f : (x - kColumnSpacing);
 	_UpdateScrollBars();
 }
 
@@ -340,18 +342,30 @@ void
 ParallelBibleView::_UpdateScrollBars()
 {
 	BScrollBar* verticalScrollBar = ScrollBar(B_VERTICAL);
-	if (verticalScrollBar == NULL)
-		return;
+	if (verticalScrollBar != NULL) {
+		float viewHeight = Bounds().Height();
+		float maxRange = fContentHeight - viewHeight;
+		if (maxRange < 0.0f)
+			maxRange = 0.0f;
 
-	float viewHeight = Bounds().Height();
-	float maxRange = fContentHeight - viewHeight;
-	if (maxRange < 0.0f)
-		maxRange = 0.0f;
+		verticalScrollBar->SetRange(0.0f, maxRange);
+		verticalScrollBar->SetProportion(
+			fContentHeight > 0.0f ? viewHeight / fContentHeight : 1.0f);
+		verticalScrollBar->SetSteps(20.0f, viewHeight);
+	}
 
-	verticalScrollBar->SetRange(0.0f, maxRange);
-	verticalScrollBar->SetProportion(
-		fContentHeight > 0.0f ? viewHeight / fContentHeight : 1.0f);
-	verticalScrollBar->SetSteps(20.0f, viewHeight);
+	BScrollBar* horizontalScrollBar = ScrollBar(B_HORIZONTAL);
+	if (horizontalScrollBar != NULL) {
+		float viewWidth = Bounds().Width();
+		float maxRange = fContentWidth - viewWidth;
+		if (maxRange < 0.0f)
+			maxRange = 0.0f;
+
+		horizontalScrollBar->SetRange(0.0f, maxRange);
+		horizontalScrollBar->SetProportion(
+			fContentWidth > 0.0f ? viewWidth / fContentWidth : 1.0f);
+		horizontalScrollBar->SetSteps(20.0f, viewWidth);
+	}
 }
 
 
@@ -371,6 +385,11 @@ ParallelBibleView::_ColumnWidth() const
 	if (columnCount == 0)
 		return totalWidth;
 
+	// Equal share of the available width, but never below kMinColumnWidth;
+	// if that means the columns no longer all fit, _PositionColumns()'s
+	// resulting fContentWidth ends up wider than this view's own Bounds(),
+	// and the horizontal scrollbar (see _UpdateScrollBars()) is how the
+	// overflow columns stay reachable instead of just running off-screen.
 	float available = totalWidth - kColumnSpacing * (columnCount - 1);
 	float width = available / columnCount;
 	if (width < kMinColumnWidth)
