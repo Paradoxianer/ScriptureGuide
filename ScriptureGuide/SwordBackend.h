@@ -88,7 +88,7 @@ private:
 
 };
 
-typedef BObjectList<SGModule> SGModuleList;
+typedef BObjectList<SGModule, true> SGModuleList;
 
 class SwordBackend
 {
