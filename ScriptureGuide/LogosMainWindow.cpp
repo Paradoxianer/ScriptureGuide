@@ -653,10 +653,11 @@ void SGMainWindow::SetModule(const TextType &module, const int32 &index)
 
 	LoadPrefsForModule();
 
-	if (fParallelView->CountColumns() == 0)
+	int32 firstBiblePosition = fParallelView->FirstBibleColumnPosition();
+	if (firstBiblePosition < 0)
 		fParallelView->AddColumn(sgmod->Name());
 	else
-		fParallelView->ReplaceColumn(0, sgmod->Name());
+		fParallelView->ReplaceColumn(firstBiblePosition, sgmod->Name());
 
 	BString chapterString;
 	chapterString << fCurrentChapter;

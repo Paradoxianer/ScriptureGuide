@@ -41,12 +41,18 @@ class NoteFieldView;
 // column's post-alignment paragraph height (see _RebuildNoteFields()),
 // not something VerseAligner needs to know about separately.
 //
-// Each column has a header cell (a BMenuField for Bible columns, listing
-// every installed "Biblical Texts" module, plus a small "x" button to
-// remove that column; a plain "Notes" label + "x" for the notes column)
-// plus a trailing "+" button to append another column -- see issue #11.
-// The notes column never claims more than kMaxNotesWidthFraction of the
-// total width (see _NotesColumnWidth()) -- a fixed cap for now; issue #19
+// Every column -- Bible, Commentary, or the notes column -- has the same
+// kind of header cell: a BMenuField listing every installed "Biblical
+// Texts"/"Commentaries" module plus a "Notes" entry, so any column can be
+// switched to any of those at any time from its own dropdown, plus a small
+// "x" button to remove that column. A trailing "+" button appends another
+// column, offering the same choices (see issue #11). Since there is only
+// ever one notes column (backed by the single, shared PersonalNotesModule),
+// picking "Notes" in a column whose dropdown doesn't offer it (because
+// another column already is the notes column) isn't possible -- remove the
+// existing notes column first. The notes column never claims more than
+// kMaxNotesWidthFraction of the total width (see _NotesColumnWidth()) --
+// a fixed cap for now; issue #19
 // tracks turning this into a real user-draggable divider. Every
 // TextDocumentView/NoteFieldView gets B_DOCUMENT_BACKGROUND_COLOR instead
 // of the B_PANEL_BACKGROUND_COLOR TextDocumentView's class default
@@ -106,10 +112,11 @@ public:
 									{ return kHeaderHeight; }
 
 			status_t			AddColumn(const char* moduleName);
-			status_t			ReplaceColumn(int32 index,
+			status_t			ReplaceColumn(int32 position,
 									const char* moduleName);
-			status_t			RemoveColumn(int32 index);
+			status_t			RemoveColumn(int32 position);
 			int32				CountColumns() const;
+			int32				FirstBibleColumnPosition() const;
 
 			status_t			SetNotesEnabled(bool enabled);
 			bool				NotesEnabled() const
@@ -120,6 +127,15 @@ public:
 			status_t			PrevChapter();
 
 private:
+			// A column "slot" holds either a Bible/Commentary module or the
+			// (single, shared) notes column -- see the class comment. Order
+			// here is the on-screen left-to-right order of all columns;
+			// fModules/fDocuments/fTextViews only ever hold the
+			// COLUMN_BIBLE slots, in the same relative order, so a slot's
+			// position in fColumnOrder has to be translated to an index
+			// into those via _BibleIndexForPosition().
+			enum ColumnType { COLUMN_BIBLE, COLUMN_NOTES };
+
 			void				_RebuildLayout();
 			void				_RebuildHeader();
 			void				_RebuildNoteFields();
@@ -130,11 +146,19 @@ private:
 			float				_RowHeight(int verse) const;
 			float				_ColumnWidth() const;
 			float				_NotesColumnWidth() const;
+			int32				_BibleIndexForPosition(int32 position) const;
+			int32				_NotesPosition() const;
+			status_t			_SetColumnToBible(int32 position,
+									const char* moduleName);
+			status_t			_SetColumnToNotes(int32 position);
 			BPopUpMenu*			_BuildModuleMenu(int32 columnIndex,
-									const char* markedModuleName);
+									const char* markedModuleName,
+									bool markNotes);
 
 private:
 			SWMgr*				fManager;
+
+			std::vector<ColumnType>	fColumnOrder;
 
 			std::vector<SWModule*>	fModules;
 			std::vector<BReference<BibleTextDocument> > fDocuments;
@@ -145,8 +169,6 @@ private:
 			PersonalNotesModule*	fNotes;
 			std::vector<BStringView*> fNoteVerseLabels;
 			std::vector<NoteFieldView*> fNoteFields;
-			BStringView*		fNotesLabel;
-			BButton*			fRemoveNotesButton;
 
 			BView*				fHeaderView;
 			BButton*			fAddColumnButton;

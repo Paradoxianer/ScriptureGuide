@@ -109,8 +109,6 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	BView(name, B_WILL_DRAW | B_FRAME_EVENTS),
 	fManager(manager),
 	fNotes(NULL),
-	fNotesLabel(NULL),
-	fRemoveNotesButton(NULL),
 	fHeaderView(NULL),
 	fAddColumnButton(NULL),
 	fInitialWidth(initialWidth),
@@ -214,17 +212,22 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			BString module;
 			if (message->FindInt32("index", &index) == B_OK
 				&& message->FindString("module", &module) == B_OK) {
-				if (index < 0)
-					AddColumn(module.String());
-				else
-					ReplaceColumn(index, module.String());
+				_SetColumnToBible(index, module.String());
 			}
+			break;
+		}
+
+		case PARALLEL_SELECT_NOTES:
+		{
+			int32 index;
+			if (message->FindInt32("index", &index) == B_OK)
+				_SetColumnToNotes(index);
 			break;
 		}
 
 		case PARALLEL_ADD_COLUMN_MENU:
 		{
-			BPopUpMenu* menu = _BuildModuleMenu(-1, NULL);
+			BPopUpMenu* menu = _BuildModuleMenu(-1, NULL, false);
 			if (menu != NULL) {
 				// Not owned by any BMenuField (unlike the per-column
 				// menus built in _RebuildHeader()) -- this one is a
@@ -245,10 +248,6 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			break;
 		}
 
-		case PARALLEL_REMOVE_NOTES:
-			SetNotesEnabled(false);
-			break;
-
 		default:
 			BView::MessageReceived(message);
 			break;
@@ -258,6 +257,108 @@ ParallelBibleView::MessageReceived(BMessage* message)
 
 status_t
 ParallelBibleView::AddColumn(const char* moduleName)
+{
+	return _SetColumnToBible(-1, moduleName);
+}
+
+
+status_t
+ParallelBibleView::ReplaceColumn(int32 position, const char* moduleName)
+{
+	if (position < 0 || (size_t)position >= fColumnOrder.size())
+		return B_BAD_INDEX;
+	return _SetColumnToBible(position, moduleName);
+}
+
+
+status_t
+ParallelBibleView::RemoveColumn(int32 position)
+{
+	if (position < 0 || (size_t)position >= fColumnOrder.size())
+		return B_BAD_INDEX;
+
+	if (fColumnOrder[position] == COLUMN_BIBLE) {
+		int32 bibleIndex = _BibleIndexForPosition(position);
+		fModules.erase(fModules.begin() + bibleIndex);
+		fDocuments.erase(fDocuments.begin() + bibleIndex);
+	} else {
+		delete fNotes;
+		fNotes = NULL;
+	}
+	fColumnOrder.erase(fColumnOrder.begin() + position);
+
+	_RebuildLayout();
+	return B_OK;
+}
+
+
+int32
+ParallelBibleView::CountColumns() const
+{
+	return (int32)fColumnOrder.size();
+}
+
+
+int32
+ParallelBibleView::FirstBibleColumnPosition() const
+{
+	for (size_t i = 0; i < fColumnOrder.size(); i++) {
+		if (fColumnOrder[i] == COLUMN_BIBLE)
+			return (int32)i;
+	}
+	return -1;
+}
+
+
+status_t
+ParallelBibleView::SetNotesEnabled(bool enabled)
+{
+	int32 position = _NotesPosition();
+	if (enabled == (position >= 0))
+		return B_OK;
+
+	if (enabled)
+		return _SetColumnToNotes(-1);
+
+	return RemoveColumn(position);
+}
+
+
+// Counts the COLUMN_BIBLE slots in fColumnOrder before `position`, which is
+// exactly the index that slot's module/document pair has in fModules/
+// fDocuments -- those arrays only ever hold Bible/Commentary columns, in
+// the same relative order as they appear in fColumnOrder.
+int32
+ParallelBibleView::_BibleIndexForPosition(int32 position) const
+{
+	int32 index = 0;
+	for (int32 i = 0; i < position && (size_t)i < fColumnOrder.size(); i++) {
+		if (fColumnOrder[i] == COLUMN_BIBLE)
+			index++;
+	}
+	return index;
+}
+
+
+// The position of the (single, shared) notes column in fColumnOrder, or -1
+// if none of the current columns is one.
+int32
+ParallelBibleView::_NotesPosition() const
+{
+	for (size_t i = 0; i < fColumnOrder.size(); i++) {
+		if (fColumnOrder[i] == COLUMN_NOTES)
+			return (int32)i;
+	}
+	return -1;
+}
+
+
+// Makes the column at `position` a Bible/Commentary column showing
+// `moduleName`, or appends a new one at the end if position < 0. If that
+// slot was the notes column, the notes column is given up entirely (there
+// is only ever one) and a new Bible slot is inserted in its place.
+status_t
+ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 {
 	if (fManager == NULL)
 		return B_NO_INIT;
@@ -272,77 +373,68 @@ ParallelBibleView::AddColumn(const char* moduleName)
 	if (!fCurrentKey.IsEmpty())
 		module->setKey(fCurrentKey.String());
 
-	fModules.push_back(module);
-	fDocuments.push_back(
-		BReference<BibleTextDocument>(new BibleTextDocument(module), true));
+	BReference<BibleTextDocument> document(new BibleTextDocument(module),
+		true);
 
-	_RebuildLayout();
-	return B_OK;
-}
-
-
-status_t
-ParallelBibleView::ReplaceColumn(int32 index, const char* moduleName)
-{
-	if (index < 0 || (size_t)index >= fModules.size())
+	if (position < 0) {
+		fModules.push_back(module);
+		fDocuments.push_back(document);
+		fColumnOrder.push_back(COLUMN_BIBLE);
+	} else if ((size_t)position >= fColumnOrder.size()) {
 		return B_BAD_INDEX;
-	if (fManager == NULL)
-		return B_NO_INIT;
-
-	SWModule* module = fManager->getModule(moduleName);
-	if (module == NULL)
-		return B_NAME_NOT_FOUND;
-
-	if (!fCurrentKey.IsEmpty())
-		module->setKey(fCurrentKey.String());
-
-	fModules[index] = module;
-	fDocuments[index] = BReference<BibleTextDocument>(
-		new BibleTextDocument(module), true);
-
-	_RebuildLayout();
-	return B_OK;
-}
-
-
-status_t
-ParallelBibleView::RemoveColumn(int32 index)
-{
-	if (index < 0 || (size_t)index >= fModules.size())
-		return B_BAD_INDEX;
-
-	fModules.erase(fModules.begin() + index);
-	fDocuments.erase(fDocuments.begin() + index);
-
-	_RebuildLayout();
-	return B_OK;
-}
-
-
-int32
-ParallelBibleView::CountColumns() const
-{
-	return (int32)fModules.size();
-}
-
-
-status_t
-ParallelBibleView::SetNotesEnabled(bool enabled)
-{
-	if (enabled == (fNotes != NULL))
-		return B_OK;
-
-	if (enabled) {
-		fNotes = new PersonalNotesModule();
-		status_t status = fNotes->Open();
-		if (status != B_OK) {
-			delete fNotes;
-			fNotes = NULL;
-			return status;
-		}
+	} else if (fColumnOrder[position] == COLUMN_BIBLE) {
+		int32 bibleIndex = _BibleIndexForPosition(position);
+		fModules[bibleIndex] = module;
+		fDocuments[bibleIndex] = document;
 	} else {
 		delete fNotes;
 		fNotes = NULL;
+		int32 bibleIndex = _BibleIndexForPosition(position);
+		fModules.insert(fModules.begin() + bibleIndex, module);
+		fDocuments.insert(fDocuments.begin() + bibleIndex, document);
+		fColumnOrder[position] = COLUMN_BIBLE;
+	}
+
+	_RebuildLayout();
+	return B_OK;
+}
+
+
+// Makes the column at `position` the notes column, or appends a new one at
+// the end if position < 0. Only one notes column can exist at a time (they
+// all share the same PersonalNotesModule) -- if a different column already
+// is the notes column, this fails rather than moving it (the per-column
+// dropdown only offers "Notes" when it would succeed, see
+// _BuildModuleMenu()).
+status_t
+ParallelBibleView::_SetColumnToNotes(int32 position)
+{
+	int32 existing = _NotesPosition();
+	if (existing >= 0) {
+		if (existing == position)
+			return B_OK;
+		return B_NOT_ALLOWED;
+	}
+
+	fNotes = new PersonalNotesModule();
+	status_t status = fNotes->Open();
+	if (status != B_OK) {
+		delete fNotes;
+		fNotes = NULL;
+		return status;
+	}
+
+	if (position < 0) {
+		fColumnOrder.push_back(COLUMN_NOTES);
+	} else if ((size_t)position >= fColumnOrder.size()) {
+		delete fNotes;
+		fNotes = NULL;
+		return B_BAD_INDEX;
+	} else {
+		int32 bibleIndex = _BibleIndexForPosition(position);
+		fModules.erase(fModules.begin() + bibleIndex);
+		fDocuments.erase(fDocuments.begin() + bibleIndex);
+		fColumnOrder[position] = COLUMN_NOTES;
 	}
 
 	_RebuildLayout();
@@ -438,10 +530,12 @@ ParallelBibleView::_RebuildLayout()
 }
 
 
-// Rebuilds the header row's per-column BMenuFields + remove buttons (Bible
-// columns) and the notes column's label + remove button. Positioning
-// happens in _PositionColumns(), which uses the exact same x-offsets as
-// the content columns so header cells and columns always line up.
+// Rebuilds the header row's per-column BMenuFields + remove buttons -- one
+// pair per fColumnOrder slot, Bible/Commentary columns and the notes column
+// alike, so every column's dropdown offers switching to any of those (see
+// _BuildModuleMenu()). Positioning happens in _PositionColumns(), which
+// uses the exact same x-offsets as the content columns so header cells and
+// columns always line up.
 void
 ParallelBibleView::_RebuildHeader()
 {
@@ -456,17 +550,24 @@ ParallelBibleView::_RebuildHeader()
 	}
 	fRemoveButtons.clear();
 
-	for (size_t i = 0; i < fModules.size(); i++) {
-		BPopUpMenu* menu = _BuildModuleMenu((int32)i, fModules[i]->getName());
+	for (size_t i = 0; i < fColumnOrder.size(); i++) {
+		bool isNotes = (fColumnOrder[i] == COLUMN_NOTES);
+		const char* label = isNotes
+			? B_TRANSLATE("Notes")
+			: fModules[_BibleIndexForPosition((int32)i)]->getName();
+
+		BPopUpMenu* menu = _BuildModuleMenu((int32)i,
+			isNotes ? NULL : label, isNotes);
 		BMenuField* field = new BMenuField("columnHeader", NULL, menu);
 		field->SetDivider(0.0f);
 		// labelFromMarked (see _BuildModuleMenu()) only looks at the
-		// popup's direct items, not the category submenus the marked
-		// item actually lives in now, so the field would otherwise show
-		// the popup's own internal name ("translation") instead of the
-		// selected module -- set it explicitly instead.
+		// popup's direct items, not the category submenus (or, for
+		// "Notes", the plain top-level item) the marked item actually
+		// lives in now, so the field would otherwise show the popup's own
+		// internal name ("translation") instead of the selected module --
+		// set it explicitly instead.
 		if (field->MenuItem() != NULL)
-			field->MenuItem()->SetLabel(fModules[i]->getName());
+			field->MenuItem()->SetLabel(label);
 		fHeaderView->AddChild(field);
 		fHeaderFields.push_back(field);
 
@@ -477,29 +578,6 @@ ParallelBibleView::_RebuildHeader()
 		removeButton->SetTarget(this);
 		fHeaderView->AddChild(removeButton);
 		fRemoveButtons.push_back(removeButton);
-	}
-
-	if (fNotesLabel != NULL) {
-		fNotesLabel->RemoveSelf();
-		delete fNotesLabel;
-		fNotesLabel = NULL;
-	}
-	if (fRemoveNotesButton != NULL) {
-		fRemoveNotesButton->RemoveSelf();
-		delete fRemoveNotesButton;
-		fRemoveNotesButton = NULL;
-	}
-	if (fNotes != NULL) {
-		// Otherwise there is nothing distinguishing the notes column's
-		// header cell from a Bible column's -- it would be a bare "x"
-		// with no indication of what it belongs to or that it's editable.
-		fNotesLabel = new BStringView("notesLabel", B_TRANSLATE("Notes"));
-		fHeaderView->AddChild(fNotesLabel);
-
-		fRemoveNotesButton = new BButton("removeNotes", "x",
-			new BMessage(PARALLEL_REMOVE_NOTES));
-		fRemoveNotesButton->SetTarget(this);
-		fHeaderView->AddChild(fRemoveNotesButton);
 	}
 
 	// The add-column button is a permanent child of fHeaderView, added in
@@ -601,24 +679,15 @@ ParallelBibleView::_Realign()
 void
 ParallelBibleView::_PositionColumns()
 {
-	float width = _ColumnWidth();
+	float bibleWidth = _ColumnWidth();
 	float x = 0.0f;
 	float contentHeight = 0.0f;
 	fColumnDividerX.clear();
 
-	for (size_t i = 0; i < fTextViews.size(); i++) {
-		// The document may have been rebuilt more than once in a row (once
-		// per SetVerseSpacing() call inside VerseAligner::Align()); force a
-		// fresh measurement rather than risk GetHeightForWidth() reading a
-		// TextDocumentLayout copy whose cache wasn't invalidated for the
-		// most recent of those rebuilds.
-		fTextViews[i]->Relayout();
-
-		float min, max, preferred;
-		fTextViews[i]->GetHeightForWidth(width, &min, &max, &preferred);
-
-		fTextViews[i]->MoveTo(x, 0.0f);
-		fTextViews[i]->ResizeTo(width, preferred);
+	size_t bibleIndex = 0;
+	for (size_t i = 0; i < fColumnOrder.size(); i++) {
+		bool isNotes = (fColumnOrder[i] == COLUMN_NOTES);
+		float width = isNotes ? _NotesColumnWidth() : bibleWidth;
 
 		if (i < fHeaderFields.size()) {
 			// The dropdown spans the full column width rather than
@@ -634,40 +703,42 @@ ParallelBibleView::_PositionColumns()
 			fRemoveButtons[i]->ResizeTo(kRemoveButtonWidth, kHeaderHeight);
 		}
 
-		contentHeight = std::max(contentHeight, preferred);
+		if (isNotes) {
+			float fieldWidth = std::max(0.0f, width - kNoteVerseLabelWidth);
+			float y = 0.0f;
+			for (size_t v = 0; v < fNoteFields.size(); v++) {
+				float rowHeight = _RowHeight((int)(v + 1));
+
+				fNoteVerseLabels[v]->MoveTo(x, y);
+				fNoteVerseLabels[v]->ResizeTo(kNoteVerseLabelWidth, rowHeight);
+
+				fNoteFields[v]->MoveTo(x + kNoteVerseLabelWidth, y);
+				fNoteFields[v]->ResizeTo(fieldWidth, rowHeight);
+
+				y += rowHeight;
+			}
+			contentHeight = std::max(contentHeight, y);
+		} else {
+			// The document may have been rebuilt more than once in a row
+			// (once per SetVerseSpacing() call inside
+			// VerseAligner::Align()); force a fresh measurement rather
+			// than risk GetHeightForWidth() reading a TextDocumentLayout
+			// copy whose cache wasn't invalidated for the most recent of
+			// those rebuilds.
+			TextDocumentView* view = fTextViews[bibleIndex];
+			view->Relayout();
+
+			float min, max, preferred;
+			view->GetHeightForWidth(width, &min, &max, &preferred);
+
+			view->MoveTo(x, 0.0f);
+			view->ResizeTo(width, preferred);
+
+			contentHeight = std::max(contentHeight, preferred);
+			bibleIndex++;
+		}
+
 		x += width + kColumnSpacing;
-		fColumnDividerX.push_back(x - kColumnSpacing / 2.0f);
-	}
-
-	if (fNotes != NULL) {
-		float notesWidth = _NotesColumnWidth();
-		float fieldWidth = std::max(0.0f, notesWidth - kNoteVerseLabelWidth);
-
-		float y = 0.0f;
-		for (size_t i = 0; i < fNoteFields.size(); i++) {
-			float rowHeight = _RowHeight((int)(i + 1));
-
-			fNoteVerseLabels[i]->MoveTo(x, y);
-			fNoteVerseLabels[i]->ResizeTo(kNoteVerseLabelWidth, rowHeight);
-
-			fNoteFields[i]->MoveTo(x + kNoteVerseLabelWidth, y);
-			fNoteFields[i]->ResizeTo(fieldWidth, rowHeight);
-
-			y += rowHeight;
-		}
-
-		if (fRemoveNotesButton != NULL) {
-			fRemoveNotesButton->MoveTo(
-				x + notesWidth - kRemoveButtonWidth, 0.0f);
-			fRemoveNotesButton->ResizeTo(kRemoveButtonWidth, kHeaderHeight);
-		}
-		if (fNotesLabel != NULL) {
-			fNotesLabel->MoveTo(x, 0.0f);
-			fNotesLabel->ResizeTo(notesWidth, kHeaderHeight);
-		}
-
-		contentHeight = std::max(contentHeight, y);
-		x += notesWidth + kColumnSpacing;
 		fColumnDividerX.push_back(x - kColumnSpacing / 2.0f);
 	}
 
@@ -676,8 +747,7 @@ ParallelBibleView::_PositionColumns()
 	x += kHeaderHeight + kColumnSpacing;
 
 	fContentHeight = contentHeight;
-	int32 columnCount = (int32)fTextViews.size() + (fNotes != NULL ? 1 : 0);
-	fContentWidth = columnCount == 0 ? 0.0f : (x - kColumnSpacing);
+	fContentWidth = fColumnOrder.empty() ? 0.0f : (x - kColumnSpacing);
 
 	// fHeaderView's own Frame() is left to the window's layout (matching
 	// the scroll viewport, same as this view's own Frame() is left to the
@@ -840,15 +910,21 @@ ParallelBibleView::_NotesColumnWidth() const
 // categories the old toolbar's module field used to split into before
 // the main window/Parallel View merge), labeled with each module's short
 // code (e.g. "KJV") rather than its full description -- the latter is
-// too long to be legible once truncated to column width. columnIndex is
-// embedded in each item's message so MessageReceived() knows whether to
-// AddColumn() (columnIndex < 0, used by the trailing "+" button) or
-// ReplaceColumn() (columnIndex >= 0, used by a column's own header
-// field). markedModuleName, if given, is checked off to show the
-// column's current selection.
+// too long to be legible once truncated to column width, plus a "Notes"
+// entry so any column can be turned into the notes column from its own
+// dropdown. columnIndex is embedded in each item's message so
+// MessageReceived() knows whether to append a new column (columnIndex < 0,
+// used by the trailing "+" button) or replace an existing one (columnIndex
+// >= 0, used by a column's own header field). markedModuleName, if given,
+// is checked off to show the column's current selection; markNotes does
+// the same for the "Notes" entry. There's only ever one notes column
+// (backed by the single, shared PersonalNotesModule, see fNotes), so
+// "Notes" is only offered here if this column already is the notes column
+// (markNotes) or no column currently is one (fNotes == NULL) -- otherwise
+// picking it would have nothing sensible to do.
 BPopUpMenu*
 ParallelBibleView::_BuildModuleMenu(int32 columnIndex,
-	const char* markedModuleName)
+	const char* markedModuleName, bool markNotes)
 {
 	if (fManager == NULL)
 		return NULL;
@@ -901,6 +977,16 @@ ParallelBibleView::_BuildModuleMenu(int32 columnIndex,
 		menu->AddItem(commentaryMenu);
 	else
 		delete commentaryMenu;
+
+	if (markNotes || fNotes == NULL) {
+		BMessage* notesMessage = new BMessage(PARALLEL_SELECT_NOTES);
+		notesMessage->AddInt32("index", columnIndex);
+		BMenuItem* notesItem = new BMenuItem(B_TRANSLATE("Notes"),
+			notesMessage);
+		notesItem->SetTarget(this);
+		notesItem->SetMarked(markNotes);
+		menu->AddItem(notesItem);
+	}
 
 	return menu;
 }
