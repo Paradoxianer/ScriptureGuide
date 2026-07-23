@@ -268,10 +268,10 @@ SwordBackend::SwordBackend(void)
 	// are a little easier to deal with outside the class
 	
 	// First, lists to contain the names of each type of text
-	fBibleList = new SGModuleList(20, true);
-	fCommentList = new SGModuleList(20, true);
-	fLexiconList = new SGModuleList(20, true);
-	fTextList = new SGModuleList(20, true);
+	fBibleList = new SGModuleList(20);
+	fCommentList = new SGModuleList(20);
+	fLexiconList = new SGModuleList(20);
+	fTextList = new SGModuleList(20);
 	
 	ModMap::iterator it;
 	SWModule* currentmodule = 0;
