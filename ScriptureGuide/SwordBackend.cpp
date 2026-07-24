@@ -12,6 +12,8 @@
 
 #include <vector>
 #include <map>
+#include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <String.h>
@@ -497,4 +499,101 @@ int UpperVerseFromKey(const char* key)
 	myKey.setLocale(language.Code());
 	myKey.setText(key);
 	return myKey.getUpperBound().getVerse();
+}
+
+
+// Trailing "<chapter>[:<verse>]" digit run at the very end of `text`, if
+// any -- e.g. 3 and 16 out of "Joh 3:16", or just 13 (chapter, hasVerse
+// false) out of "1 Kor 13". False (leaving the out-params untouched) if
+// the string doesn't end in digits at all, e.g. a bare book name like
+// "Genesis". Used by ParseVerseReference() below to catch VerseKey
+// silently mis-parsing part of the input rather than erroring out --
+// confirmed empirically that "Joh 3,16" (before comma-to-colon
+// normalization) parses with no error at all, but as chapter 3 *verse 1*,
+// silently dropping the ",16" instead of failing loudly.
+static bool
+ExtractTrailingChapterVerse(const BString& text, int& chapter, int& verse,
+	bool& hasVerse)
+{
+	int32 end = text.Length();
+
+	int32 verseEnd = end;
+	while (end > 0 && isdigit((unsigned char)text[end - 1]))
+		end--;
+	int32 verseStart = end;
+
+	if (verseStart == verseEnd)
+		return false;
+
+	hasVerse = false;
+	verse = 0;
+
+	if (end > 0 && text[end - 1] == ':') {
+		hasVerse = true;
+		verse = atoi(text.String() + verseStart);
+		end--;
+
+		int32 chapterEnd = end;
+		while (end > 0 && isdigit((unsigned char)text[end - 1]))
+			end--;
+		int32 chapterStart = end;
+		if (chapterStart == chapterEnd)
+			return false;
+		chapter = atoi(text.String() + chapterStart);
+	} else {
+		chapter = atoi(text.String() + verseStart);
+	}
+
+	return true;
+}
+
+
+bool ParseVerseReference(const char* input, BString& normalizedKey)
+{
+	BString trimmed(input);
+	trimmed.Trim();
+	if (trimmed.IsEmpty())
+		return false;
+
+	// A reference always names a book; guards against bare numbers ("13",
+	// "2023") that VerseKey would otherwise silently accept as a verse/
+	// chapter number in whatever book it happens to default to.
+	bool hasLetter = false;
+	for (int32 i = 0; i < trimmed.Length(); i++) {
+		if (isalpha((unsigned char)trimmed[i])) {
+			hasLetter = true;
+			break;
+		}
+	}
+	if (!hasLetter)
+		return false;
+
+	// German verse separator ("Joh 3,16") -- VerseKey only understands
+	// ':' natively, see ExtractTrailingChapterVerse()'s comment above.
+	trimmed.ReplaceAll(',', ':');
+
+	int expectedChapter = 0;
+	int expectedVerse = 0;
+	bool hasVerse = false;
+	bool hasChapterVerse = ExtractTrailingChapterVerse(trimmed,
+		expectedChapter, expectedVerse, hasVerse);
+
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+	VerseKey key;
+	key.setLocale(language.Code());
+	key.setText(trimmed.String());
+
+	if (key.popError())
+		return false;
+
+	if (hasChapterVerse) {
+		if (key.getChapter() != expectedChapter)
+			return false;
+		if (hasVerse && key.getVerse() != expectedVerse)
+			return false;
+	}
+
+	normalizedKey = key.getText();
+	return true;
 }

@@ -20,6 +20,7 @@ class SGModule;
 
 #define FIND_QUIT			'FTqu'
 #define M_ACTIVATE_WINDOW	'ACwn'
+#define FIND_RUN_SEARCH		'FRun'
 
 using namespace std;
 
@@ -39,6 +40,15 @@ public:
 					~SGSearchWindow();
 	virtual bool	QuitRequested();
 	virtual void	MessageReceived(BMessage* message);
+
+					// For the universal search box (#7): fills the search
+					// field and runs it exactly as if the user had typed
+					// `term` in and pressed the Find button. Safe to call
+					// from another window's thread (e.g. SGMainWindow's) --
+					// posts a message to itself rather than touching
+					// searchString directly, since that's not thread-safe
+					// without holding this window's looper lock.
+	void			RunSearch(const char* term);
 
 private:
 	void			BuildGUI(void);
