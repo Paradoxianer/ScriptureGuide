@@ -15,6 +15,7 @@
 #include <Locale.h>
 #include <MenuField.h>
 #include <MenuItem.h>
+#include <Message.h>
 #include <PopUpMenu.h>
 #include <ScrollBar.h>
 #include <StringView.h>
@@ -102,6 +103,144 @@ private:
 	int						fVerse;
 	PersonalNotesModule*	fNotes;
 	BString					fChapterKey;
+};
+
+
+// A Bible/Commentary column's TextDocumentView, with drag-out support for
+// selected text -- the old, pre-parallel-columns reading pane was a plain
+// BTextView, which drags selected text out for free, no extra code
+// required; the new TextDocumentView engine (vendored from HaikuDepot) has
+// none of that, so it's added here (see issue #23).
+//
+// The gesture: MouseDown() on top of the *existing* selection doesn't
+// touch the selection or move the caret -- it just remembers the down
+// point and waits. If the mouse moves past a small threshold before
+// MouseUp(), that's a drag: build a text/plain clipping (with the verse
+// reference and translation name prefixed) and call DragMessage(). If the
+// mouse never moves that far, MouseUp() treats it as the plain click it
+// actually was and places the caret there, same as clicking anywhere else
+// in the text. A MouseDown() that doesn't land inside the current
+// selection at all skips this entirely and behaves exactly as before.
+class BibleColumnView : public TextDocumentView {
+public:
+	BibleColumnView(const char* name, BibleTextDocument* document,
+		const char* translationName)
+		:
+		TextDocumentView(name),
+		fBibleDocument(document),
+		fTranslationName(translationName),
+		fTrackingForDrag(false)
+	{
+	}
+
+	virtual void MouseDown(BPoint where)
+	{
+		fTrackingForDrag = false;
+		if (HasSelection()) {
+			int32 start, end;
+			GetSelection(start, end);
+			int32 offset = TextOffsetAt(where);
+			if (start != end && offset >= start && offset < end) {
+				MakeFocus();
+				fTrackingForDrag = true;
+				fDragStartPoint = where;
+				SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
+				return;
+			}
+		}
+		TextDocumentView::MouseDown(where);
+	}
+
+	virtual void MouseMoved(BPoint where, uint32 transit,
+		const BMessage* dragMessage)
+	{
+		if (fTrackingForDrag) {
+			// Squared-distance check avoids pulling in libm for a plain
+			// sqrt() just to compare against a threshold.
+			float dx = where.x - fDragStartPoint.x;
+			float dy = where.y - fDragStartPoint.y;
+			const float kDragThreshold = 4.0f;
+			if (dx * dx + dy * dy > kDragThreshold * kDragThreshold) {
+				fTrackingForDrag = false;
+				_StartDrag();
+			}
+			return;
+		}
+		TextDocumentView::MouseMoved(where, transit, dragMessage);
+	}
+
+	virtual void MouseUp(BPoint where)
+	{
+		if (fTrackingForDrag) {
+			// Pressed inside the selection, released again without
+			// moving far enough to start a drag -- a plain click after
+			// all, meant to move the caret there like normal.
+			fTrackingForDrag = false;
+			SetCaret(where, false);
+		}
+		TextDocumentView::MouseUp(where);
+	}
+
+private:
+	void _StartDrag()
+	{
+		int32 start, end;
+		GetSelection(start, end);
+		if (start >= end || fBibleDocument == NULL)
+			return;
+
+		BString text = fBibleDocument->Text(start, end - start);
+		if (text.IsEmpty())
+			return;
+
+		BString reference = _ReferenceFor(start, end);
+
+		BString clipText;
+		clipText << reference << " (" << fTranslationName << ")\n\n" << text;
+
+		BMessage drag(B_SIMPLE_DATA);
+		drag.AddData("text/plain", B_MIME_TYPE, clipText.String(),
+			clipText.Length());
+		BString clipName(reference);
+		clipName << " (" << fTranslationName << ")";
+		drag.AddString("be:clip_name", clipName);
+		// Not consumed by anything yet -- for a future drop target (see
+		// issue #23) that wants the reference/translation without having
+		// to re-parse them back out of the plain-text clipping.
+		drag.AddString("scriptureguide:reference", reference);
+		drag.AddString("scriptureguide:translation", fTranslationName);
+
+		BRect dragRect(fDragStartPoint.x - 4.0f, fDragStartPoint.y - 4.0f,
+			fDragStartPoint.x + 200.0f, fDragStartPoint.y + 20.0f);
+		DragMessage(&drag, dragRect & Bounds(), this);
+	}
+
+	// "<Book> <Chapter>:<StartVerse>[-<EndVerse>]" for the given text
+	// offset range, e.g. "Genesis 1:1-3".
+	BString _ReferenceFor(int32 start, int32 end) const
+	{
+		int32 paragraphOffset;
+		int32 startParagraph = fBibleDocument->ParagraphIndexFor(start,
+			paragraphOffset);
+		int32 endParagraph = fBibleDocument->ParagraphIndexFor(
+			end > start ? end - 1 : end, paragraphOffset);
+
+		int startVerse = fBibleDocument->VerseForParagraphIndex(
+			startParagraph);
+		int endVerse = fBibleDocument->VerseForParagraphIndex(endParagraph);
+
+		BString reference(fBibleDocument->BookName());
+		reference << " " << fBibleDocument->Chapter() << ":" << startVerse;
+		if (endVerse > startVerse)
+			reference << "-" << endVerse;
+		return reference;
+	}
+
+private:
+	BibleTextDocument*	fBibleDocument;
+	BString				fTranslationName;
+	bool				fTrackingForDrag;
+	BPoint				fDragStartPoint;
 };
 
 
@@ -586,7 +725,8 @@ ParallelBibleView::_RebuildLayout()
 	fTextViews.clear();
 
 	for (size_t i = 0; i < fDocuments.size(); i++) {
-		TextDocumentView* view = new TextDocumentView("bibleColumn");
+		TextDocumentView* view = new BibleColumnView("bibleColumn",
+			fDocuments[i].Get(), fModules[i]->getName());
 		// These are a reading surface, not a details panel -- override the
 		// B_PANEL_BACKGROUND_COLOR (gray) the class constructs with. Both
 		// calls are needed: ViewColor is what a freshly exposed area gets

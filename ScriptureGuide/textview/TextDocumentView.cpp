@@ -432,6 +432,14 @@ TextDocumentView::GetSelection(int32& start, int32& end) const
 }
 
 
+int32
+TextDocumentView::TextOffsetAt(BPoint where)
+{
+	bool unused;
+	return fTextDocumentLayout.TextOffsetAt(where.x, where.y, unused);
+}
+
+
 void
 TextDocumentView::Paste(BClipboard* clipboard)
 {
