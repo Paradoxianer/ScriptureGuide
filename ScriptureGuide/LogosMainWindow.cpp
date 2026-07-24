@@ -46,7 +46,13 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 {
 	fCurrentVerse = selectVers;
 	fCurrentVerseEnd = selectVersEnd;
-		
+
+	// BuildGUI() below marks fShowVerseNumItem from this; the real value
+	// (if any was saved) isn't loaded until LoadPrefsForModule() runs,
+	// well after BuildGUI() -- default to the same "on" LoadPrefsForModule()
+	// itself falls back to when there's nothing saved yet.
+	fShowVerseNumbers = true;
+
 	fModManager = new SwordBackend();
 	BuildGUI();
 	
@@ -165,7 +171,14 @@ void SGMainWindow::BuildGUI(void)
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Previous Chapter"),
 		new BMessage(PREV_CHAPTER), B_LEFT_ARROW));
 	fMenuBar->AddItem(menu);
-	
+
+	menu = new BMenu(B_TRANSLATE("Options"));
+	fShowVerseNumItem = new BMenuItem(B_TRANSLATE("Show Verse Numbers"),
+		new BMessage(MENU_OPTIONS_VERSENUMBERS));
+	fShowVerseNumItem->SetMarked(fShowVerseNumbers);
+	menu->AddItem(fShowVerseNumItem);
+	fMenuBar->AddItem(menu);
+
 	// Prepare the book menu
 	fBookMenu = new BMenu("book");
 	BMenuField* bookfield = new BMenuField("bookfield", B_TRANSLATE("Book:"),
@@ -327,6 +340,12 @@ void SGMainWindow::LoadPrefsForModule(void)
 			SaveModulePreferences(fCurrentModule->Name(),&msg);
 	}
 	modPrefsLock.Unlock();
+
+	// fShowVerseNumbers was just (re)loaded above -- keep the menu mark
+	// and the actual columns in sync with it. Harmless/no-op if nothing
+	// has actually changed (see BibleTextDocument::SetShowVerseNumbers()).
+	fShowVerseNumItem->SetMarked(fShowVerseNumbers);
+	fParallelView->SetShowVerseNumbers(fShowVerseNumbers);
 }
 
 
@@ -542,6 +561,14 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		case MENU_EDIT_NOTE:
 		{
 			fParallelView->SetNotesEnabled(!fParallelView->NotesEnabled());
+			break;
+		}
+		case MENU_OPTIONS_VERSENUMBERS:
+		{
+			fShowVerseNumbers = !fShowVerseNumbers;
+			fShowVerseNumItem->SetMarked(fShowVerseNumbers);
+			fParallelView->SetShowVerseNumbers(fShowVerseNumbers);
+			SavePrefsForModule();
 			break;
 		}
 

@@ -57,6 +57,7 @@ private:
 	void UpdateParallelKey(void);
 
 	BMenuBar		*fMenuBar;
+	BMenuItem		*fShowVerseNumItem;
 
 	BMenu			*fBookMenu;
 
