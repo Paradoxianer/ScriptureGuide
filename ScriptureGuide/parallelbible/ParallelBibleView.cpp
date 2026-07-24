@@ -701,8 +701,20 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 	// Render filters (GBFPlain etc.) are expected to already be configured
 	// on fManager, the same way SwordBackend configures its SWMgr with a
 	// MarkupFilterMgr for every module it manages.
-	if (!fCurrentKey.IsEmpty())
-		module->setKey(fCurrentKey.String());
+	if (!fCurrentKey.IsEmpty()) {
+		// fCurrentKey is a localized reference (e.g. "1. Mose 1:1" under a
+		// German locale, from the book menu) -- setText() needs the key's
+		// locale set first or it fails silently and the module's key is
+		// left at whatever it defaulted to, same class of bug already
+		// worked around elsewhere in this file (see SetVerseKeyLocale()
+		// above). Missing this exact call is why a freshly added column
+		// used to land on the module's own default position instead of
+		// matching the other columns.
+		VerseKey verseKey(module->getKeyText());
+		SetVerseKeyLocale(verseKey);
+		verseKey.setText(fCurrentKey.String());
+		module->setKey(verseKey);
+	}
 
 	BReference<BibleTextDocument> document(new BibleTextDocument(module),
 		true);
