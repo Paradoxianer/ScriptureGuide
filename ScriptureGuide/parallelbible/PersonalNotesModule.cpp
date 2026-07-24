@@ -8,7 +8,26 @@
 #include <Directory.h>
 #include <Entry.h>
 #include <FindDirectory.h>
+#include <Language.h>
+#include <Locale.h>
 #include <Path.h>
+
+
+// See the identical helper in BibleTextDocument.cpp/ParallelBibleView.cpp:
+// VerseKey::setText() only recognizes localized book names (e.g. German
+// "1. Mose") if the key's locale has been set first, otherwise it fails
+// silently and the key is left unchanged. Every key handed to GetNote()/
+// SetNote() ultimately comes from the main window's (localized) book menu,
+// so without this, every note silently collapsed onto whatever the
+// default-constructed VerseKey's key happened to be, regardless of which
+// verse was actually being edited.
+static void
+SetVerseKeyLocale(VerseKey& key)
+{
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+	key.setLocale(language.Code());
+}
 
 
 PersonalNotesModule::PersonalNotesModule(const char* versification)
@@ -58,6 +77,7 @@ PersonalNotesModule::GetNote(const char* key) const
 		return note;
 
 	VerseKey verseKey;
+	SetVerseKeyLocale(verseKey);
 	verseKey.setText(key);
 	fModule->setKey(verseKey);
 
@@ -78,6 +98,7 @@ PersonalNotesModule::SetNote(const char* key, const char* text)
 		return B_NOT_ALLOWED;
 
 	VerseKey verseKey;
+	SetVerseKeyLocale(verseKey);
 	verseKey.setText(key);
 	fModule->setKey(verseKey);
 

@@ -209,21 +209,50 @@ ParallelBibleView::MessageReceived(BMessage* message)
 {
 	switch (message->what) {
 		case PARALLEL_SELECT_MODULE:
-		{
-			int32 index;
-			BString module;
-			if (message->FindInt32("index", &index) == B_OK
-				&& message->FindString("module", &module) == B_OK) {
-				_SetColumnToBible(index, module.String());
-			}
-			break;
-		}
-
 		case PARALLEL_SELECT_NOTES:
+		case PARALLEL_REMOVE_COLUMN:
 		{
-			int32 index;
-			if (message->FindInt32("index", &index) == B_OK)
-				_SetColumnToNotes(index);
+			// Selecting an item in a column's own dropdown, or clicking
+			// its remove button, ultimately calls _RebuildLayout(),
+			// which deletes and recreates every header BMenuField --
+			// including, in the dropdown case, the very one whose click
+			// this message came from. BMenuField::MouseDown() spawns a
+			// dedicated background thread to track that click
+			// (BMenuField.cpp's "_m_task_"), and ~BMenuField() blocks in
+			// wait_for_thread() for it to finish; that thread still
+			// needs this window's lock for its own cleanup after
+			// invoking us. Rebuilding synchronously, in the same
+			// dispatch that thread's Invoke() call landed in, can beat
+			// it to that cleanup and deadlock: this (the window) thread
+			// blocked in wait_for_thread() inside the delete, that
+			// thread blocked trying to lock a window this thread already
+			// holds. BLooper releases its lock between dispatching each
+			// queued message, so re-posting once here -- handling it for
+			// real only the second time through -- gives that thread the
+			// gap it needs to finish first.
+			if (!message->HasBool("deferred")) {
+				BMessage deferred(*message);
+				deferred.AddBool("deferred", true);
+				BMessenger(this).SendMessage(&deferred);
+				break;
+			}
+
+			if (message->what == PARALLEL_SELECT_MODULE) {
+				int32 index;
+				BString module;
+				if (message->FindInt32("index", &index) == B_OK
+					&& message->FindString("module", &module) == B_OK) {
+					_SetColumnToBible(index, module.String());
+				}
+			} else if (message->what == PARALLEL_SELECT_NOTES) {
+				int32 index;
+				if (message->FindInt32("index", &index) == B_OK)
+					_SetColumnToNotes(index);
+			} else {
+				int32 index;
+				if (message->FindInt32("index", &index) == B_OK)
+					RemoveColumn(index);
+			}
 			break;
 		}
 
@@ -239,14 +268,6 @@ ParallelBibleView::MessageReceived(BMessage* message)
 				fHeaderView->ConvertToScreen(&where);
 				menu->Go(where, true, true, true);
 			}
-			break;
-		}
-
-		case PARALLEL_REMOVE_COLUMN:
-		{
-			int32 index;
-			if (message->FindInt32("index", &index) == B_OK)
-				RemoveColumn(index);
 			break;
 		}
 
@@ -567,16 +588,9 @@ ParallelBibleView::_RebuildHeader()
 		// "Notes", the plain top-level item) the marked item actually
 		// lives in now, so the field would otherwise show the popup's own
 		// internal name ("translation") instead of the selected module --
-		// set it explicitly instead. A plain BMenuField draws no dropdown
-		// indicator of its own (unlike e.g. a desktop combo box), so a
-		// trailing arrow glyph is appended here -- right after the label
-		// text rather than at the field's far right edge, since that edge
-		// is where the remove button (added right below) sits.
-		if (field->MenuItem() != NULL) {
-			BString displayLabel(label);
-			displayLabel << " \xE2\x96\xBE"; // U+25BE, small down-pointing triangle
-			field->MenuItem()->SetLabel(displayLabel.String());
-		}
+		// set it explicitly instead.
+		if (field->MenuItem() != NULL)
+			field->MenuItem()->SetLabel(label);
 		fHeaderView->AddChild(field);
 		fHeaderFields.push_back(field);
 
@@ -663,8 +677,9 @@ ParallelBibleView::_Realign()
 		widths.push_back(_ColumnWidth());
 	}
 
-	if (columns.size() >= 2)
+	if (columns.size() >= 2) {
 		VerseAligner::Align(columns, widths);
+	}
 
 	_PositionColumns();
 
@@ -699,16 +714,24 @@ ParallelBibleView::_PositionColumns()
 		float width = isNotes ? _NotesColumnWidth() : bibleWidth;
 
 		if (i < fHeaderFields.size()) {
-			// The dropdown spans the full column width rather than
-			// leaving a gap for the "x" button beside it; the button
-			// instead sits on top of the dropdown's right edge. Children
-			// added later (see _RebuildHeader(): the button is always
-			// added right after its field) draw on top and get first
-			// claim on clicks in their own area, so this doesn't block
-			// opening the dropdown from anywhere else in it.
+			// Sized to its own natural (preferred) width -- like the
+			// original toolbar's module field -- rather than stretched
+			// to fill the column. A stretched fixed-size BMenuField
+			// still draws its native pop-up marker at its own right
+			// edge (see BMenuField/_BMCMenuBar_ in the Interface Kit;
+			// nothing here draws it), which the remove button, sitting
+			// right there, would otherwise cover; bounding the field to
+			// its content and placing the button right after it instead
+			// keeps that marker visible.
+			float preferredWidth, preferredHeight;
+			fHeaderFields[i]->GetPreferredSize(&preferredWidth,
+				&preferredHeight);
+			float fieldWidth = std::min(preferredWidth,
+				std::max(0.0f, width - kRemoveButtonWidth));
+
 			fHeaderFields[i]->MoveTo(x, 0.0f);
-			fHeaderFields[i]->ResizeTo(width, kHeaderHeight);
-			fRemoveButtons[i]->MoveTo(x + width - kRemoveButtonWidth, 0.0f);
+			fHeaderFields[i]->ResizeTo(fieldWidth, kHeaderHeight);
+			fRemoveButtons[i]->MoveTo(x + fieldWidth, 0.0f);
 			fRemoveButtons[i]->ResizeTo(kRemoveButtonWidth, kHeaderHeight);
 		}
 
