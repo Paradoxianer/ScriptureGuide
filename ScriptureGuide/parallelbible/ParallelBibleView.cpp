@@ -420,6 +420,20 @@ ParallelBibleView::SetShowVerseNumbers(bool show)
 }
 
 
+// Applies to every current Bible/Commentary column, and is remembered
+// (fBaseFont) so columns added afterward (see _SetColumnToBible()) start
+// out matching it too -- same rationale as SetShowVerseNumbers() above.
+status_t
+ParallelBibleView::SetBaseFont(const BFont& font)
+{
+	fBaseFont = font;
+	for (size_t i = 0; i < fDocuments.size(); i++)
+		fDocuments[i]->SetBaseFont(font);
+	_Realign();
+	return B_OK;
+}
+
+
 // Counts the COLUMN_BIBLE slots in fColumnOrder before `position`, which is
 // exactly the index that slot's module/document pair has in fModules/
 // fDocuments -- those arrays only ever hold Bible/Commentary columns, in
@@ -475,6 +489,9 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 	// SetShowVerseNumbers()) -- BibleTextDocument defaults to true, so
 	// this only matters when the setting has been turned off.
 	document->SetShowVerseNumbers(fShowVerseNumbers);
+	// Match the current base font (see SetBaseFont()) -- only matters once
+	// the user has actually picked something other than be_plain_font.
+	document->SetBaseFont(fBaseFont);
 
 	if (position < 0) {
 		fModules.push_back(module);

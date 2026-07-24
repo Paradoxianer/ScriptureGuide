@@ -171,6 +171,20 @@ BibleTextDocument::SetShowVerseNumbers(bool show)
 
 
 void
+BibleTextDocument::SetBaseFont(const BFont& font)
+{
+	fVerseTextStyle.SetFont(font);
+
+	// SetFont() replaces the style's whole BFont, including its face, so
+	// the bold weight set in the constructor has to be reapplied after it.
+	fVerseNumberStyle.SetFont(font);
+	fVerseNumberStyle.SetBold(true);
+
+	_Rebuild();
+}
+
+
+void
 BibleTextDocument::SetSkipEmptyVerses(bool skip)
 {
 	if (fSkipEmptyVerses == skip)

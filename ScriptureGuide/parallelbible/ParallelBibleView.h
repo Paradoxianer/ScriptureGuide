@@ -21,6 +21,7 @@
 using namespace sword;
 
 class BButton;
+class BFont;
 class BMenu;
 class BMenuField;
 class BPopUpMenu;
@@ -128,6 +129,12 @@ public:
 			bool				ShowVerseNumbers() const
 									{ return fShowVerseNumbers; }
 
+			// Family/style/size for verse text and (still bold)
+			// verse numbers, applied to every current Bible/
+			// Commentary column and remembered for columns
+			// added afterward, same as SetShowVerseNumbers().
+			status_t			SetBaseFont(const BFont& font);
+
 			status_t			SetKey(const char* key);
 			status_t			NextChapter();
 			status_t			PrevChapter();
@@ -190,6 +197,7 @@ private:
 			BButton*			fAddColumnButton;
 
 			bool				fShowVerseNumbers;
+			BFont				fBaseFont;
 
 			BString				fCurrentKey;
 			float				fInitialWidth;

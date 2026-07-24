@@ -50,6 +50,11 @@ public:
 			bool				ShowVerseNumbers() const
 									{ return fShowVerseNumbers; }
 
+				// Family/style/size apply to both verse text and
+				// verse numbers; verse numbers keep their bold
+				// weight regardless.
+			void				SetBaseFont(const BFont& font);
+
 			// When true (the default), verses with no rendered text are
 			// left out entirely. The notes column needs the opposite: an
 			// always-present, possibly-empty paragraph per verse so every
