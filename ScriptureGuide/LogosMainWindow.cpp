@@ -29,6 +29,7 @@
 #include <iostream>
 
 #include "constants.h"
+#include "FontPanel.h"
 #include "LogosApp.h"
 #include "Preferences.h"
 
@@ -42,11 +43,18 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
  	fCurrentModule(NULL),
  	fCurrentChapter(1),
  	fFindMessenger(NULL),
-	fSearchWindow(NULL)
+	fSearchWindow(NULL),
+	fFontPanel(NULL)
 {
 	fCurrentVerse = selectVers;
 	fCurrentVerseEnd = selectVersEnd;
-		
+
+	// BuildGUI() below marks fShowVerseNumItem from this; the real value
+	// (if any was saved) isn't loaded until LoadPrefsForModule() runs,
+	// well after BuildGUI() -- default to the same "on" LoadPrefsForModule()
+	// itself falls back to when there's nothing saved yet.
+	fShowVerseNumbers = true;
+
 	fModManager = new SwordBackend();
 	BuildGUI();
 	
@@ -165,7 +173,16 @@ void SGMainWindow::BuildGUI(void)
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Previous Chapter"),
 		new BMessage(PREV_CHAPTER), B_LEFT_ARROW));
 	fMenuBar->AddItem(menu);
-	
+
+	menu = new BMenu(B_TRANSLATE("Options"));
+	fShowVerseNumItem = new BMenuItem(B_TRANSLATE("Show Verse Numbers"),
+		new BMessage(MENU_OPTIONS_VERSENUMBERS));
+	fShowVerseNumItem->SetMarked(fShowVerseNumbers);
+	menu->AddItem(fShowVerseNumItem);
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Choose Font…"),
+		new BMessage(MENU_OPTIONS_FONT)));
+	fMenuBar->AddItem(menu);
+
 	// Prepare the book menu
 	fBookMenu = new BMenu("book");
 	BMenuField* bookfield = new BMenuField("bookfield", B_TRANSLATE("Book:"),
@@ -202,7 +219,14 @@ void SGMainWindow::BuildGUI(void)
 		chapterView->DisallowChar(c);
 		verseView->DisallowChar(c);
 	}
-	
+
+	// Universal search/goto box (#7): a reference like "Joh 3:16" or "1
+	// Kor 13" navigates directly (see ParseVerseReference()), anything
+	// else runs a text search in the same Find window "Find Verse..."
+	// opens (see UNIVERSAL_SEARCH in MessageReceived()).
+	fUniversalSearchBox = new BTextControl("universal_search",
+		B_TRANSLATE("Go to / Search:"), NULL, new BMessage(UNIVERSAL_SEARCH));
+
 	// Parallel View is now what the main window's own reading pane is --
 	// with a single column it reads just like the old BTextView pane did,
 	// and the "+" button in its header is how the user adds more columns
@@ -217,6 +241,7 @@ void SGMainWindow::BuildGUI(void)
 	toolBar->AddView(bookfield);
 	toolBar->AddView(fChapterBox);
 	toolBar->AddView(fVerseBox);
+	toolBar->AddView(fUniversalSearchBox);
 	toolBar->AddGlue();
 	toolBar->AddView(fNoteButton);
 
@@ -327,6 +352,16 @@ void SGMainWindow::LoadPrefsForModule(void)
 			SaveModulePreferences(fCurrentModule->Name(),&msg);
 	}
 	modPrefsLock.Unlock();
+
+	// fShowVerseNumbers was just (re)loaded above -- keep the menu mark
+	// and the actual columns in sync with it. Harmless/no-op if nothing
+	// has actually changed (see BibleTextDocument::SetShowVerseNumbers()).
+	fShowVerseNumItem->SetMarked(fShowVerseNumbers);
+	fParallelView->SetShowVerseNumbers(fShowVerseNumbers);
+
+	// Same idea for fDisplayFont -- was dead state before this (see #21):
+	// loaded/saved but never actually applied to the reading pane.
+	fParallelView->SetBaseFont(fDisplayFont);
 }
 
 
@@ -521,27 +556,52 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		}
 		case MENU_EDIT_FIND:
 		{
-			if (fFindMessenger)
-			{
-				fFindMessenger->SendMessage(M_ACTIVATE_WINDOW);
-				break;
-			}
-			
-			BRect r(Frame().OffsetByCopy(5, 23));
-			r.right = r.left + 325;
-			r.bottom = r.top + 410;
-			if (!fSearchWindow)
-			{
-				fSearchWindow = new SGSearchWindow(r, fCurrentModule->Name(),
-										new BMessenger(this));
-				fFindMessenger = new BMessenger(fSearchWindow);
-			}
-			fSearchWindow->Show();
+			EnsureSearchWindow();
 			break;
 		}
 		case MENU_EDIT_NOTE:
 		{
 			fParallelView->SetNotesEnabled(!fParallelView->NotesEnabled());
+			break;
+		}
+		case MENU_OPTIONS_VERSENUMBERS:
+		{
+			fShowVerseNumbers = !fShowVerseNumbers;
+			fShowVerseNumItem->SetMarked(fShowVerseNumbers);
+			fParallelView->SetShowVerseNumbers(fShowVerseNumbers);
+			SavePrefsForModule();
+			break;
+		}
+
+		case MENU_OPTIONS_FONT:
+		{
+			if (fFontPanel)
+				delete fFontPanel;
+
+			fFontPanel = new FontPanel(this, NULL, fFontSize);
+			fFontPanel->SelectFont(fDisplayFont);
+			fFontPanel->Show();
+			break;
+		}
+
+		// Sent by FontPanel once the user picks OK.
+		case M_FONT_SELECTED:
+		{
+			BString family;
+			BString style;
+			float size;
+
+			if (msg->FindString("family", &family) != B_OK
+				|| msg->FindString("style", &style) != B_OK
+				|| msg->FindFloat("size", &size) != B_OK)
+				break;
+
+			fFontSize = (int16)size;
+			fDisplayFont.SetSize(size);
+			fDisplayFont.SetFamilyAndStyle(family.String(), style.String());
+
+			fParallelView->SetBaseFont(fDisplayFont);
+			SavePrefsForModule();
 			break;
 		}
 
@@ -555,10 +615,25 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		{
 			BString key;
 			if (msg->FindString("key",&key) == B_OK)
+				JumpToKey(key.String());
+			break;
+		}
+		case UNIVERSAL_SEARCH:
+		{
+			BString input(fUniversalSearchBox->Text());
+			input.Trim();
+			if (input.IsEmpty())
+				break;
+
+			BString normalizedKey;
+			if (ParseVerseReference(input.String(), normalizedKey))
 			{
-				SetBook(BookFromKey(key.String()));
-				SetChapter(ChapterFromKey(key.String()));
-				SetVerse(VerseFromKey(key.String()));
+				JumpToKey(normalizedKey.String());
+				fUniversalSearchBox->SetText("");
+			} else
+			{
+				EnsureSearchWindow();
+				fSearchWindow->RunSearch(input.String());
 			}
 			break;
 		}
@@ -774,6 +849,39 @@ void SGMainWindow::SetVerse(const int16 &verse)
 }
 
 
+void
+SGMainWindow::JumpToKey(const char* key)
+{
+	SetBook(BookFromKey(key));
+	SetChapter(ChapterFromKey(key));
+	int16 verse = VerseFromKey(key);
+	SetVerse(verse);
+	fParallelView->HighlightVerse(verse, verse);
+}
+
+
+void
+SGMainWindow::EnsureSearchWindow(void)
+{
+	if (fFindMessenger)
+	{
+		fFindMessenger->SendMessage(M_ACTIVATE_WINDOW);
+		return;
+	}
+
+	BRect r(Frame().OffsetByCopy(5, 23));
+	r.right = r.left + 325;
+	r.bottom = r.top + 410;
+	if (!fSearchWindow)
+	{
+		fSearchWindow = new SGSearchWindow(r, fCurrentModule->Name(),
+								new BMessenger(this));
+		fFindMessenger = new BMessenger(fSearchWindow);
+	}
+	fSearchWindow->Show();
+}
+
+
 bool SGMainWindow::QuitRequested() 
 {
 	if (fFindMessenger)
@@ -786,6 +894,11 @@ bool SGMainWindow::QuitRequested()
 	{
 		if (fSearchWindow->LockLooper())
 			fSearchWindow->Quit();
+	}
+	if (fFontPanel)
+	{
+		if (fFontPanel->Window()->LockLooper())
+			fFontPanel->Window()->Quit();
 	}
 	SavePrefsForModule();
 	be_app_messenger.SendMessage(new BMessage(M_WINDOW_CLOSED));

@@ -50,6 +50,13 @@ public:
 			bool				ShowVerseNumbers() const
 									{ return fShowVerseNumbers; }
 
+			// Family/size apply to both verse text and verse
+			// numbers; verse numbers keep their bold weight
+			// regardless. The family is overridden for Greek/
+			// Hebrew modules (see _EffectiveFont() in the .cpp) --
+			// `font`'s size is what actually sticks in that case.
+			void				SetBaseFont(const BFont& font);
+
 			// When true (the default), verses with no rendered text are
 			// left out entirely. The notes column needs the opposite: an
 			// always-present, possibly-empty paragraph per verse so every
@@ -62,6 +69,15 @@ public:
 			int32				ParagraphIndexForVerse(int verse) const;
 			int					VerseForParagraphIndex(int32 index) const;
 
+			// Text offset range covering verses startVerse..endVerse
+			// (inclusive) -- for a TextDocumentView::SetSelection() call
+			// to highlight a verse jumped to from search (see #22).
+			// false if either end isn't part of the currently loaded
+			// chapter, leaving start/end untouched.
+			bool				TextRangeForVerseRange(int startVerse,
+									int endVerse, int32& start,
+									int32& end) const;
+
 			// Extra bottom spacing per verse, used by VerseAligner to keep
 			// the same verse lined up across parallel columns. Replaces
 			// any previous overrides and rebuilds the document once.
@@ -69,6 +85,7 @@ public:
 									const std::map<int, float>& spacing);
 
 private:
+			BFont				_EffectiveFont(const BFont& baseFont) const;
 			void				_Rebuild();
 
 private:

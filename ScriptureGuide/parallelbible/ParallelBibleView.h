@@ -21,6 +21,7 @@
 using namespace sword;
 
 class BButton;
+class BFont;
 class BMenu;
 class BMenuField;
 class BPopUpMenu;
@@ -124,9 +125,29 @@ public:
 			bool				NotesEnabled() const
 									{ return fNotes != NULL; }
 
+			status_t			SetShowVerseNumbers(bool show);
+			bool				ShowVerseNumbers() const
+									{ return fShowVerseNumbers; }
+
+			// Family/style/size for verse text and (still bold)
+			// verse numbers, applied to every current Bible/
+			// Commentary column and remembered for columns
+			// added afterward, same as SetShowVerseNumbers().
+			status_t			SetBaseFont(const BFont& font);
+
 			status_t			SetKey(const char* key);
 			status_t			NextChapter();
 			status_t			PrevChapter();
+
+			// Selects verses startVerse..endVerse (inclusive) in every
+			// Bible/Commentary column that has them, deselecting in any
+			// column that doesn't (e.g. a commentary without an entry for
+			// that verse). Callers decide when this is warranted -- SetKey()
+			// itself doesn't call this, since ordinary chapter/verse
+			// navigation isn't supposed to select anything, only a jump
+			// from search is (see #22).
+			void				HighlightVerse(int startVerse,
+									int endVerse);
 
 private:
 			friend class ParallelHeaderView;
@@ -184,6 +205,9 @@ private:
 
 			BView*				fHeaderView;
 			BButton*			fAddColumnButton;
+
+			bool				fShowVerseNumbers;
+			BFont				fBaseFont;
 
 			BString				fCurrentKey;
 			float				fInitialWidth;

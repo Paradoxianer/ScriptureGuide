@@ -287,6 +287,7 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fNotes(NULL),
 	fHeaderView(NULL),
 	fAddColumnButton(NULL),
+	fShowVerseNumbers(true),
 	fInitialWidth(initialWidth),
 	fContentHeight(0.0f),
 	fContentWidth(0.0f)
@@ -542,6 +543,36 @@ ParallelBibleView::SetNotesEnabled(bool enabled)
 }
 
 
+// Applies to every current Bible/Commentary column, and is remembered
+// (fShowVerseNumbers) so columns added afterward (see _SetColumnToBible())
+// start out matching it too -- this is a single, window-wide setting, not
+// something that varies per column, mirroring how it worked before there
+// were multiple columns at all.
+status_t
+ParallelBibleView::SetShowVerseNumbers(bool show)
+{
+	fShowVerseNumbers = show;
+	for (size_t i = 0; i < fDocuments.size(); i++)
+		fDocuments[i]->SetShowVerseNumbers(show);
+	_Realign();
+	return B_OK;
+}
+
+
+// Applies to every current Bible/Commentary column, and is remembered
+// (fBaseFont) so columns added afterward (see _SetColumnToBible()) start
+// out matching it too -- same rationale as SetShowVerseNumbers() above.
+status_t
+ParallelBibleView::SetBaseFont(const BFont& font)
+{
+	fBaseFont = font;
+	for (size_t i = 0; i < fDocuments.size(); i++)
+		fDocuments[i]->SetBaseFont(font);
+	_Realign();
+	return B_OK;
+}
+
+
 // Counts the COLUMN_BIBLE slots in fColumnOrder before `position`, which is
 // exactly the index that slot's module/document pair has in fModules/
 // fDocuments -- those arrays only ever hold Bible/Commentary columns, in
@@ -593,6 +624,13 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 
 	BReference<BibleTextDocument> document(new BibleTextDocument(module),
 		true);
+	// Match whatever the other columns are currently showing (see
+	// SetShowVerseNumbers()) -- BibleTextDocument defaults to true, so
+	// this only matters when the setting has been turned off.
+	document->SetShowVerseNumbers(fShowVerseNumbers);
+	// Match the current base font (see SetBaseFont()) -- only matters once
+	// the user has actually picked something other than be_plain_font.
+	document->SetBaseFont(fBaseFont);
 
 	if (position < 0) {
 		fModules.push_back(module);
@@ -677,6 +715,21 @@ ParallelBibleView::SetKey(const char* key)
 	_ScrollToVerse(verseKey.getVerse());
 
 	return B_OK;
+}
+
+
+void
+ParallelBibleView::HighlightVerse(int startVerse, int endVerse)
+{
+	for (size_t i = 0; i < fDocuments.size(); i++) {
+		int32 start, end;
+		if (fDocuments[i]->TextRangeForVerseRange(startVerse, endVerse,
+				start, end)) {
+			fTextViews[i]->SetSelection(start, end);
+		} else {
+			fTextViews[i]->SetSelection(0, 0);
+		}
+	}
 }
 
 

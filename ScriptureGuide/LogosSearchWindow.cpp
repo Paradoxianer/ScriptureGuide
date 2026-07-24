@@ -115,9 +115,18 @@ SGSearchWindow::SGSearchWindow(BRect frame, const char* module,
 SGSearchWindow::~SGSearchWindow(void)
 {
 	delete myBible;
-	
+
 	fMessenger->SendMessage(FIND_QUIT);
 	delete fMessenger;
+}
+
+
+void
+SGSearchWindow::RunSearch(const char* term)
+{
+	BMessage msg(FIND_RUN_SEARCH);
+	msg.AddString("term", term);
+	PostMessage(&msg);
 }
 
 
@@ -231,6 +240,16 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 			Activate(true);
 			if (IsHidden())
 				Show();
+			break;
+		}
+		case FIND_RUN_SEARCH:
+		{
+			BString term;
+			if (message->FindString("term", &term) == B_OK)
+			{
+				searchString->SetText(term.String());
+				PostMessage(new BMessage(FIND_BUTTON_OK));
+			}
 			break;
 		}
 		case FIND_SELECT_FROM:

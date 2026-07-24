@@ -38,6 +38,15 @@ int 			ChapterFromKey(const char* key);
 int				VerseFromKey(const char* key);
 int				UpperVerseFromKey(const char* key);
 
+// For the universal search/goto box (#7): true if `input` parses as an
+// actual Bible reference (localized or English book name/abbreviation,
+// German comma or colon as the chapter:verse separator), with
+// `normalizedKey` set to VerseKey's own canonical form (e.g. "1. Mose 1:1")
+// -- ready to pass straight to ParallelBibleView::SetKey(). False for
+// anything else (a plain search term), leaving normalizedKey untouched.
+bool			ParseVerseReference(const char* input,
+					BString& normalizedKey);
+
 
 std::vector<const char*>	GetBookNames(void);
 

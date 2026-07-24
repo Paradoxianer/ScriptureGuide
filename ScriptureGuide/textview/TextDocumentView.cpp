@@ -441,6 +441,18 @@ TextDocumentView::TextOffsetAt(BPoint where)
 
 
 void
+TextDocumentView::SetSelection(int32 start, int32 end)
+{
+	if (!fSelectionEnabled || !fTextEditor.IsSet())
+		return;
+
+	fTextEditor->SetSelection(TextSelection(start, end));
+	_ShowCaret(false);
+	Invalidate();
+}
+
+
+void
 TextDocumentView::Paste(BClipboard* clipboard)
 {
 	if (!fTextDocument.IsSet() || !fTextEditor.IsSet())

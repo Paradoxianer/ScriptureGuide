@@ -21,6 +21,7 @@
 
 
 class SGModule;
+class FontPanel;
 
 #define M_WINDOW_CLOSED 'wcls'
 using namespace std;
@@ -56,12 +57,23 @@ private:
 	void SetVerse(const int16 &verse);
 	void UpdateParallelKey(void);
 
+	// Navigates to `key` (a full VerseKey-parseable reference, whether
+	// from a search-result drag (SG_BIBLE) or the universal search box
+	// (UNIVERSAL_SEARCH, see #7)) and highlights the resulting verse.
+	void JumpToKey(const char* key);
+	// Lazily creates fSearchWindow/fFindMessenger if needed and brings
+	// the search window to front -- shared by MENU_EDIT_FIND and
+	// UNIVERSAL_SEARCH's fall-back-to-search path.
+	void EnsureSearchWindow(void);
+
 	BMenuBar		*fMenuBar;
+	BMenuItem		*fShowVerseNumItem;
 
 	BMenu			*fBookMenu;
 
 	BTextControl	*fChapterBox;
 	BTextControl	*fVerseBox;
+	BTextControl	*fUniversalSearchBox;
 
 	BButton			*fNoteButton;
 
@@ -79,6 +91,7 @@ private:
 
 	int16			fFontSize;
 	BFont			fDisplayFont;
+	FontPanel		*fFontPanel;
 
 	bool			fIsLineBreak,
 					fShowVerseNumbers;

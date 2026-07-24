@@ -70,6 +70,11 @@ public:
 			void				SelectAll();
 			bool				HasSelection() const;
 			void				GetSelection(int32& start, int32& end) const;
+				// Programmatic counterpart to SetCaret()'s mouse-driven
+				// range selection -- for callers that already know the
+				// text offsets they want selected (e.g. highlighting a
+				// verse jumped to from search) rather than a click point.
+			void				SetSelection(int32 start, int32 end);
 
 				// Text offset of the character under `where` (view
 				// coordinates) -- exposes the same lookup MouseDown()/
