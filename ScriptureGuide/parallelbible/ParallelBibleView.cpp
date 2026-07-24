@@ -105,6 +105,41 @@ private:
 };
 
 
+// The header row's container view (see HeaderView()/the class comment on
+// why it's not a child of ParallelBibleView itself). Whoever HeaderView()
+// is handed to (see SGMainWindow) may or may not ever adopt it via
+// AddChild() -- and if they do, exactly when varies with how that caller's
+// layout gets built (BLayoutBuilder does not necessarily attach views in
+// .Add() call order; measured to fire *after* ParallelBibleView's own
+// AttachedToWindow() in practice, which made an earlier attempt at
+// tracking "did someone else adopt it yet" via Parent() at that point
+// unreliable and caused a double-free). Rather than depend on timing at
+// all, this notifies ParallelBibleView when it is actually destroyed --
+// by the window's own child teardown if adopted, or directly by
+// ~ParallelBibleView() otherwise -- so fHeaderView there is nulled out
+// no matter which side's destructor runs first, and the other side's
+// `delete` (on an already-null pointer) is always a safe no-op.
+class ParallelHeaderView : public BView {
+public:
+	ParallelHeaderView(const char* name, uint32 flags,
+		ParallelBibleView* owner)
+		:
+		BView(name, flags),
+		fOwner(owner)
+	{
+	}
+
+	virtual ~ParallelHeaderView()
+	{
+		if (fOwner != NULL)
+			fOwner->_HeaderViewDestroyed();
+	}
+
+private:
+	ParallelBibleView*	fOwner;
+};
+
+
 ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	float initialWidth)
 	:
@@ -121,17 +156,28 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 
 	// Not added as a child of this view -- see the class comment on why
 	// the header lives outside the scrolled hierarchy. HeaderView() hands
-	// this to the caller, who places it in their own layout; ownership
-	// passes to whatever parent it ends up with (see ~ParallelBibleView()
-	// for the fallback if that never happens).
-	fHeaderView = new BView("parallelHeader", B_WILL_DRAW);
+	// this to the caller, who places it in their own layout; see
+	// ParallelHeaderView above for how ownership/deletion is handled
+	// either way.
+	fHeaderView = new ParallelHeaderView("parallelHeader", B_WILL_DRAW, this);
 	fHeaderView->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	fHeaderView->SetExplicitMinSize(BSize(B_SIZE_UNSET, kHeaderHeight));
 	fHeaderView->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, kHeaderHeight));
 
+	// SetTarget(this) is deliberately NOT called here: this constructor
+	// runs before this view (or fHeaderView) has been attached to any
+	// window, so this->Looper() is still NULL and the BMessenger
+	// SetTarget() builds from it would be permanently invalid --
+	// BMessenger doesn't re-resolve later, so the button's clicks would
+	// silently fall back to this view's Window() instead (which has no
+	// matching message case, so nothing visibly happens: exactly the
+	// "+ button does nothing" bug this fixed). Done in AttachedToWindow()
+	// instead, once this view actually has a Looper -- the same timing
+	// every other SetTarget(this) call in this class already relies on,
+	// since those all happen inside _RebuildHeader(), itself only ever
+	// reachable after attachment.
 	fAddColumnButton = new BButton("addColumn", "+",
 		new BMessage(PARALLEL_ADD_COLUMN_MENU));
-	fAddColumnButton->SetTarget(this);
 	fHeaderView->AddChild(fAddColumnButton);
 }
 
@@ -140,11 +186,17 @@ ParallelBibleView::~ParallelBibleView()
 {
 	delete fNotes;
 
-	// HeaderView() is meant to be adopted into the caller's own layout
-	// (see SGMainWindow); if that never happened, this view still owns
-	// it and must not leak it.
-	if (fHeaderView->Parent() == NULL)
-		delete fHeaderView;
+	// A no-op if fHeaderView was already destroyed by its adoptive
+	// parent's own teardown (see ParallelHeaderView above) -- in that
+	// case _HeaderViewDestroyed() already nulled this out.
+	delete fHeaderView;
+}
+
+
+void
+ParallelBibleView::_HeaderViewDestroyed()
+{
+	fHeaderView = NULL;
 }
 
 
@@ -152,6 +204,10 @@ void
 ParallelBibleView::AttachedToWindow()
 {
 	BView::AttachedToWindow();
+	// See the constructor comment on fAddColumnButton: this is the first
+	// point at which this view actually has a Looper, so it's the first
+	// point SetTarget(this) can build a valid BMessenger.
+	fAddColumnButton->SetTarget(this);
 	_RebuildLayout();
 }
 
@@ -562,6 +618,41 @@ ParallelBibleView::_RebuildLayout()
 void
 ParallelBibleView::_RebuildHeader()
 {
+	// If the number of columns hasn't changed, this is a content-only
+	// update (a column's dropdown picked a different module/Notes) --
+	// update each existing BMenuField's menu contents and label in
+	// place instead of deleting and recreating it. This matters because
+	// BMenuField::MouseDown() (Haiku's Interface Kit) spawns a
+	// background thread ("_m_task_") to track the very click that
+	// produced this rebuild, and ~BMenuField() blocks in
+	// wait_for_thread() for it; if that thread still needs this
+	// window's lock for its own post-click cleanup while this dispatch
+	// already holds it (BLooper holds its lock for a dispatch's full
+	// duration), deleting the field synchronously here deadlocks the
+	// whole window -- reproduced live, not just theoretical. Structural
+	// changes (a column added or removed, below) don't have this risk:
+	// those are triggered by a plain BButton click ("+"/"x"), which
+	// tracks synchronously with no spawned thread, so by the time this
+	// runs no *other* field's tracking thread should still be active.
+	if (fHeaderFields.size() == fColumnOrder.size()) {
+		for (size_t i = 0; i < fColumnOrder.size(); i++) {
+			bool isNotes = (fColumnOrder[i] == COLUMN_NOTES);
+			const char* label = isNotes
+				? B_TRANSLATE("Notes")
+				: fModules[_BibleIndexForPosition((int32)i)]->getName();
+
+			BMenuField* field = fHeaderFields[i];
+			BMenu* menu = field->Menu();
+			while (menu->CountItems() > 0)
+				delete menu->RemoveItem((int32)0);
+			_PopulateModuleMenu(menu, (int32)i, isNotes ? NULL : label,
+				isNotes);
+			if (field->MenuItem() != NULL)
+				field->MenuItem()->SetLabel(label);
+		}
+		return;
+	}
+
 	for (size_t i = 0; i < fHeaderFields.size(); i++) {
 		fHeaderFields[i]->RemoveSelf();
 		delete fHeaderFields[i];
@@ -962,35 +1053,33 @@ ParallelBibleView::_NotesColumnWidth() const
 }
 
 
-// Builds a popup menu listing every installed module, split into
-// per-category submenus (Biblical Texts, Commentaries -- matching the
-// categories the old toolbar's module field used to split into before
-// the main window/Parallel View merge), labeled with each module's short
-// code (e.g. "KJV") rather than its full description -- the latter is
-// too long to be legible once truncated to column width, plus a "Notes"
-// entry so any column can be turned into the notes column from its own
-// dropdown. columnIndex is embedded in each item's message so
-// MessageReceived() knows whether to append a new column (columnIndex < 0,
-// used by the trailing "+" button) or replace an existing one (columnIndex
-// >= 0, used by a column's own header field). markedModuleName, if given,
-// is checked off to show the column's current selection; markNotes does
-// the same for the "Notes" entry. There's only ever one notes column
-// (backed by the single, shared PersonalNotesModule, see fNotes), so
-// "Notes" is only offered here if this column already is the notes column
-// (markNotes) or no column currently is one (fNotes == NULL) -- otherwise
-// picking it would have nothing sensible to do.
-BPopUpMenu*
-ParallelBibleView::_BuildModuleMenu(int32 columnIndex,
+// Fills an already-constructed, already-empty BMenu with every installed
+// module, split into per-category submenus (Biblical Texts, Commentaries
+// -- matching the categories the old toolbar's module field used to split
+// into before the main window/Parallel View merge), labeled with each
+// module's short code (e.g. "KJV") rather than its full description --
+// the latter is too long to be legible once truncated to column width,
+// plus a "Notes" entry so any column can be turned into the notes column
+// from its own dropdown. columnIndex is embedded in each item's message
+// so MessageReceived() knows whether to append a new column (columnIndex
+// < 0, used by the trailing "+" button) or replace an existing one
+// (columnIndex >= 0, used by a column's own header field).
+// markedModuleName, if given, is checked off to show the column's
+// current selection; markNotes does the same for the "Notes" entry.
+// There's only ever one notes column (backed by the single, shared
+// PersonalNotesModule, see fNotes), so "Notes" is only offered here if
+// this column already is the notes column (markNotes) or no column
+// currently is one (fNotes == NULL) -- otherwise picking it would have
+// nothing sensible to do.
+//
+// Split out from _BuildModuleMenu() (below) so _RebuildHeader() can
+// repopulate an *existing* column's menu in place instead of building a
+// fresh one -- see there for why: deleting the BMenuField that wraps it
+// is the risky part, not deleting/rebuilding what's inside it.
+void
+ParallelBibleView::_PopulateModuleMenu(BMenu* menu, int32 columnIndex,
 	const char* markedModuleName, bool markNotes)
 {
-	if (fManager == NULL)
-		return NULL;
-
-	// radioMode so BMenu itself keeps exactly one item marked as the user
-	// picks different translations; labelFromMarked so the field displays
-	// that marked item's label instead of this constructor's own `name`.
-	BPopUpMenu* menu = new BPopUpMenu("translation", true, true);
-
 	BMenu* bibleMenu = new BMenu(B_TRANSLATE("Biblical Texts"));
 	BMenu* commentaryMenu = new BMenu(B_TRANSLATE("Commentaries"));
 
@@ -1044,6 +1133,20 @@ ParallelBibleView::_BuildModuleMenu(int32 columnIndex,
 		notesItem->SetMarked(markNotes);
 		menu->AddItem(notesItem);
 	}
+}
 
+
+BPopUpMenu*
+ParallelBibleView::_BuildModuleMenu(int32 columnIndex,
+	const char* markedModuleName, bool markNotes)
+{
+	if (fManager == NULL)
+		return NULL;
+
+	// radioMode so BMenu itself keeps exactly one item marked as the user
+	// picks different translations; labelFromMarked so the field displays
+	// that marked item's label instead of this constructor's own `name`.
+	BPopUpMenu* menu = new BPopUpMenu("translation", true, true);
+	_PopulateModuleMenu(menu, columnIndex, markedModuleName, markNotes);
 	return menu;
 }

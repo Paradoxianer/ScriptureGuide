@@ -21,10 +21,12 @@
 using namespace sword;
 
 class BButton;
+class BMenu;
 class BMenuField;
 class BPopUpMenu;
 class BStringView;
 class NoteFieldView;
+class ParallelHeaderView;
 
 
 // Displays one or more Bible translations side by side, each in its own
@@ -127,6 +129,12 @@ public:
 			status_t			PrevChapter();
 
 private:
+			friend class ParallelHeaderView;
+			// Called from ~ParallelHeaderView() so this view never holds a
+			// dangling fHeaderView -- see the class comment on HeaderView()
+			// ownership and ~ParallelBibleView().
+			void				_HeaderViewDestroyed();
+
 			// A column "slot" holds either a Bible/Commentary module or the
 			// (single, shared) notes column -- see the class comment. Order
 			// here is the on-screen left-to-right order of all columns;
@@ -151,6 +159,10 @@ private:
 			status_t			_SetColumnToBible(int32 position,
 									const char* moduleName);
 			status_t			_SetColumnToNotes(int32 position);
+			void				_PopulateModuleMenu(BMenu* menu,
+									int32 columnIndex,
+									const char* markedModuleName,
+									bool markNotes);
 			BPopUpMenu*			_BuildModuleMenu(int32 columnIndex,
 									const char* markedModuleName,
 									bool markNotes);
