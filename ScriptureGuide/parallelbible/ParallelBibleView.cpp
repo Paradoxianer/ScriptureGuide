@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include <Bitmap.h>
 #include <Button.h>
 #include <Catalog.h>
 #include <Font.h>
@@ -210,9 +211,90 @@ private:
 		drag.AddString("scriptureguide:reference", reference);
 		drag.AddString("scriptureguide:translation", fTranslationName);
 
-		BRect dragRect(fDragStartPoint.x - 4.0f, fDragStartPoint.y - 4.0f,
-			fDragStartPoint.x + 200.0f, fDragStartPoint.y + 20.0f);
-		DragMessage(&drag, dragRect & Bounds(), this);
+		BString snippet(text);
+		snippet.ReplaceAll("\n", " ");
+
+		BBitmap* dragBitmap = _CreateDragBitmap(clipName, snippet);
+		if (dragBitmap != NULL && dragBitmap->IsValid()) {
+			DragMessage(&drag, dragBitmap, B_OP_ALPHA, BPoint(8.0f, 8.0f),
+				this);
+		} else {
+			delete dragBitmap;
+			BRect dragRect(fDragStartPoint.x - 4.0f,
+				fDragStartPoint.y - 4.0f, fDragStartPoint.x + 200.0f,
+				fDragStartPoint.y + 20.0f);
+			DragMessage(&drag, dragRect & Bounds(), this);
+		}
+	}
+
+	// A small "sticky note" style label following the cursor for the
+	// whole drag -- shows what's being dragged (reference + a one-line
+	// snippet of the actual text) instead of the bare outline rectangle
+	// DragMessage() falls back to on its own. Ownership passes to
+	// DragMessage() once called; the caller must not delete the
+	// returned bitmap itself.
+	BBitmap* _CreateDragBitmap(const BString& reference,
+		const BString& snippet) const
+	{
+		BFont font;
+		GetFont(&font);
+		font_height fontHeight;
+		font.GetHeight(&fontHeight);
+		float lineHeight = ceilf(fontHeight.ascent + fontHeight.descent
+			+ fontHeight.leading);
+
+		BFont snippetFont(font);
+		snippetFont.SetSize(font.Size() * 0.85f);
+		font_height snippetFontHeight;
+		snippetFont.GetHeight(&snippetFontHeight);
+		float snippetLineHeight = ceilf(snippetFontHeight.ascent
+			+ snippetFontHeight.descent + snippetFontHeight.leading);
+
+		const float kMaxTextWidth = 240.0f;
+		const float kPadding = 6.0f;
+
+		BString clippedSnippet(snippet);
+		snippetFont.TruncateString(&clippedSnippet, B_TRUNCATE_END,
+			kMaxTextWidth);
+
+		float width = std::min(std::max(font.StringWidth(reference.String()),
+			snippetFont.StringWidth(clippedSnippet.String())),
+			kMaxTextWidth) + kPadding * 2.0f;
+		float height = lineHeight + snippetLineHeight + kPadding * 2.0f;
+
+		BRect bounds(0.0f, 0.0f, ceilf(width) - 1.0f, ceilf(height) - 1.0f);
+		BBitmap* bitmap = new BBitmap(bounds, B_RGBA32, true);
+		BView* view = new BView(bounds, "dragPreview", B_FOLLOW_NONE,
+			B_WILL_DRAW);
+		bitmap->AddChild(view);
+
+		if (bitmap->Lock()) {
+			view->SetDrawingMode(B_OP_ALPHA);
+			view->SetHighColor(255, 250, 210, 235);
+			view->SetLowColor(255, 250, 210, 0);
+			view->FillRoundRect(bounds, 5.0f, 5.0f);
+			view->SetHighColor(150, 120, 40, 255);
+			view->StrokeRoundRect(bounds, 5.0f, 5.0f);
+
+			view->SetDrawingMode(B_OP_OVER);
+			view->SetHighColor(20, 20, 20, 255);
+			view->SetFont(&font);
+			view->DrawString(reference.String(),
+				BPoint(kPadding, kPadding + fontHeight.ascent));
+
+			view->SetHighColor(90, 90, 90, 255);
+			view->SetFont(&snippetFont);
+			view->DrawString(clippedSnippet.String(),
+				BPoint(kPadding, kPadding + lineHeight
+					+ snippetFontHeight.ascent));
+
+			view->Sync();
+			bitmap->RemoveChild(view);
+			bitmap->Unlock();
+		}
+		delete view;
+
+		return bitmap;
 	}
 
 	// "<Book> <Chapter>:<StartVerse>[-<EndVerse>]" for the given text

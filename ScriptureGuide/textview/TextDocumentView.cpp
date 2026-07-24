@@ -203,10 +203,18 @@ TextDocumentView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragM
 
 	SetViewCursor(&cursor);
 
+	// dragMessage != NULL means a drag-and-drop session is passing over
+	// this view right now -- including one this same view just started
+	// (see BibleColumnView::_StartDrag()), since the source view keeps
+	// receiving MouseMoved() with the mouse button still physically
+	// down for the whole gesture. Without this check, every move during
+	// a drag silently extended the text selection to wherever the
+	// pointer currently is, which is confusing to watch and not what a
+	// drag is supposed to do to the selection it's dragging.
 	uint32 buttons = 0;
 	if (Window() != NULL)
 		Window()->CurrentMessage()->FindInt32("buttons", (int32*)&buttons);
-	if (buttons > 0)
+	if (buttons > 0 && dragMessage == NULL)
 		SetCaret(where, true);
 
 	BView::MouseMoved(where, transit, dragMessage);
