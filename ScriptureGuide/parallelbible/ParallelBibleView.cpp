@@ -148,6 +148,7 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fNotes(NULL),
 	fHeaderView(NULL),
 	fAddColumnButton(NULL),
+	fShowVerseNumbers(true),
 	fInitialWidth(initialWidth),
 	fContentHeight(0.0f),
 	fContentWidth(0.0f)
@@ -403,6 +404,22 @@ ParallelBibleView::SetNotesEnabled(bool enabled)
 }
 
 
+// Applies to every current Bible/Commentary column, and is remembered
+// (fShowVerseNumbers) so columns added afterward (see _SetColumnToBible())
+// start out matching it too -- this is a single, window-wide setting, not
+// something that varies per column, mirroring how it worked before there
+// were multiple columns at all.
+status_t
+ParallelBibleView::SetShowVerseNumbers(bool show)
+{
+	fShowVerseNumbers = show;
+	for (size_t i = 0; i < fDocuments.size(); i++)
+		fDocuments[i]->SetShowVerseNumbers(show);
+	_Realign();
+	return B_OK;
+}
+
+
 // Counts the COLUMN_BIBLE slots in fColumnOrder before `position`, which is
 // exactly the index that slot's module/document pair has in fModules/
 // fDocuments -- those arrays only ever hold Bible/Commentary columns, in
@@ -454,6 +471,10 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 
 	BReference<BibleTextDocument> document(new BibleTextDocument(module),
 		true);
+	// Match whatever the other columns are currently showing (see
+	// SetShowVerseNumbers()) -- BibleTextDocument defaults to true, so
+	// this only matters when the setting has been turned off.
+	document->SetShowVerseNumbers(fShowVerseNumbers);
 
 	if (position < 0) {
 		fModules.push_back(module);

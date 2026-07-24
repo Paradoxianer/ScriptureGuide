@@ -124,6 +124,10 @@ public:
 			bool				NotesEnabled() const
 									{ return fNotes != NULL; }
 
+			status_t			SetShowVerseNumbers(bool show);
+			bool				ShowVerseNumbers() const
+									{ return fShowVerseNumbers; }
+
 			status_t			SetKey(const char* key);
 			status_t			NextChapter();
 			status_t			PrevChapter();
@@ -184,6 +188,8 @@ private:
 
 			BView*				fHeaderView;
 			BButton*			fAddColumnButton;
+
+			bool				fShowVerseNumbers;
 
 			BString				fCurrentKey;
 			float				fInitialWidth;
