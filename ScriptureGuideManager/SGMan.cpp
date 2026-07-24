@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <Alert.h>
 #include <Entry.h>
 #include <File.h>
 #include <Message.h>
@@ -24,14 +25,39 @@ public:
 
 	status_t TokenizeWords(const char *source, BList *stringarray, const char *tokenstr);
 	void SetupPackageList(void);
+	bool ConfirmNetworkAccess(void);
 };
 
 SGMApp::SGMApp(void)
  : BApplication("application/x-vnd.wgp.ScriptureGuideManager")
 {
-	SetupPackageList();
+	// Fetching the package list and downloading modules both mean
+	// contacting crosswire.org over plain, unencrypted HTTP -- in some
+	// countries that alone can be enough to put someone at risk. Ask
+	// before any of that happens, not after; if the user declines, skip
+	// SetupPackageList() (and therefore every wget call in it) entirely
+	// and still open the window, just with an empty list.
+	if (ConfirmNetworkAccess())
+		SetupPackageList();
 	MainWindow *win=new MainWindow(BRect(300,200,900,600));
 	win->Show();
+}
+
+
+bool
+SGMApp::ConfirmNetworkAccess(void)
+{
+	BAlert* alert = new BAlert("Network Access",
+		"ScriptureGuide Book Manager needs to contact crosswire.org over "
+		"the internet (plain HTTP, not encrypted) to list and download "
+		"Bible modules.\n\n"
+		"In some countries, accessing Bible translations or other "
+		"religious content online is monitored or restricted, and doing "
+		"so could put you at risk. Only continue if you're sure this is "
+		"safe where you are.",
+		"Cancel", "Continue", NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+	alert->SetShortcut(0, B_ESCAPE);
+	return alert->Go() == 1;
 }
 
 SGMApp::~SGMApp(void)
