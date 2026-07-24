@@ -21,6 +21,7 @@
 
 
 class SGModule;
+class FontPanel;
 
 #define M_WINDOW_CLOSED 'wcls'
 using namespace std;
@@ -80,6 +81,7 @@ private:
 
 	int16			fFontSize;
 	BFont			fDisplayFont;
+	FontPanel		*fFontPanel;
 
 	bool			fIsLineBreak,
 					fShowVerseNumbers;

@@ -29,6 +29,7 @@
 #include <iostream>
 
 #include "constants.h"
+#include "FontPanel.h"
 #include "LogosApp.h"
 #include "Preferences.h"
 
@@ -42,7 +43,8 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
  	fCurrentModule(NULL),
  	fCurrentChapter(1),
  	fFindMessenger(NULL),
-	fSearchWindow(NULL)
+	fSearchWindow(NULL),
+	fFontPanel(NULL)
 {
 	fCurrentVerse = selectVers;
 	fCurrentVerseEnd = selectVersEnd;
@@ -177,6 +179,8 @@ void SGMainWindow::BuildGUI(void)
 		new BMessage(MENU_OPTIONS_VERSENUMBERS));
 	fShowVerseNumItem->SetMarked(fShowVerseNumbers);
 	menu->AddItem(fShowVerseNumItem);
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Choose Font…"),
+		new BMessage(MENU_OPTIONS_FONT)));
 	fMenuBar->AddItem(menu);
 
 	// Prepare the book menu
@@ -346,6 +350,10 @@ void SGMainWindow::LoadPrefsForModule(void)
 	// has actually changed (see BibleTextDocument::SetShowVerseNumbers()).
 	fShowVerseNumItem->SetMarked(fShowVerseNumbers);
 	fParallelView->SetShowVerseNumbers(fShowVerseNumbers);
+
+	// Same idea for fDisplayFont -- was dead state before this (see #21):
+	// loaded/saved but never actually applied to the reading pane.
+	fParallelView->SetBaseFont(fDisplayFont);
 }
 
 
@@ -568,6 +576,38 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fShowVerseNumbers = !fShowVerseNumbers;
 			fShowVerseNumItem->SetMarked(fShowVerseNumbers);
 			fParallelView->SetShowVerseNumbers(fShowVerseNumbers);
+			SavePrefsForModule();
+			break;
+		}
+
+		case MENU_OPTIONS_FONT:
+		{
+			if (fFontPanel)
+				delete fFontPanel;
+
+			fFontPanel = new FontPanel(this, NULL, fFontSize);
+			fFontPanel->SelectFont(fDisplayFont);
+			fFontPanel->Show();
+			break;
+		}
+
+		// Sent by FontPanel once the user picks OK.
+		case M_FONT_SELECTED:
+		{
+			BString family;
+			BString style;
+			float size;
+
+			if (msg->FindString("family", &family) != B_OK
+				|| msg->FindString("style", &style) != B_OK
+				|| msg->FindFloat("size", &size) != B_OK)
+				break;
+
+			fFontSize = (int16)size;
+			fDisplayFont.SetSize(size);
+			fDisplayFont.SetFamilyAndStyle(family.String(), style.String());
+
+			fParallelView->SetBaseFont(fDisplayFont);
 			SavePrefsForModule();
 			break;
 		}
@@ -813,6 +853,11 @@ bool SGMainWindow::QuitRequested()
 	{
 		if (fSearchWindow->LockLooper())
 			fSearchWindow->Quit();
+	}
+	if (fFontPanel)
+	{
+		if (fFontPanel->Window()->LockLooper())
+			fFontPanel->Window()->Quit();
 	}
 	SavePrefsForModule();
 	be_app_messenger.SendMessage(new BMessage(M_WINDOW_CLOSED));
