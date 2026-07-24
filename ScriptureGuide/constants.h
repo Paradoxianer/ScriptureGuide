@@ -19,6 +19,7 @@
 #define PREFERENCES_FILE "/boot/home/config/settings/scriptureguide/settings"
 #define MODULES_PATH "/boot/home/config/settings/sword/"
 #define WEBSITE_URL "http://www.scripture-guide.org/"
+#define SG_MANAGER_SIGNATURE "application/x-vnd.wgp.ScriptureGuideManager"
 
 #define FONTSIZE 12
 #define LINEBREAK false
@@ -46,6 +47,7 @@ const uint32 WINDOW_REGISTRY_ADDED		= 'WRdd';
 
 const uint32 MENU_FILE_NEW				= 'MFnw';
 const uint32 MENU_FILE_QUIT				= 'MFqu';
+const uint32 MENU_PROGRAM_BOOKMANAGER	= 'MPbm';
 
 const uint32 MENU_EDIT_NOTE				= 'MEno';
 const uint32 MENU_EDIT_FIND				= 'MEfi';

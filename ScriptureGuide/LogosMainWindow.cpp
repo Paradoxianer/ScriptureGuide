@@ -150,6 +150,9 @@ void SGMainWindow::BuildGUI(void)
 	menu->AddItem(new BMenuItem(B_TRANSLATE("About Scripture Guide…"),
 		new BMessage(MENU_HELP_ABOUT)));
 	menu->AddSeparatorItem();
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Book Manager…"),
+		new BMessage(MENU_PROGRAM_BOOKMANAGER)));
+	menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Duplicate This Window…"),
 		new BMessage(MENU_FILE_NEW), 'D'));
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Close This Window"),
@@ -552,6 +555,11 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			window->AddSpecialThanks(specialThanks);
 
 			window->Show();
+			break;
+		}
+		case MENU_PROGRAM_BOOKMANAGER:
+		{
+			be_roster->Launch(SG_MANAGER_SIGNATURE);
 			break;
 		}
 		case FIND_QUIT:
