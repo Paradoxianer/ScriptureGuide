@@ -126,14 +126,19 @@ private:
 // than falling straight through to TextDocumentView's own handling.
 //
 // Fresh selections coordinate across columns through fOwner (see
-// ParallelBibleView::_ColumnSelectionStarted() and friends): starting a
-// selection in one column and dragging into a sibling extends a second,
-// verse-aligned selection there too, matching the same verse range (each
-// column's paragraphs are the same verses in the same order, just
-// different translations, thanks to VerseAligner) -- not just this
-// column's own selection growing in isolation. _StartDrag() then gathers
-// every column with a non-empty selection into one combined clipping,
-// matching issue #23's original spec (one translation+reference block per
+// ParallelBibleView::_ColumnSelectionStarted() and friends): the whole
+// gesture is one selection rectangle from the MouseDown point to wherever
+// the cursor currently is, same as dragging a selection rectangle in any
+// two-dimensional view -- which verses (the rectangle's y-extent) and
+// which columns (its x-extent) are resolved once per move and applied to
+// every column whose own frame overlaps it, rather than each column
+// growing its own selection independently in isolation. Verse-level
+// granularity, not character-level, once more than one column can be
+// involved -- half a verse in one translation and a different half in
+// another don't correspond to anything; verses are the unit two
+// translations can actually agree on. _StartDrag() then gathers every
+// column with a non-empty selection into one combined clipping, matching
+// issue #23's original spec (one translation+reference block per
 // participating column).
 class BibleColumnView : public TextDocumentView {
 public:
@@ -144,8 +149,7 @@ public:
 		fBibleDocument(document),
 		fTranslationName(translationName),
 		fOwner(owner),
-		fTrackingForDrag(false),
-		fSelectionStartVerse(-1)
+		fTrackingForDrag(false)
 	{
 	}
 
@@ -165,22 +169,17 @@ public:
 			}
 		}
 
-		// A fresh selection starts here -- remember which verse, and
-		// claim ownership of the gesture for as long as the mouse stays
-		// down so sibling columns (which still get their own
-		// MouseMoved() as the cursor passes over them -- see the class
-		// comment) stay passive instead of independently growing their
-		// own selection from wherever they happened to be sitting.
-		if (fBibleDocument != NULL) {
-			int32 paragraphOffset;
-			int32 offset = TextOffsetAt(where);
-			int32 paragraphIndex = fBibleDocument->ParagraphIndexFor(offset,
-				paragraphOffset);
-			fSelectionStartVerse = fBibleDocument->VerseForParagraphIndex(
-				paragraphIndex);
-		}
+		// A fresh selection starts here -- claim ownership of the
+		// gesture for as long as the mouse stays down, so sibling
+		// columns (which still get their own MouseMoved() as the cursor
+		// passes over them -- see the class comment) stay passive
+		// instead of independently growing their own selection from
+		// wherever they happened to be sitting. fOwner resolves the
+		// whole gesture as one selection rectangle from this anchor
+		// point to wherever the cursor currently is -- see
+		// ParallelBibleView::_ColumnSelectionMoved().
 		if (fOwner != NULL)
-			fOwner->_ColumnSelectionStarted(this);
+			fOwner->_ColumnSelectionStarted(this, ConvertToScreen(where));
 
 		TextDocumentView::MouseDown(where);
 	}
@@ -209,16 +208,14 @@ public:
 			return;
 		}
 
-		if (fSelectionStartVerse >= 0 && fOwner != NULL
-			&& fOwner->_HasActiveColumnSelection()) {
+		if (fOwner != NULL && fOwner->_HasActiveColumnSelection()) {
 			uint32 buttons = 0;
 			if (Window() != NULL) {
 				Window()->CurrentMessage()->FindInt32("buttons",
 					(int32*)&buttons);
 			}
 			if (buttons > 0) {
-				fOwner->_ColumnSelectionMoved(this, fSelectionStartVerse,
-					ConvertToScreen(where));
+				fOwner->_ColumnSelectionMoved(this, ConvertToScreen(where));
 				return;
 			}
 		}
@@ -237,62 +234,47 @@ public:
 		} else if (fOwner != NULL) {
 			fOwner->_ColumnSelectionEnded();
 		}
-		fSelectionStartVerse = -1;
 		TextDocumentView::MouseUp(where);
 	}
 
-	// The rest of these are called on sibling columns by
-	// ParallelBibleView::_ColumnSelectionMoved() -- see the class comment.
+	// The rest of these are called by ParallelBibleView::
+	// _ColumnSelectionMoved() -- see the class comment. Once a
+	// fresh-selection gesture has crossed into a different column at
+	// least once, _ColumnSelectionMoved() switches every participating
+	// column (source included) over to these: the whole gesture becomes
+	// one shared verse range applied uniformly, since "half a verse in
+	// one translation, a different half in another" doesn't mean
+	// anything -- verses are the unit two translations can actually
+	// agree on, characters aren't.
 
-	// Verse-aligned companion selection: startVerse (translated through
-	// this column's own paragraph layout, since a verse number means the
-	// same paragraph index in every column) through whatever verse
-	// `where` (this column's local coordinates) currently resolves to.
-	void SelectVerseRangeAt(int startVerse, BPoint where)
+	// The verse at this column's own local point `where`, or -1 if it
+	// doesn't resolve to one (e.g. outside the loaded chapter).
+	int VerseAt(BPoint where)
 	{
 		if (fBibleDocument == NULL)
-			return;
-
+			return -1;
 		int32 paragraphOffset;
 		int32 offset = TextOffsetAt(where);
 		int32 paragraphIndex = fBibleDocument->ParagraphIndexFor(offset,
 			paragraphOffset);
-		int endVerse = fBibleDocument->VerseForParagraphIndex(paragraphIndex);
-		if (endVerse < 0)
-			endVerse = startVerse;
-
-		int32 start, end;
-		int lowVerse = std::min(startVerse, endVerse);
-		int highVerse = std::max(startVerse, endVerse);
-		if (fBibleDocument->TextRangeForVerseRange(lowVerse, highVerse, start,
-				end)) {
-			SetSelectionEnabled(true);
-			SetSelection(start, end);
-		}
+		return fBibleDocument->VerseForParagraphIndex(paragraphIndex);
 	}
 
-	// The gesture has moved on past this column entirely -- select
-	// through to this column's own last verse, same idea as highlighting
-	// the rest of a paragraph the cursor has already passed.
-	void SelectThroughEnd(int startVerse)
+	// lowVerse..highVerse translated through this column's own paragraph
+	// layout (a verse number means the same paragraph index in every
+	// column -- see VerseAligner) and applied as its selection. Clears
+	// the selection instead if this column doesn't have that range at
+	// all (e.g. a commentary without an entry for one of those verses).
+	void SelectVerseRange(int lowVerse, int highVerse)
 	{
-		if (fBibleDocument == NULL)
-			return;
-
-		int32 lastParagraphIndex = fBibleDocument->CountParagraphs() - 1;
-		if (lastParagraphIndex < 0)
-			return;
-		int lastVerse = fBibleDocument->VerseForParagraphIndex(
-			lastParagraphIndex);
-		if (lastVerse < 0)
-			return;
-
 		int32 start, end;
-		int lowVerse = std::min(startVerse, lastVerse);
-		if (fBibleDocument->TextRangeForVerseRange(lowVerse, lastVerse, start,
-				end)) {
+		if (fBibleDocument != NULL
+			&& fBibleDocument->TextRangeForVerseRange(lowVerse, highVerse,
+				start, end)) {
 			SetSelectionEnabled(true);
 			SetSelection(start, end);
+		} else {
+			SetSelection(0, 0);
 		}
 	}
 
@@ -309,7 +291,7 @@ private:
 
 		// Gather every column (this one included) that currently has a
 		// non-empty selection -- a fresh cross-column gesture (see
-		// SelectVerseRangeAt()/SelectThroughEnd() above) can leave more
+		// SelectVerseRange() above) can leave more
 		// than one populated before the user picks any of them back up
 		// to drag. Matches issue #23's original spec: one
 		// translation+reference block per participating column.
@@ -515,8 +497,6 @@ private:
 	ParallelBibleView*	fOwner;
 	bool				fTrackingForDrag;
 	BPoint				fDragStartPoint;
-	// -1 when no fresh-selection gesture is in progress in this column.
-	int					fSelectionStartVerse;
 };
 
 
@@ -564,6 +544,7 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fHeaderView(NULL),
 	fAddColumnButton(NULL),
 	fActiveSelectionColumn(NULL),
+	fSelectionLastEndVerse(-1),
 	fShowVerseNumbers(true),
 	fInitialWidth(initialWidth),
 	fContentHeight(0.0f),
@@ -1023,9 +1004,12 @@ ParallelBibleView::HighlightVerse(int startVerse, int endVerse)
 
 
 void
-ParallelBibleView::_ColumnSelectionStarted(BibleColumnView* source)
+ParallelBibleView::_ColumnSelectionStarted(BibleColumnView* source,
+	BPoint screenPoint)
 {
 	fActiveSelectionColumn = source;
+	fSelectionAnchorScreen = screenPoint;
+	fSelectionLastEndVerse = -1;
 }
 
 
@@ -1053,41 +1037,63 @@ ParallelBibleView::_IsColumnSelectionOwnedByOther(BibleColumnView* column)
 
 // Called by the owning column (fActiveSelectionColumn) on every
 // MouseMoved() of an active fresh-selection gesture -- see the class
-// comment on BibleColumnView. Walks every Bible/Commentary column and
-// decides, per column, whether it's the source, currently under the
-// cursor, or neither:
+// comment on BibleColumnView. The gesture is one selection rectangle
+// from fSelectionAnchorScreen (set in _ColumnSelectionStarted()) to
+// screenPoint, resolved into a verse range and a column range:
 //
-//  - the source column itself: extends its own selection normally while
-//    the cursor is still within its own bounds, or selects through to its
-//    own last verse once the cursor has moved past it into a sibling;
-//  - whichever OTHER column the cursor is currently over: a verse-aligned
-//    companion selection from startVerse through whatever verse is under
-//    the cursor there;
-//  - any other column (the gesture passed through it earlier but has
-//    since moved on): selection cleared, rather than left stranded.
+//  - verse range: both ends resolved via the SOURCE column's own
+//    coordinate mapping alone -- every column's rows sit at the same y
+//    position for the same verse (see VerseAligner), so one column's
+//    lookup already speaks for all of them. If the current point
+//    doesn't resolve to a verse (e.g. dragged into the header row, or
+//    past the last line), the previous end verse is kept rather than
+//    collapsing the range;
+//  - column range: every column whose own frame (in this view's local
+//    coordinates) overlaps the rectangle's x-extent, so dragging from
+//    column 1 to column 3 also includes column 2 in between, even if
+//    the cursor swept past it without lingering.
+//
+// Every column in range gets the same verse range applied (see
+// BibleColumnView::SelectVerseRange()); anything outside it gets
+// cleared, rather than left stranded from earlier in the same gesture.
 void
 ParallelBibleView::_ColumnSelectionMoved(BibleColumnView* source,
-	int startVerse, BPoint screenPoint)
+	BPoint screenPoint)
 {
+	if (source == NULL)
+		return;
+
+	BPoint anchorInSource = source->ConvertFromScreen(fSelectionAnchorScreen);
+	BPoint currentInSource = source->ConvertFromScreen(screenPoint);
+	int startVerse = source->VerseAt(anchorInSource);
+	int endVerse = source->VerseAt(currentInSource);
+	if (endVerse < 0)
+		endVerse = fSelectionLastEndVerse >= 0 ? fSelectionLastEndVerse
+			: startVerse;
+	else
+		fSelectionLastEndVerse = endVerse;
+	if (startVerse < 0)
+		startVerse = endVerse;
+
+	int lowVerse = std::min(startVerse, endVerse);
+	int highVerse = std::max(startVerse, endVerse);
+
+	BPoint anchorLocal = ConvertFromScreen(fSelectionAnchorScreen);
+	BPoint currentLocal = ConvertFromScreen(screenPoint);
+	float left = std::min(anchorLocal.x, currentLocal.x);
+	float right = std::max(anchorLocal.x, currentLocal.x);
+
 	for (size_t i = 0; i < fTextViews.size(); i++) {
 		BibleColumnView* column
 			= dynamic_cast<BibleColumnView*>(fTextViews[i]);
 		if (column == NULL)
 			continue;
 
-		BPoint localPoint = column->ConvertFromScreen(screenPoint);
-		bool underCursor = column->Bounds().Contains(localPoint);
-
-		if (column == source) {
-			if (underCursor)
-				column->SetCaret(localPoint, true);
-			else
-				column->SelectThroughEnd(startVerse);
-		} else if (underCursor) {
-			column->SelectVerseRangeAt(startVerse, localPoint);
-		} else {
+		BRect frame = column->Frame();
+		if (frame.right >= left && frame.left <= right)
+			column->SelectVerseRange(lowVerse, highVerse);
+		else
 			column->ClearColumnSelection();
-		}
 	}
 }
 

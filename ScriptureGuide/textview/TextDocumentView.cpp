@@ -671,7 +671,16 @@ TextDocumentView::_DrawSelection()
 	SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
 	MovePenTo(fInsetLeft - 0.5f, fInsetTop - 0.5f);
 
-	if (IsFocus() && Window() != NULL && Window()->IsActive()) {
+	// Deliberately not gated on IsFocus() too -- a cross-column selection
+	// (see BibleColumnView in ParallelBibleView.cpp) spans several
+	// sibling views at once, only one of which can hold literal
+	// keyboard focus at any moment. Every column showing a selection
+	// should look the same (a solid fill, not some columns getting only
+	// the thinner stroke-only fallback below) as long as the window
+	// itself is the active one -- the same convention as dimming a
+	// selection when a whole window is inactive, just not per-view
+	// within it.
+	if (Window() != NULL && Window()->IsActive()) {
 		SetHighColor(30, 30, 30);
 		FillShape(&shape);
 	}

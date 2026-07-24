@@ -163,10 +163,10 @@ public:
 			// selection from wherever it happened to be sitting
 			// instead of participating in the same gesture.
 			void				_ColumnSelectionStarted(
-									BibleColumnView* source);
-			void				_ColumnSelectionMoved(
 									BibleColumnView* source,
-									int startVerse, BPoint screenPoint);
+									BPoint screenPoint);
+			void				_ColumnSelectionMoved(
+									BibleColumnView* source, BPoint screenPoint);
 			void				_ColumnSelectionEnded();
 			bool				_HasActiveColumnSelection() const;
 			bool				_IsColumnSelectionOwnedByOther(
@@ -235,6 +235,14 @@ private:
 			// Non-owning; NULL when no cross-column selection gesture
 			// is currently active (see _ColumnSelectionStarted()).
 			BibleColumnView*	fActiveSelectionColumn;
+			// Screen-space anchor of the active gesture's MouseDown --
+			// the selection rectangle for any given MouseMoved() is
+			// this point to the current one (see _ColumnSelectionMoved()).
+			BPoint				fSelectionAnchorScreen;
+			// Last verse the cursor resolved to; kept stable while the
+			// cursor is briefly over a gap/margin rather than
+			// resetting/collapsing the range. -1 when unset.
+			int					fSelectionLastEndVerse;
 
 			bool				fShowVerseNumbers;
 			BFont				fBaseFont;
