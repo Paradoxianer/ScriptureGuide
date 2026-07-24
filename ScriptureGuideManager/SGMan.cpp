@@ -44,9 +44,17 @@ SGMApp::SGMApp(void)
 }
 
 
+// Existence of this file means "don't ask again" was chosen previously --
+// its content doesn't matter, only that it's there.
+#define SG_SKIP_WARNING_MARKER SG_SETTINGS_PATH "skip-network-warning"
+
 bool
 SGMApp::ConfirmNetworkAccess(void)
 {
+	BEntry marker(SG_SKIP_WARNING_MARKER);
+	if (marker.Exists())
+		return true;
+
 	BAlert* alert = new BAlert("Network Access",
 		"ScriptureGuide Book Manager needs to contact crosswire.org over "
 		"the internet (plain HTTP, not encrypted) to list and download "
@@ -55,9 +63,22 @@ SGMApp::ConfirmNetworkAccess(void)
 		"religious content online is monitored or restricted, and doing "
 		"so could put you at risk. Only continue if you're sure this is "
 		"safe where you are.",
-		"Cancel", "Continue", NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+		"Cancel", "Don't ask again", "Continue", B_WIDTH_AS_USUAL,
+		B_WARNING_ALERT);
 	alert->SetShortcut(0, B_ESCAPE);
-	return alert->Go() == 1;
+	int32 choice = alert->Go();
+
+	if (choice == 1)
+	{
+		// "Don't ask again" -- also proceed this time, same as Continue;
+		// asking a second time right after they just said "don't ask
+		// again" would defeat the point.
+		create_directory(SG_SETTINGS_PATH, 0777);
+		BFile(SG_SKIP_WARNING_MARKER, B_CREATE_FILE | B_WRITE_ONLY);
+		return true;
+	}
+
+	return choice == 2; // "Continue"
 }
 
 SGMApp::~SGMApp(void)
