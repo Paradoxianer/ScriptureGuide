@@ -11,8 +11,30 @@
 
 #include <Catalog.h>
 
+#include <string.h>
+
+#include "constants.h"
+
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "BibleTextDocument"
+
+
+// Mirrors SGModule::IsGreek()/IsHebrew() (SwordBackend.cpp) -- duplicated
+// rather than shared because this class works directly on the sword::
+// SWModule layer and has no dependency on the app's SGModule wrapper.
+static bool
+IsGreekModule(SWModule* module)
+{
+	return strcmp(module->getLanguage(), "grc") == 0
+		|| strcmp(module->getLanguage(), "el") == 0;
+}
+
+
+static bool
+IsHebrewModule(SWModule* module)
+{
+	return strcmp(module->getLanguage(), "he") == 0;
+}
 
 
 // VerseKey::setText()/setBookName() only recognize localized book names
@@ -173,14 +195,45 @@ BibleTextDocument::SetShowVerseNumbers(bool show)
 void
 BibleTextDocument::SetBaseFont(const BFont& font)
 {
-	fVerseTextStyle.SetFont(font);
+	BFont effective = _EffectiveFont(font);
+
+	fVerseTextStyle.SetFont(effective);
 
 	// SetFont() replaces the style's whole BFont, including its face, so
 	// the bold weight set in the constructor has to be reapplied after it.
-	fVerseNumberStyle.SetFont(font);
+	fVerseNumberStyle.SetFont(effective);
 	fVerseNumberStyle.SetBold(true);
 
 	_Rebuild();
+}
+
+
+// Greek/Hebrew modules (fModule->getLanguage(), see IsGreekModule()/
+// IsHebrewModule() above) get a family suited to those scripts instead of
+// whatever the user picked for the rest of the reading pane -- baseFont's
+// size carries over either way. Falls back to baseFont unchanged if that
+// family isn't actually installed (SetFamilyAndFace() failing is the
+// expected case on a system without it, not a bug -- see #21).
+BFont
+BibleTextDocument::_EffectiveFont(const BFont& baseFont) const
+{
+	const char* family = NULL;
+	if (IsGreekModule(fModule))
+		family = GREEK;
+	else if (IsHebrewModule(fModule))
+		family = HEBREW;
+
+	if (family == NULL)
+		return baseFont;
+
+	font_family fontFamily;
+	strlcpy(fontFamily, family, sizeof(font_family));
+
+	BFont effective(baseFont);
+	if (effective.SetFamilyAndFace(fontFamily, B_REGULAR_FACE) != B_OK)
+		return baseFont;
+
+	return effective;
 }
 
 

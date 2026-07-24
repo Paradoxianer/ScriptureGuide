@@ -50,9 +50,11 @@ public:
 			bool				ShowVerseNumbers() const
 									{ return fShowVerseNumbers; }
 
-				// Family/style/size apply to both verse text and
-				// verse numbers; verse numbers keep their bold
-				// weight regardless.
+			// Family/size apply to both verse text and verse
+			// numbers; verse numbers keep their bold weight
+			// regardless. The family is overridden for Greek/
+			// Hebrew modules (see _EffectiveFont() in the .cpp) --
+			// `font`'s size is what actually sticks in that case.
 			void				SetBaseFont(const BFont& font);
 
 			// When true (the default), verses with no rendered text are
@@ -74,6 +76,7 @@ public:
 									const std::map<int, float>& spacing);
 
 private:
+			BFont				_EffectiveFont(const BFont& baseFont) const;
 			void				_Rebuild();
 
 private:
