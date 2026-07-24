@@ -219,7 +219,14 @@ void SGMainWindow::BuildGUI(void)
 		chapterView->DisallowChar(c);
 		verseView->DisallowChar(c);
 	}
-	
+
+	// Universal search/goto box (#7): a reference like "Joh 3:16" or "1
+	// Kor 13" navigates directly (see ParseVerseReference()), anything
+	// else runs a text search in the same Find window "Find Verse..."
+	// opens (see UNIVERSAL_SEARCH in MessageReceived()).
+	fUniversalSearchBox = new BTextControl("universal_search",
+		B_TRANSLATE("Go to / Search:"), NULL, new BMessage(UNIVERSAL_SEARCH));
+
 	// Parallel View is now what the main window's own reading pane is --
 	// with a single column it reads just like the old BTextView pane did,
 	// and the "+" button in its header is how the user adds more columns
@@ -234,6 +241,7 @@ void SGMainWindow::BuildGUI(void)
 	toolBar->AddView(bookfield);
 	toolBar->AddView(fChapterBox);
 	toolBar->AddView(fVerseBox);
+	toolBar->AddView(fUniversalSearchBox);
 	toolBar->AddGlue();
 	toolBar->AddView(fNoteButton);
 
@@ -548,22 +556,7 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		}
 		case MENU_EDIT_FIND:
 		{
-			if (fFindMessenger)
-			{
-				fFindMessenger->SendMessage(M_ACTIVATE_WINDOW);
-				break;
-			}
-			
-			BRect r(Frame().OffsetByCopy(5, 23));
-			r.right = r.left + 325;
-			r.bottom = r.top + 410;
-			if (!fSearchWindow)
-			{
-				fSearchWindow = new SGSearchWindow(r, fCurrentModule->Name(),
-										new BMessenger(this));
-				fFindMessenger = new BMessenger(fSearchWindow);
-			}
-			fSearchWindow->Show();
+			EnsureSearchWindow();
 			break;
 		}
 		case MENU_EDIT_NOTE:
@@ -622,21 +615,25 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		{
 			BString key;
 			if (msg->FindString("key",&key) == B_OK)
+				JumpToKey(key.String());
+			break;
+		}
+		case UNIVERSAL_SEARCH:
+		{
+			BString input(fUniversalSearchBox->Text());
+			input.Trim();
+			if (input.IsEmpty())
+				break;
+
+			BString normalizedKey;
+			if (ParseVerseReference(input.String(), normalizedKey))
 			{
-				SetBook(BookFromKey(key.String()));
-				SetChapter(ChapterFromKey(key.String()));
-				int16 verse = VerseFromKey(key.String());
-				SetVerse(verse);
-				// Each search-result row is exactly one verse (see
-				// ResultListView::MakeDragMessage() -- one "key" per
-				// BibleItem, never a range), so start == end here. Tried
-				// UpperVerseFromKey() for a possible range first, but its
-				// getUpperBound() turned out not to mean what the name
-				// suggests for a plain (non-range) key -- confirmed via
-				// debug output it returned the chapter's last verse
-				// instead of the key's own verse, highlighting most of
-				// the chapter. See #22.
-				fParallelView->HighlightVerse(verse, verse);
+				JumpToKey(normalizedKey.String());
+				fUniversalSearchBox->SetText("");
+			} else
+			{
+				EnsureSearchWindow();
+				fSearchWindow->RunSearch(input.String());
 			}
 			break;
 		}
@@ -849,6 +846,39 @@ void SGMainWindow::SetVerse(const int16 &verse)
 	BString vText;
 	vText << fCurrentVerse;
 	fVerseBox->SetText(vText.String());
+}
+
+
+void
+SGMainWindow::JumpToKey(const char* key)
+{
+	SetBook(BookFromKey(key));
+	SetChapter(ChapterFromKey(key));
+	int16 verse = VerseFromKey(key);
+	SetVerse(verse);
+	fParallelView->HighlightVerse(verse, verse);
+}
+
+
+void
+SGMainWindow::EnsureSearchWindow(void)
+{
+	if (fFindMessenger)
+	{
+		fFindMessenger->SendMessage(M_ACTIVATE_WINDOW);
+		return;
+	}
+
+	BRect r(Frame().OffsetByCopy(5, 23));
+	r.right = r.left + 325;
+	r.bottom = r.top + 410;
+	if (!fSearchWindow)
+	{
+		fSearchWindow = new SGSearchWindow(r, fCurrentModule->Name(),
+								new BMessenger(this));
+		fFindMessenger = new BMessenger(fSearchWindow);
+	}
+	fSearchWindow->Show();
 }
 
 
