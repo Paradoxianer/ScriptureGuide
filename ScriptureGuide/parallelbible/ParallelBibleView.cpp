@@ -579,6 +579,21 @@ ParallelBibleView::SetKey(const char* key)
 }
 
 
+void
+ParallelBibleView::HighlightVerse(int startVerse, int endVerse)
+{
+	for (size_t i = 0; i < fDocuments.size(); i++) {
+		int32 start, end;
+		if (fDocuments[i]->TextRangeForVerseRange(startVerse, endVerse,
+				start, end)) {
+			fTextViews[i]->SetSelection(start, end);
+		} else {
+			fTextViews[i]->SetSelection(0, 0);
+		}
+	}
+}
+
+
 status_t
 ParallelBibleView::NextChapter()
 {

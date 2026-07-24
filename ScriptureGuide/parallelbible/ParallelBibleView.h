@@ -139,6 +139,16 @@ public:
 			status_t			NextChapter();
 			status_t			PrevChapter();
 
+			// Selects verses startVerse..endVerse (inclusive) in every
+			// Bible/Commentary column that has them, deselecting in any
+			// column that doesn't (e.g. a commentary without an entry for
+			// that verse). Callers decide when this is warranted -- SetKey()
+			// itself doesn't call this, since ordinary chapter/verse
+			// navigation isn't supposed to select anything, only a jump
+			// from search is (see #22).
+			void				HighlightVerse(int startVerse,
+									int endVerse);
+
 private:
 			friend class ParallelHeaderView;
 			// Called from ~ParallelHeaderView() so this view never holds a

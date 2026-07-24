@@ -268,6 +268,31 @@ BibleTextDocument::VerseForParagraphIndex(int32 index) const
 }
 
 
+bool
+BibleTextDocument::TextRangeForVerseRange(int startVerse, int endVerse,
+	int32& start, int32& end) const
+{
+	int32 startParagraph = ParagraphIndexForVerse(startVerse);
+	int32 endParagraph = ParagraphIndexForVerse(endVerse);
+	if (startParagraph < 0 || endParagraph < 0)
+		return false;
+
+	// Mirrors how TextDocument::ParagraphIndexFor() itself accumulates
+	// paragraphOffset from Paragraph::Length() -- there's no public
+	// "offset of paragraph N" lookup to reuse directly.
+	int32 offset = 0;
+	for (int32 i = 0; i < startParagraph; i++)
+		offset += ParagraphAtIndex(i).Length();
+	start = offset;
+
+	for (int32 i = startParagraph; i <= endParagraph; i++)
+		offset += ParagraphAtIndex(i).Length();
+	end = offset;
+
+	return true;
+}
+
+
 void
 BibleTextDocument::SetVerseSpacing(const std::map<int, float>& spacing)
 {

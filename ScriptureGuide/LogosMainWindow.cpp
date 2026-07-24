@@ -625,7 +625,18 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			{
 				SetBook(BookFromKey(key.String()));
 				SetChapter(ChapterFromKey(key.String()));
-				SetVerse(VerseFromKey(key.String()));
+				int16 verse = VerseFromKey(key.String());
+				SetVerse(verse);
+				// Each search-result row is exactly one verse (see
+				// ResultListView::MakeDragMessage() -- one "key" per
+				// BibleItem, never a range), so start == end here. Tried
+				// UpperVerseFromKey() for a possible range first, but its
+				// getUpperBound() turned out not to mean what the name
+				// suggests for a plain (non-range) key -- confirmed via
+				// debug output it returned the chapter's last verse
+				// instead of the key's own verse, highlighting most of
+				// the chapter. See #22.
+				fParallelView->HighlightVerse(verse, verse);
 			}
 			break;
 		}
