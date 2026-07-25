@@ -26,6 +26,7 @@ class BMenu;
 class BMenuField;
 class BPopUpMenu;
 class BStringView;
+class BibleColumnView;
 class NoteFieldView;
 class ParallelHeaderView;
 
@@ -149,6 +150,31 @@ public:
 			void				HighlightVerse(int startVerse,
 									int endVerse);
 
+			// Cross-column selection coordination (see #23) -- called
+			// by BibleColumnView instances, not meant for other
+			// callers. A selection-drag that starts in one column and
+			// crosses into a sibling needs a coordinator: each
+			// TextDocumentView still gets its own independent
+			// MouseMoved() as the cursor passes over it (nothing about
+			// BView::SetMouseEventMask()/B_LOCK_WINDOW_FOCUS suppresses
+			// that -- confirmed against the BView reference, it only
+			// keeps a *window* from losing activation), so without
+			// this a sibling column would silently grow its own
+			// selection from wherever it happened to be sitting
+			// instead of participating in the same gesture.
+			void				_ColumnSelectionStarted(
+									BibleColumnView* source,
+									BPoint screenPoint);
+			void				_ColumnSelectionMoved(
+									BibleColumnView* source, BPoint screenPoint);
+			void				_ColumnSelectionEnded();
+			bool				_HasActiveColumnSelection() const;
+			bool				_IsColumnSelectionOwnedByOther(
+									BibleColumnView* column) const;
+			const std::vector<TextDocumentView*>&
+									_ColumnViews() const
+										{ return fTextViews; }
+
 private:
 			friend class ParallelHeaderView;
 			// Called from ~ParallelHeaderView() so this view never holds a
@@ -205,6 +231,18 @@ private:
 
 			BView*				fHeaderView;
 			BButton*			fAddColumnButton;
+
+			// Non-owning; NULL when no cross-column selection gesture
+			// is currently active (see _ColumnSelectionStarted()).
+			BibleColumnView*	fActiveSelectionColumn;
+			// Screen-space anchor of the active gesture's MouseDown --
+			// the selection rectangle for any given MouseMoved() is
+			// this point to the current one (see _ColumnSelectionMoved()).
+			BPoint				fSelectionAnchorScreen;
+			// Last verse the cursor resolved to; kept stable while the
+			// cursor is briefly over a gap/margin rather than
+			// resetting/collapsing the range. -1 when unset.
+			int					fSelectionLastEndVerse;
 
 			bool				fShowVerseNumbers;
 			BFont				fBaseFont;

@@ -18,6 +18,7 @@
 #include "LogosApp.h"
 #include "LogosMainWindow.h"
 #include "Preferences.h"
+#include "SwordBackend.h"
 
 
 // Global containing the startup path. Accessed via GetAppPath()
@@ -210,7 +211,35 @@ status_t SGApp::StartupCheck(void)
 		}
 		return B_ERROR;
 	}
-	
+
+	// The directories above can exist (e.g. a normal package install)
+	// while still being completely empty -- a genuinely fresh install
+	// with nothing downloaded yet. Constructing a SwordBackend here is
+	// the same SWMgr scan SGMainWindow's constructor does anyway; doing
+	// it once up front lets us fail cleanly before any window is built,
+	// instead of what used to happen: BuildGUI() would already run, and
+	// only then would SGMainWindow notice CountModules()==0 and bail
+	// out partway through its own constructor, leaving SGApp to Show() a
+	// half-built, empty window with no indication why.
+	SwordBackend* checkBackend = new SwordBackend();
+	bool hasModules = checkBackend->CountModules() > 0;
+	delete checkBackend;
+
+	if (!hasModules)
+	{
+		alert = new BAlert("Scripture Guide", "Scripture Guide didn't find any"
+			" Bibles, commentaries, or other books installed yet. You'll need"
+			" at least one from the SWORD Project to get started -- the Book"
+			" Manager can download one for you.\n", "Open Book Manager",
+			"Quit");
+		int32 value = alert->Go();
+
+		if (value == 0)
+			be_roster->Launch(SG_MANAGER_SIGNATURE);
+
+		return B_ERROR;
+	}
+
 	// Check for existence of documentation
 	gDocsAvailable = true;
 	

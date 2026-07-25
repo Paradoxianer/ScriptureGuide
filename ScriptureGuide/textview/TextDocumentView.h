@@ -76,6 +76,14 @@ public:
 				// verse jumped to from search) rather than a click point.
 			void				SetSelection(int32 start, int32 end);
 
+				// Text offset of the character under `where` (view
+				// coordinates) -- exposes the same lookup MouseDown()/
+				// MouseMoved() already use internally, for subclasses
+				// that need their own hit-testing (e.g. to tell whether a
+				// click landed inside the current selection, to decide
+				// between starting a drag and placing the caret there).
+				int32				TextOffsetAt(BPoint where);
+
 			void				Copy(BClipboard* clipboard);
 			void				Paste(BClipboard* clipboard);
 

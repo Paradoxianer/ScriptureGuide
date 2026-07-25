@@ -203,10 +203,18 @@ TextDocumentView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragM
 
 	SetViewCursor(&cursor);
 
+	// dragMessage != NULL means a drag-and-drop session is passing over
+	// this view right now -- including one this same view just started
+	// (see BibleColumnView::_StartDrag()), since the source view keeps
+	// receiving MouseMoved() with the mouse button still physically
+	// down for the whole gesture. Without this check, every move during
+	// a drag silently extended the text selection to wherever the
+	// pointer currently is, which is confusing to watch and not what a
+	// drag is supposed to do to the selection it's dragging.
 	uint32 buttons = 0;
 	if (Window() != NULL)
 		Window()->CurrentMessage()->FindInt32("buttons", (int32*)&buttons);
-	if (buttons > 0)
+	if (buttons > 0 && dragMessage == NULL)
 		SetCaret(where, true);
 
 	BView::MouseMoved(where, transit, dragMessage);
@@ -429,6 +437,14 @@ TextDocumentView::GetSelection(int32& start, int32& end) const
 		start = fTextEditor->SelectionStart();
 		end = fTextEditor->SelectionEnd();
 	}
+}
+
+
+int32
+TextDocumentView::TextOffsetAt(BPoint where)
+{
+	bool unused;
+	return fTextDocumentLayout.TextOffsetAt(where.x, where.y, unused);
 }
 
 
@@ -655,7 +671,16 @@ TextDocumentView::_DrawSelection()
 	SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
 	MovePenTo(fInsetLeft - 0.5f, fInsetTop - 0.5f);
 
-	if (IsFocus() && Window() != NULL && Window()->IsActive()) {
+	// Deliberately not gated on IsFocus() too -- a cross-column selection
+	// (see BibleColumnView in ParallelBibleView.cpp) spans several
+	// sibling views at once, only one of which can hold literal
+	// keyboard focus at any moment. Every column showing a selection
+	// should look the same (a solid fill, not some columns getting only
+	// the thinner stroke-only fallback below) as long as the window
+	// itself is the active one -- the same convention as dimming a
+	// selection when a whole window is inactive, just not per-view
+	// within it.
+	if (Window() != NULL && Window()->IsActive()) {
 		SetHighColor(30, 30, 30);
 		FillShape(&shape);
 	}
