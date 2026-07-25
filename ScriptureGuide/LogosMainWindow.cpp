@@ -60,7 +60,8 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	
 	// More voodoo hackerdom to work around a bug. :)
 	AddCommonFilter(new EndKeyFilter);
-	
+	AddCommonFilter(new UniversalSearchEnterFilter(fUniversalSearchBox));
+
 	if (fModManager->CountModules()==0)
 	{
 		// TODO: fail
@@ -898,6 +899,12 @@ SGMainWindow::EnsureSearchWindow(void)
 {
 	if (fFindMessenger)
 	{
+		// The module list was otherwise only ever built once, when this
+		// window was first created -- switching a column to a different
+		// translation afterward left it stale (reported: changed a
+		// column to a different translation, but the already-open
+		// window's "Search in" field still only offered the old one).
+		fSearchWindow->RefreshModuleList(fParallelView->ColumnModuleNames());
 		fFindMessenger->SendMessage(M_ACTIVATE_WINDOW);
 		return;
 	}
@@ -982,6 +989,36 @@ filter_result EndKeyFilter::Filter(BMessage* msg, BHandler **target)
 				sb->SetValue(max);
 			return B_SKIP_MESSAGE;
 		}
+	}
+	return B_DISPATCH_MESSAGE;
+}
+
+
+UniversalSearchEnterFilter::UniversalSearchEnterFilter(BTextControl* searchBox)
+ :	BMessageFilter(B_PROGRAMMED_DELIVERY, B_ANY_SOURCE, B_KEY_DOWN),
+ 	fSearchBox(searchBox)
+{
+}
+
+
+UniversalSearchEnterFilter::~UniversalSearchEnterFilter(void)
+{
+}
+
+
+filter_result UniversalSearchEnterFilter::Filter(BMessage* msg, BHandler **target)
+{
+	int32 c;
+	msg->FindInt32("raw_char", &c);
+	if (c == B_ENTER && *target == fSearchBox->TextView())
+	{
+		// Invoke() unconditionally (unlike the box's own KeyDown(), which
+		// only calls it when the text changed) then skip the message
+		// entirely, so that conditional KeyDown() never runs and can't
+		// double-invoke on top of this when the text did change.
+		fSearchBox->Invoke();
+		fSearchBox->TextView()->SelectAll();
+		return B_SKIP_MESSAGE;
 	}
 	return B_DISPATCH_MESSAGE;
 }

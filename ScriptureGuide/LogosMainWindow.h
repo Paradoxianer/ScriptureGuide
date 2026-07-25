@@ -35,6 +35,29 @@ public:
 	virtual filter_result Filter(BMessage* msg, BHandler **target);
 };
 
+
+// BTextControl only invokes on Enter if its text actually changed since
+// the last invoke (confirmed against Haiku's own source,
+// src/kits/interface/TextInput.cpp's _BTextInput_::KeyDown() -- it
+// tracks fPreviousText and skips Invoke() entirely when unchanged), so
+// pressing Enter a second time with the same reference or search term
+// silently did nothing at all -- not a ScriptureGuide bug, but this
+// window still needs Enter to always re-jump/re-search regardless.
+// Intercepts B_ENTER specifically targeted at the universal search
+// box's own BTextView, invokes it unconditionally, then skips the
+// message so the box's own conditional-invoke KeyDown() never runs (and
+// can't double-invoke when the text did change).
+class UniversalSearchEnterFilter : public BMessageFilter
+{
+public:
+	UniversalSearchEnterFilter(BTextControl* searchBox);
+	~UniversalSearchEnterFilter(void);
+	virtual filter_result Filter(BMessage* msg, BHandler **target);
+
+private:
+	BTextControl* fSearchBox;
+};
+
 class SGMainWindow : public BWindow
 {
 public:

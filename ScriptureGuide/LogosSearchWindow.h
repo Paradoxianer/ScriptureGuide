@@ -22,6 +22,7 @@ class SGModule;
 #define M_ACTIVATE_WINDOW	'ACwn'
 #define FIND_RUN_SEARCH		'FRun'
 #define FIND_SELECT_MODULE	'FSmd'
+#define FIND_UPDATE_MODULES	'FUmd'
 
 using namespace std;
 
@@ -59,9 +60,31 @@ public:
 					// without holding this window's looper lock.
 	void			RunSearch(const char* term);
 
+					// Rebuilds the "Search in" field from a fresh list of
+					// open columns -- called every time the search window
+					// is reused (see SGMainWindow::EnsureSearchWindow()),
+					// since the module list was otherwise only ever built
+					// once at construction and went stale the moment a
+					// column's translation changed while this window
+					// stayed open. Same thread-safety note as RunSearch()
+					// applies -- posts to itself rather than touching
+					// moduleField directly.
+	void			RefreshModuleList(
+						const std::vector<BString>& moduleNames);
+
 private:
 	void			BuildGUI(void);
-	
+					// Rebuilds moduleField's menu items from
+					// fModuleNames, marking index `markIndex`. Shared by
+					// BuildGUI() (initial population) and
+					// FIND_UPDATE_MODULES (see RefreshModuleList()).
+	void			_RebuildModuleMenu(int32 markIndex);
+					// Applies fModuleNames[selectIndex] (clamped) as
+					// curModule/fCurrentModule and updates the window
+					// title -- shared by BuildGUI(), FIND_SELECT_MODULE,
+					// and FIND_UPDATE_MODULES.
+	void			_ApplyModuleSelection(int32 selectIndex);
+
 	vector<const char*>	books;
 	SwordBackend		*myBible;
 	BString				curModule;

@@ -98,13 +98,7 @@ SGSearchWindow::SGSearchWindow(BRect frame,
 		prefsLock.Unlock();
 		fModuleNames.push_back(saved);
 	}
-	curModule = fModuleNames[0];
 	books = GetBookNames();
-	fCurrentModule = myBible->FindModule(curModule.String());
-
-	BString title("Find in ");
-	title << fCurrentModule->FullName();
-	SetTitle(title.String());
 
 	fSearchMode = SEARCH_WORDS;
 	fSearchFlags = REG_ICASE;
@@ -113,6 +107,8 @@ SGSearchWindow::SGSearchWindow(BRect frame,
 
 	// start the show
 	BuildGUI();
+	_RebuildModuleMenu(0);
+	_ApplyModuleSelection(0);
 	searchString->MakeFocus(true);
 }
 
@@ -135,6 +131,53 @@ SGSearchWindow::RunSearch(const char* term)
 }
 
 
+void
+SGSearchWindow::RefreshModuleList(const std::vector<BString>& moduleNames)
+{
+	if (moduleNames.empty())
+		return;
+
+	BMessage msg(FIND_UPDATE_MODULES);
+	for (size_t i = 0; i < moduleNames.size(); i++)
+		msg.AddString("module", moduleNames[i]);
+	PostMessage(&msg);
+}
+
+
+void
+SGSearchWindow::_RebuildModuleMenu(int32 markIndex)
+{
+	BMenu* menu = moduleField->Menu();
+	for (int32 i = menu->CountItems() - 1; i >= 0; i--)
+		delete menu->RemoveItem(i);
+
+	for (size_t i = 0; i < fModuleNames.size(); i++) {
+		SGModule* module = myBible->FindModule(fModuleNames[i].String());
+		const char* label = module != NULL ? module->FullName()
+			: fModuleNames[i].String();
+		BMenuItem* item = new BMenuItem(label, new BMessage(FIND_SELECT_MODULE));
+		if ((int32)i == markIndex)
+			item->SetMarked(true);
+		menu->AddItem(item);
+	}
+}
+
+
+void
+SGSearchWindow::_ApplyModuleSelection(int32 selectIndex)
+{
+	if (selectIndex < 0 || (size_t)selectIndex >= fModuleNames.size())
+		selectIndex = 0;
+
+	curModule = fModuleNames[selectIndex];
+	fCurrentModule = myBible->FindModule(curModule.String());
+
+	BString title("Find in ");
+	title << fCurrentModule->FullName();
+	SetTitle(title.String());
+}
+
+
 void SGSearchWindow::BuildGUI(void)
 {
 	// The find button
@@ -151,20 +194,14 @@ void SGSearchWindow::BuildGUI(void)
 	// Which of the currently open reading-pane columns to search --
 	// only offered (not every installed module) since that's what #7's
 	// original spec asked for: search whatever's actually visible.
+	// Populated by _RebuildModuleMenu() right after BuildGUI() returns
+	// (see the constructor), not here -- the same rebuild is reused
+	// whenever the open columns change (see FIND_UPDATE_MODULES).
 	BPopUpMenu* moduleChoice = new BPopUpMenu("modulechoice");
 	moduleField = new BMenuField("module_field", B_TRANSLATE("Search in "),
 		moduleChoice);
 	moduleField->SetDivider(
 		moduleField->StringWidth(B_TRANSLATE("Search in ")) + 5);
-	for (size_t i = 0; i < fModuleNames.size(); i++) {
-		SGModule* module = myBible->FindModule(fModuleNames[i].String());
-		const char* label = module != NULL ? module->FullName()
-			: fModuleNames[i].String();
-		BMenuItem* item = new BMenuItem(label, new BMessage(FIND_SELECT_MODULE));
-		if (i == 0)
-			item->SetMarked(true);
-		moduleChoice->AddItem(item);
-	}
 
 	// First, we will set up the two menu fields for the search range
 
@@ -328,14 +365,35 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 		{
 			BMenu* menu = moduleField->Menu();
 			int32 index = menu->IndexOf(menu->FindMarked());
-			if (index >= 0 && (size_t)index < fModuleNames.size()) {
-				curModule = fModuleNames[index];
-				fCurrentModule = myBible->FindModule(curModule.String());
+			_ApplyModuleSelection(index);
+			break;
+		}
 
-				BString title("Find in ");
-				title << fCurrentModule->FullName();
-				SetTitle(title.String());
+		case FIND_UPDATE_MODULES:
+		{
+			std::vector<BString> moduleNames;
+			BString name;
+			for (int32 i = 0; message->FindString("module", i, &name) == B_OK;
+					i++) {
+				moduleNames.push_back(name);
 			}
+			if (moduleNames.empty())
+				break;
+
+			// Keep whatever's currently selected if it's still one of the
+			// open columns (e.g. the user only added a column since this
+			// window opened), otherwise fall back to the first.
+			int32 selectIndex = 0;
+			for (size_t i = 0; i < moduleNames.size(); i++) {
+				if (moduleNames[i] == curModule) {
+					selectIndex = (int32)i;
+					break;
+				}
+			}
+
+			fModuleNames = moduleNames;
+			_RebuildModuleMenu(selectIndex);
+			_ApplyModuleSelection(selectIndex);
 			break;
 		}
 
