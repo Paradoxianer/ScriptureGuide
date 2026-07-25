@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <Alert.h>
 #include <Entry.h>
 #include <File.h>
 #include <Message.h>
@@ -24,14 +25,60 @@ public:
 
 	status_t TokenizeWords(const char *source, BList *stringarray, const char *tokenstr);
 	void SetupPackageList(void);
+	bool ConfirmNetworkAccess(void);
 };
 
 SGMApp::SGMApp(void)
  : BApplication("application/x-vnd.wgp.ScriptureGuideManager")
 {
-	SetupPackageList();
+	// Fetching the package list and downloading modules both mean
+	// contacting crosswire.org over plain, unencrypted HTTP -- in some
+	// countries that alone can be enough to put someone at risk. Ask
+	// before any of that happens, not after; if the user declines, skip
+	// SetupPackageList() (and therefore every wget call in it) entirely
+	// and still open the window, just with an empty list.
+	if (ConfirmNetworkAccess())
+		SetupPackageList();
 	MainWindow *win=new MainWindow(BRect(300,200,900,600));
 	win->Show();
+}
+
+
+// Existence of this file means "don't ask again" was chosen previously --
+// its content doesn't matter, only that it's there.
+#define SG_SKIP_WARNING_MARKER SG_SETTINGS_PATH "skip-network-warning"
+
+bool
+SGMApp::ConfirmNetworkAccess(void)
+{
+	BEntry marker(SG_SKIP_WARNING_MARKER);
+	if (marker.Exists())
+		return true;
+
+	BAlert* alert = new BAlert("Network Access",
+		"ScriptureGuide Book Manager needs to contact crosswire.org over "
+		"the internet (plain HTTP, not encrypted) to list and download "
+		"Bible modules.\n\n"
+		"In some countries, accessing Bible translations or other "
+		"religious content online is monitored or restricted, and doing "
+		"so could put you at risk. Only continue if you're sure this is "
+		"safe where you are.",
+		"Cancel", "Don't ask again", "Continue", B_WIDTH_AS_USUAL,
+		B_WARNING_ALERT);
+	alert->SetShortcut(0, B_ESCAPE);
+	int32 choice = alert->Go();
+
+	if (choice == 1)
+	{
+		// "Don't ask again" -- also proceed this time, same as Continue;
+		// asking a second time right after they just said "don't ask
+		// again" would defeat the point.
+		create_directory(SG_SETTINGS_PATH, 0777);
+		BFile(SG_SKIP_WARNING_MARKER, B_CREATE_FILE | B_WRITE_ONLY);
+		return true;
+	}
+
+	return choice == 2; // "Continue"
 }
 
 SGMApp::~SGMApp(void)
