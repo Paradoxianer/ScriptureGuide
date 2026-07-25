@@ -107,14 +107,38 @@ BibleTextDocument::Verse() const
 }
 
 
+// fModule->setKey() does not carry over its argument's locale -- verified
+// empirically, it always resets the module's own persistent key back to
+// the default ("en") locale no matter what the passed-in key had set.
+// Every setter below therefore needs to reapply it afterward, or
+// BookName()/getKeyText() silently revert to English right after any
+// navigation call.
+void
+BibleTextDocument::_SetModuleKey(VerseKey& verseKey)
+{
+	fModule->setKey(verseKey);
+	SetVerseKeyLocale(*(VerseKey*)fModule->getKey());
+}
+
+
 status_t
 BibleTextDocument::SetKey(const char* key)
 {
 	if (fModule == NULL)
 		return B_NO_INIT;
 
-	VerseKey verseKey(fModule->getKeyText());
+	// Seeded from the module's own current position via an explicit
+	// setText() call, not the VerseKey(const char*) constructor -- once
+	// _SetModuleKey() below keeps the module's key permanently localized,
+	// getKeyText() itself starts returning localized text (e.g. "Johannes
+	// 3:16"), and parsing that through a fresh, still-default-locale key
+	// (what the constructor form does) silently mis-parses it -- confirmed
+	// empirically, "Johannes 3:16" with no locale set resolves to
+	// "Revelation of John" 1:1 instead. Locale has to be set before either
+	// parse, not just the second one.
+	VerseKey verseKey;
 	SetVerseKeyLocale(verseKey);
+	verseKey.setText(fModule->getKeyText());
 	verseKey.setText(key);
 	// Deliberately not forcing verse 1 here, unlike SetChapter()/Next/
 	// PrevChapter() (which always want the chapter's first verse):
@@ -122,7 +146,7 @@ BibleTextDocument::SetKey(const char* key)
 	// which verse `key` names, so preserving it only affects Verse()
 	// afterward -- which is exactly what ParallelBibleView::SetKey() uses
 	// to scroll straight to the requested verse.
-	fModule->setKey(verseKey);
+	_SetModuleKey(verseKey);
 
 	_Rebuild();
 	return B_OK;
@@ -135,14 +159,14 @@ BibleTextDocument::SetChapter(const char* book, int chapter)
 	if (fModule == NULL)
 		return B_NO_INIT;
 
-	VerseKey verseKey(fModule->getKeyText());
-	if (book != NULL) {
-		SetVerseKeyLocale(verseKey);
+	VerseKey verseKey;
+	SetVerseKeyLocale(verseKey);
+	verseKey.setText(fModule->getKeyText());
+	if (book != NULL)
 		verseKey.setBookName(book);
-	}
 	verseKey.setChapter(chapter);
 	verseKey.setVerse(1);
-	fModule->setKey(verseKey);
+	_SetModuleKey(verseKey);
 
 	_Rebuild();
 	return B_OK;
@@ -155,10 +179,12 @@ BibleTextDocument::NextChapter()
 	if (fModule == NULL)
 		return B_NO_INIT;
 
-	VerseKey verseKey(fModule->getKeyText());
+	VerseKey verseKey;
+	SetVerseKeyLocale(verseKey);
+	verseKey.setText(fModule->getKeyText());
 	verseKey.setChapter(verseKey.getChapter() + 1);
 	verseKey.setVerse(1);
-	fModule->setKey(verseKey);
+	_SetModuleKey(verseKey);
 
 	_Rebuild();
 	return B_OK;
@@ -171,10 +197,12 @@ BibleTextDocument::PrevChapter()
 	if (fModule == NULL)
 		return B_NO_INIT;
 
-	VerseKey verseKey(fModule->getKeyText());
+	VerseKey verseKey;
+	SetVerseKeyLocale(verseKey);
+	verseKey.setText(fModule->getKeyText());
 	verseKey.setChapter(verseKey.getChapter() - 1);
 	verseKey.setVerse(1);
-	fModule->setKey(verseKey);
+	_SetModuleKey(verseKey);
 
 	_Rebuild();
 	return B_OK;
@@ -340,10 +368,26 @@ BibleTextDocument::_Rebuild()
 	// module's own live key object back into setKey() crashes deep inside
 	// SWORD (ListKey's copy constructor), since setKey() replaces its
 	// internal key before cloning from what was just passed in.
+	//
+	// Locale has to be set on savedKey/iterKey before parsing
+	// savedKeyText, not left to the VerseKey(const char*) constructor --
+	// _SetModuleKey() keeps the module's own key permanently localized,
+	// so savedKeyText itself is already localized text (e.g. "1. Mose
+	// 1:1") by the time this runs. Parsing that through a fresh,
+	// default-locale key (what the constructor form does) silently
+	// mis-parses it into "Revelation of John" 1:1 instead -- confirmed
+	// empirically -- which fModule->setKey(savedKey) at the bottom of
+	// this function then wrote back as the module's new position,
+	// undoing whatever SetKey()/SetChapter() had just correctly set
+	// right before calling _Rebuild().
 	BString savedKeyText(fModule->getKeyText());
-	VerseKey savedKey(savedKeyText.String());
+	VerseKey savedKey;
+	SetVerseKeyLocale(savedKey);
+	savedKey.setText(savedKeyText.String());
 
-	VerseKey iterKey(savedKeyText.String());
+	VerseKey iterKey;
+	SetVerseKeyLocale(iterKey);
+	iterKey.setText(savedKeyText.String());
 	int verseCount = iterKey.getVerseMax();
 	for (int verse = 1; verse <= verseCount; verse++) {
 		iterKey.setVerse(verse);
@@ -386,5 +430,5 @@ BibleTextDocument::_Rebuild()
 		fParagraphVerse.push_back(verse);
 	}
 
-	fModule->setKey(savedKey);
+	_SetModuleKey(savedKey);
 }

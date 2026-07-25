@@ -190,8 +190,15 @@ void SGMainWindow::BuildGUI(void)
 	bookfield->SetDivider(be_plain_font->StringWidth("Book:") + 5);
 	
 	fBookMenu->SetLabelFromMarked(true);
-	
-	// TODO: needs to be reworked for to make 
+	// Without radio mode, clicking an item doesn't mark it automatically --
+	// the app has to call BMenuItem::SetMarked() itself. SELECT_BOOK's
+	// handler never did that, so FindMarked() (which UpdateParallelKey()
+	// relies on to know which book to build the key from) kept returning
+	// whatever was marked before, regardless of which book was actually
+	// clicked in the dropdown.
+	fBookMenu->SetRadioMode(true);
+
+	// TODO: needs to be reworked for to make
 	// a dvision between Old Testament and New Testament
 	vector<const char *> booknames = GetBookNames();
 	for (uint32 i = 0; i < booknames.size(); i++)
@@ -424,7 +431,7 @@ bool SGMainWindow::NeedsLineBreaks(void)
 
 void SGMainWindow::MessageReceived(BMessage* msg)
 {
-	switch (msg->what) 
+	switch (msg->what)
 	{
 		case NEXT_BOOK:
 		{
@@ -780,7 +787,7 @@ SGMainWindow::UpdateParallelKey(void)
 void SGMainWindow::SetChapter(const int16 &chapter)
 {
 	BString currentbook;
-	
+
 	int16 maxchapters = ChaptersInBook(fBookMenu->FindMarked()->Label());
 	if (chapter > maxchapters)
 	{
@@ -852,11 +859,29 @@ void SGMainWindow::SetVerse(const int16 &verse)
 void
 SGMainWindow::JumpToKey(const char* key)
 {
+	// fCurrentChapter/fCurrentVerse have to already hold the target
+	// chapter/verse before SetBook() runs -- SetBook() itself calls
+	// UpdateParallelKey(), which builds "<book> <fCurrentChapter>:
+	// <fCurrentVerse>" from whatever they currently hold. Setting the
+	// book first (the previous order here) pushed a reference built
+	// from the *old* book's leftover chapter/verse -- out of range for
+	// the new book more often than not, which SWORD's VerseKey resolves
+	// by rolling over into subsequent books/chapters rather than
+	// failing, occasionally landing pages away from the intended verse
+	// before the second and third calls below ever got a chance to
+	// correct it.
+	fCurrentChapter = ChapterFromKey(key);
+	fCurrentVerse = VerseFromKey(key);
 	SetBook(BookFromKey(key));
-	SetChapter(ChapterFromKey(key));
-	int16 verse = VerseFromKey(key);
-	SetVerse(verse);
-	fParallelView->HighlightVerse(verse, verse);
+
+	BString cText;
+	cText << fCurrentChapter;
+	fChapterBox->SetText(cText.String());
+	BString vText;
+	vText << fCurrentVerse;
+	fVerseBox->SetText(vText.String());
+
+	fParallelView->HighlightVerse(fCurrentVerse, fCurrentVerse);
 }
 
 

@@ -571,11 +571,39 @@ bool ParseVerseReference(const char* input, BString& normalizedKey)
 	// German verse separator ("Joh 3,16") -- VerseKey only understands
 	// ':' natively, see ExtractTrailingChapterVerse()'s comment above.
 	trimmed.ReplaceAll(',', ':');
+	// "Joh 3, 16" (space after the comma, common when typing it out)
+	// would otherwise leave a space between the ':' and the verse
+	// digits -- confirmed empirically that ExtractTrailingChapterVerse()
+	// then fails to recognize the ':' at all and misreads the verse
+	// number as a second chapter number instead, rejecting the whole
+	// reference as invalid.
+	trimmed.ReplaceAll(": ", ":");
+
+	// A verse range's end ("Epheser 6:4-5") has to be stripped before
+	// ExtractTrailingChapterVerse() runs, not passed through -- its
+	// trailing-digit scan has no notion of a range and reads the "-5"
+	// as a second chapter number instead of part of the verse, rejecting
+	// an otherwise valid reference as a mismatch. VerseKey itself has no
+	// use for it either (confirmed empirically -- a plain VerseKey's
+	// setText() parses only the range's start, "6:4", and silently drops
+	// "-5" on its own), so nothing downstream needs it kept.
+	BString withoutRangeEnd(trimmed);
+	int32 dash = withoutRangeEnd.FindLast('-');
+	if (dash >= 0) {
+		bool isRangeEnd = dash + 1 < withoutRangeEnd.Length();
+		for (int32 i = dash + 1; i < withoutRangeEnd.Length() && isRangeEnd;
+				i++) {
+			if (!isdigit((unsigned char)withoutRangeEnd[i]))
+				isRangeEnd = false;
+		}
+		if (isRangeEnd)
+			withoutRangeEnd.Truncate(dash);
+	}
 
 	int expectedChapter = 0;
 	int expectedVerse = 0;
 	bool hasVerse = false;
-	bool hasChapterVerse = ExtractTrailingChapterVerse(trimmed,
+	bool hasChapterVerse = ExtractTrailingChapterVerse(withoutRangeEnd,
 		expectedChapter, expectedVerse, hasVerse);
 
 	BLanguage language;

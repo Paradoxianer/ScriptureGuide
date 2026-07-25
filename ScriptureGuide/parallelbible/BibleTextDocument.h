@@ -87,6 +87,7 @@ public:
 private:
 			BFont				_EffectiveFont(const BFont& baseFont) const;
 			void				_Rebuild();
+			void				_SetModuleKey(VerseKey& verseKey);
 
 private:
 			SWModule*			fModule;

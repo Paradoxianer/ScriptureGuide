@@ -11,6 +11,8 @@
 #include <Bitmap.h>
 #include <Button.h>
 #include <Catalog.h>
+#include <Entry.h>
+#include <File.h>
 #include <Font.h>
 #include <Language.h>
 #include <Locale.h>
@@ -18,6 +20,7 @@
 #include <MenuItem.h>
 #include <Message.h>
 #include <PopUpMenu.h>
+#include <Screen.h>
 #include <ScrollBar.h>
 #include <StringView.h>
 #include <TextView.h>
@@ -26,6 +29,7 @@
 #include <versekey.h>
 
 #include "ParagraphLayout.h"
+#include "SwordBackend.h"
 #include "VerseAligner.h"
 #include "constants.h"
 
@@ -151,6 +155,19 @@ public:
 		fOwner(owner),
 		fTrackingForDrag(false)
 	{
+	}
+
+	// A dropped Bible reference navigates every column (see #23 -- for
+	// now they're all chained to the same key via fOwner->SetKey();
+	// once columns can be unchained this'll need to target just this one
+	// instead), whichever column it happens to land on. Anything that
+	// isn't a drop, or doesn't resolve to a reference, falls through to
+	// the base class unchanged.
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->WasDropped() && _HandleReferenceDrop(message))
+			return;
+		TextDocumentView::MessageReceived(message);
 	}
 
 	virtual void MouseDown(BPoint where)
@@ -291,14 +308,22 @@ private:
 
 		// Gather every column (this one included) that currently has a
 		// non-empty selection -- a fresh cross-column gesture (see
-		// SelectVerseRange() above) can leave more
-		// than one populated before the user picks any of them back up
-		// to drag. Matches issue #23's original spec: one
-		// translation+reference block per participating column.
+		// SelectVerseRange() above) can leave more than one populated
+		// before the user picks any of them back up to drag. Matches
+		// issue #23's original spec: one translation block per
+		// participating column. The reference itself (book/chapter/verse)
+		// is the same across every participating column no matter its
+		// translation -- VerseAligner keeps them all on the same verse
+		// range -- so it's computed once from this column's own current
+		// selection, not repeated per column.
+		int32 dragStart, dragEnd;
+		GetSelection(dragStart, dragEnd);
+		BString reference = _ReferenceFor(dragStart, dragEnd);
+
 		const std::vector<TextDocumentView*>& columns = fOwner->_ColumnViews();
 
-		BString clipText;
-		BString clipName;
+		BString clipText(reference);
+		clipText << "\n\n";
 		int32 partCount = 0;
 
 		for (size_t i = 0; i < columns.size(); i++) {
@@ -316,16 +341,9 @@ private:
 			if (text.IsEmpty())
 				continue;
 
-			BString reference = column->_ReferenceFor(start, end);
-
 			if (partCount > 0)
 				clipText << "\n\n";
-			clipText << reference << " (" << column->fTranslationName << ")\n"
-				<< text;
-
-			if (partCount > 0)
-				clipName << " / ";
-			clipName << reference << " (" << column->fTranslationName << ")";
+			clipText << column->fTranslationName << ":\n" << text;
 
 			partCount++;
 		}
@@ -333,31 +351,39 @@ private:
 		if (partCount == 0)
 			return;
 
-		BMessage drag(B_SIMPLE_DATA);
+		// "be:clip_name" ends up as a file name if this gets dropped onto
+		// Tracker (see BPoseView::CreateClippingFile()) -- a literal '/'
+		// in it is a path separator there, not a character a file name can
+		// contain. References are built from book/chapter/verse numbers
+		// so they shouldn't ever contain one, but scrub it anyway rather
+		// than assume.
+		BString clipName(reference);
+		clipName.ReplaceAll("/", "-");
+
+		// B_MIME_DATA, not B_SIMPLE_DATA -- this is the "what" a BTextView
+		// itself puts on its own drag messages, and the one text drop
+		// targets (StyledEdit and friends) actually recognize. B_SIMPLE_DATA
+		// is the convention for file-ref drags (Tracker), not text.
+		BMessage drag(B_MIME_DATA);
 		drag.AddData("text/plain", B_MIME_TYPE, clipText.String(),
 			clipText.Length());
 		drag.AddString("be:clip_name", clipName);
 		// Not consumed by anything yet -- for a future drop target (see
 		// issue #23) that wants the reference/translation without having
 		// to re-parse them back out of the plain-text clipping. Only the
-		// dragging column's own reference/translation when more than one
-		// participated -- there's no single "the" reference/translation
-		// once several columns are involved.
-		if (partCount == 1) {
-			int32 start, end;
-			GetSelection(start, end);
-			drag.AddString("scriptureguide:reference",
-				_ReferenceFor(start, end));
+		// dragging column's own translation when more than one
+		// participated -- there's no single "the" translation once
+		// several columns are involved.
+		if (partCount == 1)
 			drag.AddString("scriptureguide:translation", fTranslationName);
-		}
+		drag.AddString("scriptureguide:reference", reference);
 
-		BString snippet(clipText);
-		snippet.ReplaceAll("\n", " ");
-
-		BBitmap* dragBitmap = _CreateDragBitmap(clipName, snippet);
+		BPoint dragScreenPoint = ConvertToScreen(fDragStartPoint);
+		BBitmap* dragBitmap = _CreateDragBitmap(dragScreenPoint);
 		if (dragBitmap != NULL && dragBitmap->IsValid()) {
-			DragMessage(&drag, dragBitmap, B_OP_ALPHA, BPoint(8.0f, 8.0f),
-				this);
+			BRect bounds = dragBitmap->Bounds();
+			BPoint hotspot(bounds.Width() / 2.0f, bounds.Height() / 2.0f);
+			DragMessage(&drag, dragBitmap, B_OP_COPY, hotspot, this);
 		} else {
 			delete dragBitmap;
 			BRect dragRect(fDragStartPoint.x - 4.0f,
@@ -367,105 +393,32 @@ private:
 		}
 	}
 
-	// A small torn-paper-corner shape following the cursor for the whole
-	// drag -- as if this piece of the reading pane had just been ripped
-	// out of the view, rather than the bare outline rectangle
-	// DragMessage() falls back to on its own (or the plain rounded label
-	// this used before). Ownership passes to DragMessage() once called;
-	// the caller must not delete the returned bitmap itself.
-	BBitmap* _CreateDragBitmap(const BString& reference,
-		const BString& snippet) const
+	// A small screenshot excerpt centered on the drag point -- just
+	// enough to show the user what they're carrying, not the whole
+	// selection. Ownership passes to DragMessage() once called; the
+	// caller must not delete the returned bitmap itself.
+	BBitmap* _CreateDragBitmap(BPoint screenPoint) const
 	{
-		BFont font;
-		GetFont(&font);
-		font_height fontHeight;
-		font.GetHeight(&fontHeight);
-		float lineHeight = ceilf(fontHeight.ascent + fontHeight.descent
-			+ fontHeight.leading);
+		const float kHalfWidth = 90.0f;
+		const float kHalfHeight = 24.0f;
 
-		BFont snippetFont(font);
-		snippetFont.SetSize(font.Size() * 0.85f);
-		font_height snippetFontHeight;
-		snippetFont.GetHeight(&snippetFontHeight);
-		float snippetLineHeight = ceilf(snippetFontHeight.ascent
-			+ snippetFontHeight.descent + snippetFontHeight.leading);
+		BScreen screen(Window());
+		if (!screen.IsValid())
+			return NULL;
 
-		const float kMaxTextWidth = 240.0f;
-		const float kPadding = 10.0f;
-		const float kTornEdgeHeight = 9.0f;
+		BRect screenRect(screenPoint.x - kHalfWidth,
+			screenPoint.y - kHalfHeight, screenPoint.x + kHalfWidth,
+			screenPoint.y + kHalfHeight);
+		screenRect = screenRect & screen.Frame();
+		if (!screenRect.IsValid())
+			return NULL;
 
-		BString clippedReference(reference);
-		font.TruncateString(&clippedReference, B_TRUNCATE_END, kMaxTextWidth);
-
-		BString clippedSnippet(snippet);
-		snippetFont.TruncateString(&clippedSnippet, B_TRUNCATE_END,
-			kMaxTextWidth);
-
-		float width = std::min(std::max(
-			font.StringWidth(clippedReference.String()),
-			snippetFont.StringWidth(clippedSnippet.String())),
-			kMaxTextWidth) + kPadding * 2.0f;
-		float textHeight = lineHeight + snippetLineHeight + kPadding * 2.0f;
-		float height = textHeight + kTornEdgeHeight;
-
-		BRect bounds(0.0f, 0.0f, ceilf(width) - 1.0f, ceilf(height) - 1.0f);
-		BBitmap* bitmap = new BBitmap(bounds, B_RGBA32, true);
-		BView* view = new BView(bounds, "dragPreview", B_FOLLOW_NONE,
-			B_WILL_DRAW);
-		bitmap->AddChild(view);
-
-		if (bitmap->Lock()) {
-			// The torn edge is the top edge -- a ragged, irregular
-			// zigzag instead of a straight line, like a strip just
-			// ripped free. Everything below it is a plain paper-colored
-			// rectangle down to the bottom edge.
-			const float kToothWidth = 7.0f;
-			int32 toothCount = std::max(2,
-				(int32)(bounds.Width() / kToothWidth));
-
-			std::vector<BPoint> outline;
-			outline.push_back(BPoint(0.0f, kTornEdgeHeight));
-			// A small, deterministic pseudo-random wobble per tooth (no
-			// <cstdlib> rand() needed) so the tear doesn't look like a
-			// perfectly regular sawtooth.
-			for (int32 i = 0; i <= toothCount; i++) {
-				float x = (bounds.Width() * i) / toothCount;
-				float wobble = ((i * 37) % 5) - 2.0f; // -2..2
-				float y = (i % 2 == 0)
-					? 1.0f + wobble * 0.4f
-					: kTornEdgeHeight - 1.0f + wobble * 0.6f;
-				if (y < 0.0f)
-					y = 0.0f;
-				outline.push_back(BPoint(x, y));
-			}
-			outline.push_back(BPoint(bounds.Width(), bounds.Height()));
-			outline.push_back(BPoint(0.0f, bounds.Height()));
-
-			view->SetDrawingMode(B_OP_ALPHA);
-			view->SetHighColor(252, 248, 235, 245);
-			view->SetLowColor(252, 248, 235, 0);
-			view->FillPolygon(&outline[0], outline.size());
-			view->SetHighColor(170, 150, 110, 255);
-			view->StrokePolygon(&outline[0], outline.size());
-
-			view->SetDrawingMode(B_OP_OVER);
-			view->SetHighColor(20, 20, 20, 255);
-			view->SetFont(&font);
-			view->DrawString(clippedReference.String(),
-				BPoint(kPadding, kTornEdgeHeight + kPadding
-					+ fontHeight.ascent));
-
-			view->SetHighColor(90, 90, 90, 255);
-			view->SetFont(&snippetFont);
-			view->DrawString(clippedSnippet.String(),
-				BPoint(kPadding, kTornEdgeHeight + kPadding + lineHeight
-					+ snippetFontHeight.ascent));
-
-			view->Sync();
-			bitmap->RemoveChild(view);
-			bitmap->Unlock();
+		BBitmap* bitmap = new BBitmap(screenRect, B_RGB32);
+		if (!bitmap->IsValid()
+			|| screen.ReadBitmap(bitmap, false, &screenRect) != B_OK) {
+			delete bitmap;
+			return NULL;
 		}
-		delete view;
 
 		return bitmap;
 	}
@@ -484,11 +437,91 @@ private:
 			startParagraph);
 		int endVerse = fBibleDocument->VerseForParagraphIndex(endParagraph);
 
+		// German convention uses a comma between chapter and verse
+		// ("Epheser 6, 9"), not a colon -- ParseVerseReference() already
+		// accepts both on input, so this stays round-trip safe when the
+		// reference gets dropped back into the app.
+		BLanguage language;
+		BLocale::Default()->GetLanguage(&language);
+		const char* separator
+			= strcmp(language.Code(), "de") == 0 ? ", " : ":";
+
 		BString reference(fBibleDocument->BookName());
-		reference << " " << fBibleDocument->Chapter() << ":" << startVerse;
+		reference << " " << fBibleDocument->Chapter() << separator
+			<< startVerse;
 		if (endVerse > startVerse)
 			reference << "-" << endVerse;
 		return reference;
+	}
+
+	// True if `message` carried a Bible reference to navigate to --
+	// "scriptureguide:reference" if this came from our own drag source
+	// (see _StartDrag()), otherwise falling back to parsing whatever
+	// plain text was dropped so drops from outside the app work too.
+	// Only the first line matters for the fallback case, since our own
+	// multi-column clippings put the reference alone on the first line
+	// with each translation's own text following it.
+	bool _HandleReferenceDrop(BMessage* message)
+	{
+		if (fOwner == NULL)
+			return false;
+
+		BString reference;
+		if (message->FindString("scriptureguide:reference", &reference)
+				!= B_OK) {
+			BString firstLine;
+			const char* text;
+			ssize_t length;
+			if (message->FindData("text/plain", B_MIME_TYPE,
+					(const void**)&text, &length) == B_OK) {
+				firstLine.SetTo(text, length);
+			} else {
+				// Dragging a file -- a Tracker clipping, e.g. -- delivers
+				// an entry_ref, not inline text; Tracker's own drag
+				// protocol for files never includes the data itself, only
+				// a pointer to it on disk. Read a bounded amount directly
+				// rather than assume anything about the file's size.
+				entry_ref ref;
+				if (message->FindRef("refs", &ref) != B_OK)
+					return false;
+
+				BFile file(&ref, B_READ_ONLY);
+				if (file.InitCheck() != B_OK)
+					return false;
+
+				const size_t kMaxClippingSize = 4096;
+				char buffer[kMaxClippingSize];
+				ssize_t bytesRead = file.Read(buffer, sizeof(buffer));
+				if (bytesRead <= 0)
+					return false;
+				firstLine.SetTo(buffer, bytesRead);
+			}
+
+			int32 newline = firstLine.FindFirst('\n');
+			if (newline >= 0)
+				firstLine.Truncate(newline);
+
+			if (!ParseVerseReference(firstLine.String(), reference))
+				return false;
+		}
+
+		// Post to the window rather than call fOwner->SetKey() directly
+		// -- SetKey() only updates this view's own columns. SGMainWindow
+		// keeps separate book-menu/chapter/verse UI state in sync with
+		// the current key exclusively through its own JumpToKey(), which
+		// SG_BIBLE routes to (see SGMainWindow::MessageReceived()) -- the
+		// same path the universal search box and search results already
+		// use, so a dropped reference stays consistent with every other
+		// way to navigate instead of updating the reading pane while
+		// leaving the book/chapter/verse fields showing the old position.
+		BWindow* window = Window();
+		if (window == NULL)
+			return false;
+
+		BMessage jump(SG_BIBLE);
+		jump.AddString("key", reference);
+		window->PostMessage(&jump);
+		return true;
 	}
 
 private:
@@ -976,6 +1009,17 @@ ParallelBibleView::SetKey(const char* key)
 	for (size_t i = 0; i < fDocuments.size(); i++)
 		fDocuments[i]->SetKey(key);
 
+	// A selection's text offsets are only meaningful for the chapter they
+	// were made in -- SetKey() rebuilds every column's document out from
+	// under it (see BibleTextDocument::_Rebuild()), so a leftover
+	// selection either highlights unrelated text at the same offsets in
+	// the new chapter or, once the new text is shorter, points past the
+	// end of it entirely. Every navigation path (book/chapter/verse
+	// fields, the universal search box, a dropped reference) funnels
+	// through here, so clearing it in this one place covers all of them.
+	for (size_t i = 0; i < fTextViews.size(); i++)
+		fTextViews[i]->SetSelection(0, 0);
+
 	_RebuildNoteFields();
 	_Realign();
 
@@ -1039,29 +1083,63 @@ ParallelBibleView::_IsColumnSelectionOwnedByOther(BibleColumnView* column)
 // MouseMoved() of an active fresh-selection gesture -- see the class
 // comment on BibleColumnView. The gesture is one selection rectangle
 // from fSelectionAnchorScreen (set in _ColumnSelectionStarted()) to
-// screenPoint, resolved into a verse range and a column range:
+// screenPoint; which columns' own frames (in this view's local
+// coordinates) overlap its x-extent decides the granularity for this
+// specific move, re-evaluated fresh every time rather than latched once
+// a threshold is crossed:
 //
-//  - verse range: both ends resolved via the SOURCE column's own
-//    coordinate mapping alone -- every column's rows sit at the same y
-//    position for the same verse (see VerseAligner), so one column's
-//    lookup already speaks for all of them. If the current point
-//    doesn't resolve to a verse (e.g. dragged into the header row, or
-//    past the last line), the previous end verse is kept rather than
-//    collapsing the range;
-//  - column range: every column whose own frame (in this view's local
-//    coordinates) overlaps the rectangle's x-extent, so dragging from
-//    column 1 to column 3 also includes column 2 in between, even if
-//    the cursor swept past it without lingering.
+//  - exactly one column overlaps (still purely within the source, the
+//    ordinary case): plain character-precise text selection, identical
+//    to how a single column always selected before cross-column
+//    dragging existed -- half a verse in one translation means exactly
+//    as much as it ever did, nothing snaps to verse boundaries;
+//  - more than one column overlaps: verses are the unit multiple
+//    translations can actually agree on, so this switches to verse-
+//    level instead -- both ends resolved via the SOURCE column's own
+//    coordinate mapping alone (every column's rows sit at the same y
+//    position for the same verse, see VerseAligner, so one column's
+//    lookup already speaks for all of them), applied the same to every
+//    overlapping column. If the current point doesn't resolve to a
+//    verse (dragged into the header row, past the last line, etc.) the
+//    previous end verse is kept rather than collapsing the range.
 //
-// Every column in range gets the same verse range applied (see
-// BibleColumnView::SelectVerseRange()); anything outside it gets
-// cleared, rather than left stranded from earlier in the same gesture.
+// Either way, any column outside the current x-extent gets its
+// selection cleared rather than left stranded from earlier in the same
+// gesture.
 void
 ParallelBibleView::_ColumnSelectionMoved(BibleColumnView* source,
 	BPoint screenPoint)
 {
 	if (source == NULL)
 		return;
+
+	BPoint anchorLocal = ConvertFromScreen(fSelectionAnchorScreen);
+	BPoint currentLocal = ConvertFromScreen(screenPoint);
+	float left = std::min(anchorLocal.x, currentLocal.x);
+	float right = std::max(anchorLocal.x, currentLocal.x);
+
+	std::vector<BibleColumnView*> participating;
+	for (size_t i = 0; i < fTextViews.size(); i++) {
+		BibleColumnView* column
+			= dynamic_cast<BibleColumnView*>(fTextViews[i]);
+		if (column == NULL)
+			continue;
+		BRect frame = column->Frame();
+		if (frame.right >= left && frame.left <= right)
+			participating.push_back(column);
+	}
+
+	if (participating.size() <= 1) {
+		BPoint sourceLocal = source->ConvertFromScreen(screenPoint);
+		source->SetCaret(sourceLocal, true);
+		for (size_t i = 0; i < fTextViews.size(); i++) {
+			BibleColumnView* column
+				= dynamic_cast<BibleColumnView*>(fTextViews[i]);
+			if (column != NULL && column != source)
+				column->ClearColumnSelection();
+		}
+		return;
+	}
 
 	BPoint anchorInSource = source->ConvertFromScreen(fSelectionAnchorScreen);
 	BPoint currentInSource = source->ConvertFromScreen(screenPoint);
@@ -1078,19 +1156,15 @@ ParallelBibleView::_ColumnSelectionMoved(BibleColumnView* source,
 	int lowVerse = std::min(startVerse, endVerse);
 	int highVerse = std::max(startVerse, endVerse);
 
-	BPoint anchorLocal = ConvertFromScreen(fSelectionAnchorScreen);
-	BPoint currentLocal = ConvertFromScreen(screenPoint);
-	float left = std::min(anchorLocal.x, currentLocal.x);
-	float right = std::max(anchorLocal.x, currentLocal.x);
-
 	for (size_t i = 0; i < fTextViews.size(); i++) {
 		BibleColumnView* column
 			= dynamic_cast<BibleColumnView*>(fTextViews[i]);
 		if (column == NULL)
 			continue;
 
-		BRect frame = column->Frame();
-		if (frame.right >= left && frame.left <= right)
+		bool isParticipating = std::find(participating.begin(),
+			participating.end(), column) != participating.end();
+		if (isParticipating)
 			column->SelectVerseRange(lowVerse, highVerse);
 		else
 			column->ClearColumnSelection();
@@ -1156,6 +1230,13 @@ ParallelBibleView::_RebuildLayout()
 		view->SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 		view->SetInsets(kBibleColumnInset);
 		view->SetSelectionEnabled(true);
+		// A reading surface, not an editable one -- selection (for copy/
+		// drag) is wanted, typing into scripture text is not. TextEditor
+		// defaults to editing enabled, and nothing here ever turned it
+		// off, so a Bible/Commentary column silently accepted keystrokes
+		// as edits to its own in-memory document (never saved, but still
+		// corrupting what was displayed) until this was added.
+		view->SetEditingEnabled(false);
 		view->SetTextDocument(fDocuments[i]);
 		AddChild(view);
 		fTextViews.push_back(view);
