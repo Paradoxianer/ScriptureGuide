@@ -149,9 +149,21 @@ const char* SGModule::GetParagraph(const char* key)
 	BLanguage language;
 	BLocale::Default()->GetLanguage(&language);
 	BString bibleText = BString();
-	VerseKey minKey(key);
+	// key is already locale-formatted text by the time it gets here (see
+	// BibleItem's key, built from VerseKey::getText() after setLocale()
+	// in FIND_BUTTON_OK) -- the VerseKey(const char*) constructor parses
+	// with no locale set at all, silently mis-parsing it under a non-
+	// English locale (confirmed empirically elsewhere this same
+	// session: "Johannes 3:16" with no locale set resolves to
+	// "Revelation of John" 1:1 instead), which is exactly why the
+	// clicked-verse preview showed the wrong text.
+	VerseKey minKey;
+	minKey.setLocale(language.Code());
+	minKey.setText(key);
 	minKey.decrement();
-	VerseKey maxKey(key);
+	VerseKey maxKey;
+	maxKey.setLocale(language.Code());
+	maxKey.setText(key);
 	maxKey.increment();
 	VerseKey paragraph;
 	paragraph.setLowerBound(minKey);
@@ -195,8 +207,13 @@ void SGModule::SetKey(const char* key)
 	// when sword::SWModule::SetKey fails and succeeds
 	if (!key)
 		return;
-	VerseKey vkey(key);
+	// Same class of bug as GetParagraph() above: locale has to be set
+	// before parsing, not after -- key may already be locale-formatted
+	// text (e.g. from a caller that read it back via GetKey(), which
+	// returns already-localized text).
+	VerseKey vkey;
 	vkey.setLocale(language.Code());
+	vkey.setText(key);
 	fModule->setKey(vkey);
 }
 
