@@ -11,6 +11,7 @@
 
 #include <Catalog.h>
 
+#include <stdio.h>
 #include <string.h>
 
 #include "constants.h"
@@ -389,12 +390,34 @@ BibleTextDocument::_Rebuild()
 	SetVerseKeyLocale(iterKey);
 	iterKey.setText(savedKeyText.String());
 	int verseCount = iterKey.getVerseMax();
+
+	// Commentary modules commonly link one entry across a whole verse
+	// range (e.g. a single comment discussing verses 13-20) rather than
+	// storing separate text per verse; renderText() then returns the
+	// SAME long text for every linked verse. Without this check each of
+	// those verses became its own full-size paragraph, forcing
+	// VerseAligner to inflate every other column's spacing once per
+	// linked verse instead of just once overall -- the more verses an
+	// entry spans, the more the whole chapter's height balloons.
+	VerseKey previousKey;
+	bool havePreviousEntry = false;
+
 	for (int verse = 1; verse <= verseCount; verse++) {
 		iterKey.setVerse(verse);
 		fModule->setKey(iterKey);
 
-		BString text(fModule->renderText());
-		if (text.CountChars() < 1 && fSkipEmptyVerses)
+		bool linkedToPrevious = havePreviousEntry
+			&& fModule->isLinked(&iterKey, &previousKey);
+
+		BString text;
+		if (!linkedToPrevious)
+			text = fModule->renderText();
+
+		fprintf(stderr, "[BibleTextDocument %s] verse %d linked=%d "
+			"textLen=%d\n", fModule->getName(), verse, linkedToPrevious,
+			(int)text.CountChars());
+
+		if (text.CountChars() < 1 && fSkipEmptyVerses && !linkedToPrevious)
 			continue;
 
 		// GBFPlain leaves paragraph markers behind; strip them so verses
@@ -428,6 +451,11 @@ BibleTextDocument::_Rebuild()
 		paragraph.Append(TextSpan(text, fVerseTextStyle));
 		Append(paragraph);
 		fParagraphVerse.push_back(verse);
+
+		if (!linkedToPrevious) {
+			previousKey = iterKey;
+			havePreviousEntry = true;
+		}
 	}
 
 	_SetModuleKey(savedKey);

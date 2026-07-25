@@ -118,6 +118,11 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	if (fParallelView->CountColumns() == 0 && fCurrentModule != NULL)
 		fParallelView->AddColumn(fCurrentModule->Name());
 
+	// TEMP debug: force a commentary column open at startup to reproduce
+	// the verse-height bug (linked commentary entries spanning several
+	// verses) without clicking through the "+" menu every time.
+	fParallelView->AddColumn("GerKingComments");
+
 	// Load the preferences for the individual module
 	LoadPrefsForModule();
 

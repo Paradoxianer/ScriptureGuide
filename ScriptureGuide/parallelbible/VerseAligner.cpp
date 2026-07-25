@@ -7,6 +7,8 @@
 
 #include <map>
 
+#include <stdio.h>
+
 #include "ParagraphLayout.h"
 
 
@@ -63,6 +65,9 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 			natural[c] = height;
 			if (height > maxHeight)
 				maxHeight = height;
+
+			fprintf(stderr, "[VerseAligner] verse %d column %zu height=%.1f\n",
+				verse, c, height);
 		}
 
 		for (size_t c = 0; c < columns.size(); c++) {
@@ -72,6 +77,9 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 			if (extra > 0.1f)
 				spacing[c][verse] = extra;
 		}
+
+		fprintf(stderr, "[VerseAligner] verse %d maxHeight=%.1f\n", verse,
+			maxHeight);
 	}
 
 	for (size_t c = 0; c < columns.size(); c++) {
