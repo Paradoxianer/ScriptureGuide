@@ -557,6 +557,20 @@ public:
 	{
 	}
 
+	// A thin line along the bottom edge, the same style as the vertical
+	// column dividers in ParallelBibleView::Draw() -- without it the
+	// toolbar/header area blends directly into the reading pane below
+	// with no clean edge between them.
+	virtual void Draw(BRect updateRect)
+	{
+		BView::Draw(updateRect);
+
+		BRect bounds = Bounds();
+		SetHighColor(0, 0, 0);
+		StrokeLine(BPoint(bounds.left, bounds.bottom),
+			BPoint(bounds.right, bounds.bottom));
+	}
+
 	virtual ~ParallelHeaderView()
 	{
 		if (fOwner != NULL)
