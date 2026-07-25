@@ -27,6 +27,13 @@ case "$1" in
 	build)
 		cd "$ROOT/ScriptureGuide"
 		make
+		# Embeds every locales/*.catkeys translation directly into the
+		# binary's own resources (linkcatkeys, via the makefile-engine's
+		# bindcatalogs target) -- a plain `make` only builds the binary,
+		# it never runs this on its own, which is why menu items showed
+		# up English even under a non-English system locale despite
+		# translations existing in locales/de.catkeys etc.
+		make bindcatalogs
 		;;
 
 	run)
