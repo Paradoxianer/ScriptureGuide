@@ -578,6 +578,62 @@ public:
 			fOwner->_HeaderViewDestroyed();
 	}
 
+	// Reordering a column (see #23) is started from a MouseDown that
+	// lands directly on this view rather than on one of its children --
+	// Haiku only dispatches MouseDown() here when the point isn't inside
+	// a child's frame, so this only fires on the blank strip of header
+	// background a column's BMenuField/remove button don't cover (their
+	// own width is their *preferred* size, not the full column width --
+	// see _PositionColumns()), never hijacking an actual click on either
+	// control. No separate drag handle needed as a result.
+	virtual void MouseDown(BPoint where)
+	{
+		if (fOwner == NULL) {
+			BView::MouseDown(where);
+			return;
+		}
+
+		uint32 buttons = 0;
+		BMessage* message = Window()->CurrentMessage();
+		if (message != NULL)
+			message->FindInt32("buttons", (int32*)&buttons);
+		if (buttons != B_PRIMARY_MOUSE_BUTTON) {
+			BView::MouseDown(where);
+			return;
+		}
+
+		int32 index = fOwner->_ColumnIndexForX(where.x);
+		if (index < 0) {
+			BView::MouseDown(where);
+			return;
+		}
+
+		BMessage dragMessage(PARALLEL_REORDER_COLUMN);
+		dragMessage.AddInt32("from", index);
+		DragMessage(&dragMessage, Bounds());
+	}
+
+	// The other half of the gesture MouseDown() above starts: a dropped
+	// PARALLEL_REORDER_COLUMN message lands here via the normal
+	// MessageReceived() path (Haiku delivers a dropped BMessage to
+	// whatever view is under the drop point, the same as any other
+	// message), not through some separate drag-and-drop callback.
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->WasDropped() && message->what == PARALLEL_REORDER_COLUMN
+			&& fOwner != NULL) {
+			int32 from;
+			if (message->FindInt32("from", &from) == B_OK) {
+				BPoint dropPoint = message->DropPoint();
+				ConvertFromScreen(&dropPoint);
+				int32 to = fOwner->_ColumnIndexForX(dropPoint.x);
+				fOwner->_MoveColumn(from, to);
+			}
+			return;
+		}
+		BView::MessageReceived(message);
+	}
+
 private:
 	ParallelBibleView*	fOwner;
 };
@@ -907,6 +963,49 @@ ParallelBibleView::_NotesPosition() const
 			return (int32)i;
 	}
 	return -1;
+}
+
+
+int32
+ParallelBibleView::_ColumnIndexForX(float x) const
+{
+	if (fColumnOrder.empty())
+		return -1;
+
+	for (size_t i = 0; i < fColumnDividerX.size(); i++) {
+		if (x < fColumnDividerX[i])
+			return (int32)i;
+	}
+	return (int32)fColumnOrder.size() - 1;
+}
+
+
+void
+ParallelBibleView::_MoveColumn(int32 from, int32 to)
+{
+	if (from < 0 || (size_t)from >= fColumnOrder.size())
+		return;
+	if (to < 0)
+		to = (int32)fColumnOrder.size() - 1;
+	if ((size_t)to > fColumnOrder.size() - 1)
+		to = (int32)fColumnOrder.size() - 1;
+	if (from == to)
+		return;
+
+	std::vector<ColumnDescription> columns = ColumnLayout();
+	ColumnDescription moved = columns[from];
+	columns.erase(columns.begin() + from);
+	columns.insert(columns.begin() + to, moved);
+
+	while (CountColumns() > 0)
+		RemoveColumn(0);
+
+	for (size_t i = 0; i < columns.size(); i++) {
+		if (columns[i].isNotes)
+			SetNotesEnabled(true);
+		else if (!columns[i].moduleName.IsEmpty())
+			AddColumn(columns[i].moduleName.String());
+	}
 }
 
 

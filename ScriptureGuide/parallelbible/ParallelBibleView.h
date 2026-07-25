@@ -223,6 +223,30 @@ private:
 			float				_NotesColumnWidth() const;
 			int32				_BibleIndexForPosition(int32 position) const;
 			int32				_NotesPosition() const;
+
+			// Column index whose on-screen cell contains content-space x
+			// (same coordinate space as fColumnDividerX/the header
+			// fields' own MoveTo() calls), clamped to the last column if
+			// x falls past every divider. -1 if there are no columns at
+			// all. Used for column-header drag-to-reorder (see #23):
+			// ParallelHeaderView::MouseDown() to find which column a
+			// drag started on, MessageReceived() to find where it was
+			// dropped.
+			int32				_ColumnIndexForX(float x) const;
+
+			// Moves the column currently at `from` so it ends up at
+			// `to` in the final on-screen order (not "insert before the
+			// element currently at `to`" -- `to` is the position in the
+			// array *after* `from` has already been removed from it).
+			// Implemented by reading the current order via
+			// ColumnLayout(), reordering that list, tearing down every
+			// column, and re-adding them via the same AddColumn()/
+			// SetNotesEnabled() calls RestoreColumnLayout() (see #9)
+			// uses -- simplest way to keep this correct without
+			// duplicating the COLUMN_BIBLE/fModules/fDocuments/
+			// fTextViews index bookkeeping AddColumn()/RemoveColumn()
+			// already maintain.
+			void				_MoveColumn(int32 from, int32 to);
 			status_t			_SetColumnToBible(int32 position,
 									const char* moduleName);
 			status_t			_SetColumnToNotes(int32 position);
