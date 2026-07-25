@@ -53,6 +53,7 @@ SetVerseKeyLocale(VerseKey& key)
 const float ParallelBibleView::kMinColumnWidth = 150.0f;
 const float ParallelBibleView::kColumnSpacing = 8.0f;
 const float ParallelBibleView::kHeaderHeight = 24.0f;
+const float ParallelBibleView::kHeaderBottomGap = 2.0f;
 const float ParallelBibleView::kRemoveButtonWidth = 20.0f;
 const float ParallelBibleView::kMaxNotesWidthFraction = 1.0f / 3.0f;
 const float ParallelBibleView::kNoteVerseLabelWidth = 20.0f;
@@ -606,8 +607,10 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	// either way.
 	fHeaderView = new ParallelHeaderView("parallelHeader", B_WILL_DRAW, this);
 	fHeaderView->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
-	fHeaderView->SetExplicitMinSize(BSize(B_SIZE_UNSET, kHeaderHeight));
-	fHeaderView->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, kHeaderHeight));
+	fHeaderView->SetExplicitMinSize(
+		BSize(B_SIZE_UNSET, kHeaderHeight + kHeaderBottomGap));
+	fHeaderView->SetExplicitMaxSize(
+		BSize(B_SIZE_UNLIMITED, kHeaderHeight + kHeaderBottomGap));
 
 	// SetTarget(this) is deliberately NOT called here: this constructor
 	// runs before this view (or fHeaderView) has been attached to any

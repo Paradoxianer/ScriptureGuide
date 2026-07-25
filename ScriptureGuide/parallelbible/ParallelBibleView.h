@@ -264,6 +264,14 @@ private:
 	static	const float			kMinColumnWidth;
 	static	const float			kColumnSpacing;
 	static	const float			kHeaderHeight;
+	// Extra blank space left below the header row's controls, between
+	// their bottom edge and the dividing line ParallelHeaderView::Draw()
+	// strokes along its own bottom edge -- without it the controls'
+	// white backgrounds ran right up against the line with no breathing
+	// room, which looked wrong. Only grows the header row itself, not
+	// the controls within it (still sized/positioned off kHeaderHeight
+	// alone, unchanged).
+	static	const float			kHeaderBottomGap;
 	static	const float			kRemoveButtonWidth;
 	static	const float			kMaxNotesWidthFraction;
 	static	const float			kNoteVerseLabelWidth;
