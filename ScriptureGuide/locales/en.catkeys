@@ -1,15 +1,14 @@
-1	English	application/x-vnd.Scripture-Guide	740233707
+1	English	application/x-vnd.Scripture-Guide	4272978631
 Find Verse…	MainWindow		Find Verse…
 Program	MainWindow		Program
 Font Name	FontPanel		Font Name
-Next Chapter	MainWindow		Next Chapter
 About Scripture Guide…	MainWindow		About Scripture Guide…
+Next Chapter	MainWindow		Next Chapter
 Regular Expression	SearchWindow		Regular Expression
-This module does not have this section.	MainWindow		This module does not have this section.
+Commentaries	ParallelBibleView		Commentaries
+Choose Font…	MainWindow		Choose Font…
 Verse	MainWindow		Verse
-No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.
 Previous Book	MainWindow		Previous Book
-Select All	MainWindow		Select All
 Search Progress:	SearchWindow		Search Progress:
 Quit	MainWindow		Quit
 Preview	FontPanel		Preview
@@ -19,22 +18,23 @@ Chapter	MainWindow		Chapter
 OK	FontPanel		OK
 Options	MainWindow		Options
 Search Results:	SearchWindow		Search Results:
+Notes	ParallelBibleView		Notes
 Find	SearchWindow		Find
 End in 	SearchWindow		End in 
-Copy Verses	MainWindow		Copy Verses
+Book Manager…	MainWindow		Book Manager…
 Duplicate This Window…	MainWindow		Duplicate This Window…
-Choose Font...	MainWindow		Choose Font...
-Commentaries	MainWindow		Commentaries
-Font Size: 	FontPanel		Font Size: 
+Search in 	SearchWindow		Search in 
+Notes	MainWindow		Notes
 Start in 	SearchWindow		Start in 
 Close This Window	MainWindow		Close This Window
+Font Size: 	FontPanel		Font Size: 
 Show Verse Numbers	MainWindow		Show Verse Numbers
-Text:	MainWindow		Text:
+No module selected.	BibleTextDocument		No module selected.
 Navigation	MainWindow		Navigation
 Find Words	SearchWindow		Find Words
-Bibles	MainWindow		Bibles
-Notes…	MainWindow		Notes…
 Next Book	MainWindow		Next Book
+Biblical Texts	ParallelBibleView		Biblical Texts
 Find: 	SearchWindow		Find: 
 Previous Chapter	MainWindow		Previous Chapter
+Go to / Search:	MainWindow		Go to / Search:
 Book:	MainWindow		Book:

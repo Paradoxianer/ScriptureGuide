@@ -1,40 +1,40 @@
-1	German	application/x-vnd.Scripture-Guide	740233707
+1	German	application/x-vnd.Scripture-Guide	4272978631
 Find Verse…	MainWindow		Vers finden…
 Program	MainWindow		Programm
-Next Chapter	MainWindow		nächstes Kapitel
-About Scripture Guide…	MainWindow		Über Scripture Guide…
-This module does not have this section.	MainWindow		Abschnitt in diesem Modul nicht vorhanden
-Previous Book	MainWindow		vorheriges Buch
-Select All	MainWindow		Alles Auswählen
-Quit	MainWindow		Beenden
-Chapter	MainWindow		Kapitel
-Options	MainWindow		Einstellungen
-Copy Verses	MainWindow		Vers kopieren
-Duplicate This Window…	MainWindow		Fenster duplizieren
-Choose Font...	MainWindow		Schrift...
-Commentaries	MainWindow		Kommentare
-Close This Window	MainWindow		Fenster schließen
-Show Verse Numbers	MainWindow		Zeige Versnummerierung
-Text:	MainWindow		Text:
-Navigation	MainWindow		Navigation
-Bibles	MainWindow		Bibel
-Notes…	MainWindow		Notizen...
-Next Book	MainWindow		nächstes Buch
-Previous Chapter	MainWindow		vorheriges Kapitel
-Book:	MainWindow		Buch:
-Verse	MainWindow		Vers
-No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		Es sind noch keine Module installiert\n\n Bitte benutze ScriptureGuideManager um die Bücher, die du benutzen möchtest, herunterzuladen.
 Font Name	FontPanel		Schrift
-Preview	FontPanel		Vorschau
-OK	FontPanel		OK
-Font Size: 	FontPanel		Schriftgröße
+About Scripture Guide…	MainWindow		Über Scripture Guide…
+Next Chapter	MainWindow		nächstes Kapitel
 Regular Expression	SearchWindow		Regulärer Ausdruck
+Commentaries	ParallelBibleView		Kommentare
+Choose Font…	MainWindow		Schrift…
+Verse	MainWindow		Vers
+Previous Book	MainWindow		vorheriges Buch
 Search Progress:	SearchWindow		Fortschritt Suche:
+Quit	MainWindow		Beenden
+Preview	FontPanel		Vorschau
 Find Phrase	SearchWindow		Suche Phrase
 Match Case	SearchWindow		Großschreibung beachten
+Chapter	MainWindow		Kapitel
+OK	FontPanel		OK
+Options	MainWindow		Einstellungen
 Search Results:	SearchWindow		Ergebniss der Suche:
+Notes	ParallelBibleView		Notizen
 Find	SearchWindow		Finde
 End in 	SearchWindow		End in
+Book Manager…	MainWindow		Buchverwaltung…
+Duplicate This Window…	MainWindow		Fenster duplizieren
+Search in 	SearchWindow		Suche in
+Notes	MainWindow		Notizen
 Start in 	SearchWindow		Start in
+Close This Window	MainWindow		Fenster schließen
+Font Size: 	FontPanel		Schriftgröße
+Show Verse Numbers	MainWindow		Zeige Versnummerierung
+No module selected.	BibleTextDocument		Kein Modul ausgewählt.
+Navigation	MainWindow		Navigation
 Find Words	SearchWindow		Suche Wörter
+Next Book	MainWindow		nächstes Buch
+Biblical Texts	ParallelBibleView		Bibeltexte
 Find: 	SearchWindow		Suche:
+Previous Chapter	MainWindow		vorheriges Kapitel
+Go to / Search:	MainWindow		Gehe zu / Suche:
+Book:	MainWindow		Buch:
