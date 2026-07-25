@@ -21,6 +21,7 @@ class SGModule;
 #define FIND_QUIT			'FTqu'
 #define M_ACTIVATE_WINDOW	'ACwn'
 #define FIND_RUN_SEARCH		'FRun'
+#define FIND_SELECT_MODULE	'FSmd'
 
 using namespace std;
 
@@ -35,7 +36,15 @@ enum
 class SGSearchWindow : public BWindow
 {
 public:
-					SGSearchWindow(BRect frame, const char *module,
+					// moduleNames: every translation to offer in the
+					// "Search in" field, in the order they should appear
+					// -- normally the currently open reading-pane columns
+					// (see SGMainWindow::EnsureSearchWindow()), so search
+					// defaults to and only ever offers what's actually
+					// visible rather than some separately tracked
+					// "current module" disconnected from the columns.
+					SGSearchWindow(BRect frame,
+									const std::vector<BString>& moduleNames,
 									BMessenger* owner);
 					~SGSearchWindow();
 	virtual bool	QuitRequested();
@@ -55,8 +64,10 @@ private:
 	
 	vector<const char*>	books;
 	SwordBackend		*myBible;
-	const char			*curModule;
-	
+	BString				curModule;
+	vector<BString>		fModuleNames;
+
+	BMenuField			*moduleField;
 	BMenuField			*bookField;
 	BMenuField			*sndBookField;
 	BTextControl		*searchString;

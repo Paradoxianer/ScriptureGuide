@@ -907,7 +907,14 @@ SGMainWindow::EnsureSearchWindow(void)
 	r.bottom = r.top + 410;
 	if (!fSearchWindow)
 	{
-		fSearchWindow = new SGSearchWindow(r, fCurrentModule->Name(),
+		// The reading pane's own open columns, not fCurrentModule --
+		// that field is a leftover from before ParallelBibleView could
+		// hold more than one column and had drifted out of sync with
+		// whatever the columns actually show (reported: search always
+		// used the first-ever-loaded translation regardless of what was
+		// open).
+		fSearchWindow = new SGSearchWindow(r,
+								fParallelView->ColumnModuleNames(),
 								new BMessenger(this));
 		fFindMessenger = new BMessenger(fSearchWindow);
 	}

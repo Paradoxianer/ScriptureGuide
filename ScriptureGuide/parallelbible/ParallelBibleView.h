@@ -150,6 +150,14 @@ public:
 			void				HighlightVerse(int startVerse,
 									int endVerse);
 
+			// SWORD module names of every Bible/Commentary column
+			// currently open, left-to-right (never the notes column --
+			// fModules only ever holds the COLUMN_BIBLE slots, see the
+			// class comment on fColumnOrder). For the search window
+			// (SGMainWindow::EnsureSearchWindow()), which otherwise has
+			// no way to know what's actually shown in the reading pane.
+			std::vector<BString> ColumnModuleNames() const;
+
 			// Cross-column selection coordination (see #23) -- called
 			// by BibleColumnView instances, not meant for other
 			// callers. A selection-drag that starts in one column and

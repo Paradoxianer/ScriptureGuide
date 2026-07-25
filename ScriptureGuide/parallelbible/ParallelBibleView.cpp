@@ -1047,6 +1047,16 @@ ParallelBibleView::HighlightVerse(int startVerse, int endVerse)
 }
 
 
+std::vector<BString>
+ParallelBibleView::ColumnModuleNames() const
+{
+	std::vector<BString> names;
+	for (size_t i = 0; i < fModules.size(); i++)
+		names.push_back(fModules[i]->getName());
+	return names;
+}
+
+
 void
 ParallelBibleView::_ColumnSelectionStarted(BibleColumnView* source,
 	BPoint screenPoint)

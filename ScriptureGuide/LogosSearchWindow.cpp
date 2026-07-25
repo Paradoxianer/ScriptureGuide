@@ -71,7 +71,8 @@ void VersePreview::FrameResized(float width, float height)
 }
 
 
-SGSearchWindow::SGSearchWindow(BRect frame, const char* module,
+SGSearchWindow::SGSearchWindow(BRect frame,
+					const std::vector<BString>& moduleNames,
 					BMessenger* owner)
  :	BWindow(frame, "", B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL,
 			B_NOT_ZOOMABLE | B_CLOSE_ON_ESCAPE),
@@ -82,25 +83,29 @@ SGSearchWindow::SGSearchWindow(BRect frame, const char* module,
 	minw = 500;
 	minh = 480;
 	SetSizeLimits(minw, maxw, minh, maxh);
-	
-	prefsLock.Lock();
-	if (preferences.FindString("module", &curModule) != B_OK)
-		curModule = "WEB";
-	prefsLock.Unlock();
-	
+
 	myBible = new SwordBackend();
-	curModule = module;
+	fModuleNames = moduleNames;
+	// Falls back to whatever was last saved, then the hardcoded default,
+	// only if the reading pane has no columns open at all -- normally
+	// there's always at least one, so this is a defensive fallback, not
+	// the everyday path.
+	if (fModuleNames.empty()) {
+		BString saved;
+		prefsLock.Lock();
+		if (preferences.FindString("module", &saved) != B_OK)
+			saved = "WEB";
+		prefsLock.Unlock();
+		fModuleNames.push_back(saved);
+	}
+	curModule = fModuleNames[0];
 	books = GetBookNames();
-	fCurrentModule = myBible->FindModule(curModule);
-	
-	if (module)
-	{
-		BString title("Find in ");
-		title << fCurrentModule->FullName();
-		SetTitle(title.String());
-	} else
-		SetTitle("Find");
-	
+	fCurrentModule = myBible->FindModule(curModule.String());
+
+	BString title("Find in ");
+	title << fCurrentModule->FullName();
+	SetTitle(title.String());
+
 	fSearchMode = SEARCH_WORDS;
 	fSearchFlags = REG_ICASE;
 	fSearchStart = 0;
@@ -142,9 +147,27 @@ void SGSearchWindow::BuildGUI(void)
 									new BMessage(FIND_SEARCH_STR),
 									B_WILL_DRAW | B_NAVIGABLE);
 	searchString->SetDivider(searchString->StringWidth("Find: ") + 5);
-	
+
+	// Which of the currently open reading-pane columns to search --
+	// only offered (not every installed module) since that's what #7's
+	// original spec asked for: search whatever's actually visible.
+	BPopUpMenu* moduleChoice = new BPopUpMenu("modulechoice");
+	moduleField = new BMenuField("module_field", B_TRANSLATE("Search in "),
+		moduleChoice);
+	moduleField->SetDivider(
+		moduleField->StringWidth(B_TRANSLATE("Search in ")) + 5);
+	for (size_t i = 0; i < fModuleNames.size(); i++) {
+		SGModule* module = myBible->FindModule(fModuleNames[i].String());
+		const char* label = module != NULL ? module->FullName()
+			: fModuleNames[i].String();
+		BMenuItem* item = new BMenuItem(label, new BMessage(FIND_SELECT_MODULE));
+		if (i == 0)
+			item->SetMarked(true);
+		moduleChoice->AddItem(item);
+	}
+
 	// First, we will set up the two menu fields for the search range
-	
+
 	// The first book in the scope
 	BPopUpMenu* bookChoice = new BPopUpMenu("biblebook");
 	bookField = new BMenuField("book_field", B_TRANSLATE("Start in "), bookChoice);
@@ -208,6 +231,9 @@ void SGSearchWindow::BuildGUI(void)
 		.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
 			.Add(searchString)
 			.Add(findButton)
+		.End()
+		.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
+			.Add(moduleField)
 		.End()
 		.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
 			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
@@ -298,6 +324,21 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 			break;
 		}
 		
+		case FIND_SELECT_MODULE:
+		{
+			BMenu* menu = moduleField->Menu();
+			int32 index = menu->IndexOf(menu->FindMarked());
+			if (index >= 0 && (size_t)index < fModuleNames.size()) {
+				curModule = fModuleNames[index];
+				fCurrentModule = myBible->FindModule(curModule.String());
+
+				BString title("Find in ");
+				title << fCurrentModule->FullName();
+				SetTitle(title.String());
+			}
+			break;
+		}
+
 		case FIND_SEARCH_STR:
 		{
 			fSearchString = searchString->Text();
@@ -354,8 +395,9 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 				sword::VerseKey myKey = sword::VerseKey();
 				myKey.setLocale(language.Code());
 				myKey.setText(item->GetKey());
-				SGMainWindow* win = new SGMainWindow(windowRect, curModule,
-										myKey, VerseFromKey(myKey), VerseFromKey(myKey));
+				SGMainWindow* win = new SGMainWindow(windowRect,
+										curModule.String(), myKey,
+										VerseFromKey(myKey), VerseFromKey(myKey));
 				win->Show();
 			}
 			break;
