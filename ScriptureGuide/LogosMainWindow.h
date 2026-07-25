@@ -71,6 +71,7 @@ private:
 	void BuildGUI(void);
 	void LoadPrefsForModule(void);
 	void SavePrefsForModule(void);
+	void RestoreColumnLayout(void);
 	bool NeedsLineBreaks(void);
 
 	void SetModule(const TextType &module, const int32 &index);

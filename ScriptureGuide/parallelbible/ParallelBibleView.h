@@ -158,6 +158,18 @@ public:
 			// no way to know what's actually shown in the reading pane.
 			std::vector<BString> ColumnModuleNames() const;
 
+			// One entry per on-screen column, left to right, including
+			// the notes column at its actual position -- unlike
+			// ColumnModuleNames() above, which drops position
+			// information because it only serves the search window's
+			// module picker. Used to save/restore a window's whole
+			// layout (see #9); moduleName is empty when isNotes is true.
+			struct ColumnDescription {
+				bool	isNotes;
+				BString	moduleName;
+			};
+			std::vector<ColumnDescription> ColumnLayout() const;
+
 			// Cross-column selection coordination (see #23) -- called
 			// by BibleColumnView instances, not meant for other
 			// callers. A selection-drag that starts in one column and

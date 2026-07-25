@@ -118,10 +118,14 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	if (fParallelView->CountColumns() == 0 && fCurrentModule != NULL)
 		fParallelView->AddColumn(fCurrentModule->Name());
 
-	// TEMP debug: force a commentary column open at startup to reproduce
-	// the verse-height bug (linked commentary entries spanning several
-	// verses) without clicking through the "+" menu every time.
-	fParallelView->AddColumn("GerKingComments");
+	// A saved column layout (see #9) takes over from whatever single
+	// column SetModuleFromString()/the fallback above just built --
+	// replacing it with the exact set of columns (Bible/Commentary
+	// modules and the notes column, in position) the window had the
+	// last time it was closed. Absent one (fresh install, or a
+	// preferences file from before this existed), the single column
+	// already built stands as-is.
+	RestoreColumnLayout();
 
 	// Load the preferences for the individual module
 	LoadPrefsForModule();
@@ -409,7 +413,74 @@ void SGMainWindow::SavePrefsForModule(void)
 	preferences.AddString("module",fCurrentModule->Name());
 	preferences.RemoveData("key");
 	preferences.AddString("key",fCurrentModule->GetKey());
+
+	// Full column layout (#9): every column's type and, for Bible/
+	// Commentary columns, its module -- in on-screen order, so a saved
+	// workspace restores the notes column at the position it was
+	// actually in rather than always appending it last. Only one
+	// layout is ever persisted app-wide (matching how "module"/"key"
+	// above already work): whichever window last saved wins, same
+	// simplification the pre-existing single-module/key persistence
+	// already made for multiple open windows.
+	// RemoveData() (used just above for the single-value fields) only
+	// clears the entry at its default index 0, not the whole array --
+	// harmless there since those fields only ever hold one value, but
+	// these two are genuine arrays (one pair per column). RemoveName()
+	// is what actually clears all of them; without it, every save
+	// appended another copy of the old layout in front of the new one
+	// instead of replacing it (confirmed empirically: two saves in a
+	// row produced a 5-entry array from what should've stayed 3).
+	preferences.RemoveName("columnIsNotes");
+	preferences.RemoveName("columnModule");
+	std::vector<ParallelBibleView::ColumnDescription> columns
+		= fParallelView->ColumnLayout();
+	for (size_t i = 0; i < columns.size(); i++) {
+		preferences.AddBool("columnIsNotes", columns[i].isNotes);
+		preferences.AddString("columnModule", columns[i].moduleName);
+	}
 	prefsLock.Unlock();
+}
+
+
+void SGMainWindow::RestoreColumnLayout(void)
+{
+	prefsLock.Lock();
+
+	int32 count = 0;
+	type_code type;
+	bool haveSavedLayout
+		= preferences.GetInfo("columnIsNotes", &type, &count) == B_OK;
+
+	std::vector<bool> isNotes;
+	std::vector<BString> moduleNames;
+	if (haveSavedLayout) {
+		for (int32 i = 0; i < count; i++) {
+			bool notesFlag = false;
+			BString moduleName;
+			preferences.FindBool("columnIsNotes", i, &notesFlag);
+			preferences.FindString("columnModule", i, &moduleName);
+			isNotes.push_back(notesFlag);
+			moduleNames.push_back(moduleName);
+		}
+	}
+	prefsLock.Unlock();
+
+	// No saved layout at all (fresh install, or a preferences file from
+	// before this existed) -- leave the single column
+	// SetModuleFromString()/the fallback in the constructor already
+	// built alone.
+	if (!haveSavedLayout || count == 0)
+		return;
+
+	while (fParallelView->CountColumns() > 0)
+		fParallelView->RemoveColumn(0);
+
+	for (int32 i = 0; i < count; i++) {
+		if (isNotes[i])
+			fParallelView->SetNotesEnabled(true);
+		else if (!moduleNames[i].IsEmpty())
+			fParallelView->AddColumn(moduleNames[i].String());
+	}
 }
 
 

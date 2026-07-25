@@ -1074,6 +1074,26 @@ ParallelBibleView::ColumnModuleNames() const
 }
 
 
+std::vector<ParallelBibleView::ColumnDescription>
+ParallelBibleView::ColumnLayout() const
+{
+	std::vector<ColumnDescription> result;
+	for (size_t i = 0; i < fColumnOrder.size(); i++) {
+		ColumnDescription desc;
+		if (fColumnOrder[i] == COLUMN_NOTES) {
+			desc.isNotes = true;
+		} else {
+			desc.isNotes = false;
+			int32 bibleIndex = _BibleIndexForPosition((int32)i);
+			if (bibleIndex >= 0 && (size_t)bibleIndex < fModules.size())
+				desc.moduleName = fModules[bibleIndex]->getName();
+		}
+		result.push_back(desc);
+	}
+	return result;
+}
+
+
 void
 ParallelBibleView::_ColumnSelectionStarted(BibleColumnView* source,
 	BPoint screenPoint)
