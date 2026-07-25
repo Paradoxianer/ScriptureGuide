@@ -652,7 +652,9 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fShowVerseNumbers(true),
 	fInitialWidth(initialWidth),
 	fContentHeight(0.0f),
-	fContentWidth(0.0f)
+	fContentWidth(0.0f),
+	fNotesWidthFraction(-1.0f),
+	fNotesSplitDragGuideX(-1.0f)
 {
 	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 
@@ -761,6 +763,91 @@ ParallelBibleView::Draw(BRect updateRect)
 			continue;
 		StrokeLine(BPoint(x, top), BPoint(x, bottom));
 	}
+
+	// The notes-splitter drag in progress (see MouseDown()/MouseMoved()
+	// below) -- a plain guide line at the tracked x, not an actual
+	// resize; only MouseUp() commits a real width/relayout, so this is
+	// the only visual feedback while the drag is live.
+	if (fNotesSplitDragGuideX >= 0.0f
+		&& fNotesSplitDragGuideX >= updateRect.left
+		&& fNotesSplitDragGuideX <= updateRect.right) {
+		StrokeLine(BPoint(fNotesSplitDragGuideX, top),
+			BPoint(fNotesSplitDragGuideX, bottom));
+	}
+}
+
+
+// Starts dragging the notes-column splitter (see #19) if the click landed
+// within a few pixels of _NotesSplitDividerX() -- the only divider that's
+// ever draggable, all the others being purely cosmetic boundaries between
+// equal-share Bible/Commentary columns. Falls through to the base class
+// otherwise, same as ParallelHeaderView::MouseDown() does for its own
+// column-reorder gesture (see #23) -- both rely on this view only ever
+// getting MouseDown() at all when the point isn't inside a child view's
+// frame, i.e. only in the gap between columns.
+void
+ParallelBibleView::MouseDown(BPoint where)
+{
+	float dividerX = _NotesSplitDividerX();
+	static const float kSplitDragTolerance = 4.0f;
+	if (dividerX >= 0.0f) {
+		float distance = where.x > dividerX ? where.x - dividerX
+			: dividerX - where.x;
+		if (distance <= kSplitDragTolerance) {
+			fNotesSplitDragGuideX = dividerX;
+			SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
+			Invalidate();
+			return;
+		}
+	}
+	BView::MouseDown(where);
+}
+
+
+void
+ParallelBibleView::MouseMoved(BPoint where, uint32 transit,
+	const BMessage* dragMessage)
+{
+	if (fNotesSplitDragGuideX >= 0.0f) {
+		fNotesSplitDragGuideX = where.x;
+		Invalidate();
+		return;
+	}
+	BView::MouseMoved(where, transit, dragMessage);
+}
+
+
+// Commits the drag started in MouseDown(): the notes column always sits
+// immediately after _NotesSplitDividerX(), regardless of what's on the
+// other side (including after #23's column reordering), so the space to
+// the right of wherever the guide ended up, as a fraction of total
+// width, becomes fNotesWidthFraction -- _NotesColumnWidth() applies it
+// from here on. A single _Realign() here is the only relayout the whole
+// drag causes, however far the mouse moved (see fNotesSplitDragGuideX's
+// class comment).
+void
+ParallelBibleView::MouseUp(BPoint where)
+{
+	if (fNotesSplitDragGuideX >= 0.0f) {
+		float totalWidth = Bounds().Width();
+		if (totalWidth <= 0.0f)
+			totalWidth = fInitialWidth;
+
+		if (totalWidth > 0.0f) {
+			float notesWidth = totalWidth - fNotesSplitDragGuideX;
+			float fraction = notesWidth / totalWidth;
+			if (fraction < 0.0f)
+				fraction = 0.0f;
+			if (fraction > 1.0f)
+				fraction = 1.0f;
+			fNotesWidthFraction = fraction;
+		}
+
+		fNotesSplitDragGuideX = -1.0f;
+		_Realign();
+		return;
+	}
+	BView::MouseUp(where);
 }
 
 
@@ -1811,10 +1898,17 @@ ParallelBibleView::_ColumnWidth() const
 }
 
 
-// The notes column never claims more than kMaxNotesWidthFraction of the
-// total width -- the equal-share split let it eat half the window with
-// just one Bible column open. Still just a fixed cap for now; issue #19
-// tracks turning this into a real user-draggable divider.
+// Before the user has ever dragged the splitter (see #19),
+// fNotesWidthFraction is -1 and the notes column never claims more than
+// kMaxNotesWidthFraction of the total width -- the equal-share split let
+// it eat half the window with just one Bible column open. Once dragged,
+// fNotesWidthFraction takes over completely (still floor-clamped to
+// kMinColumnWidth, and implicitly ceiling-clamped by MouseMoved() never
+// letting the fraction get set high enough to starve the bible columns
+// below kMinColumnWidth each -- see MouseMoved()), and stays in effect
+// across resizes/column changes rather than resetting to the 1/3 cap on
+// every _PositionColumns() pass, since it's a fraction of totalWidth
+// applied fresh each call, not a one-time pixel snapshot.
 float
 ParallelBibleView::_NotesColumnWidth() const
 {
@@ -1827,14 +1921,35 @@ ParallelBibleView::_NotesColumnWidth() const
 	if (totalWidth <= 0.0f)
 		return kMinColumnWidth;
 
-	int32 columnCount = (int32)fModules.size() + 1;
-	float naturalShare = (totalWidth - kColumnSpacing * (columnCount - 1))
-		/ columnCount;
+	float width;
+	if (fNotesWidthFraction >= 0.0f) {
+		width = totalWidth * fNotesWidthFraction;
+	} else {
+		int32 columnCount = (int32)fModules.size() + 1;
+		float naturalShare
+			= (totalWidth - kColumnSpacing * (columnCount - 1)) / columnCount;
+		width = std::min(naturalShare, totalWidth * kMaxNotesWidthFraction);
+	}
 
-	float width = std::min(naturalShare, totalWidth * kMaxNotesWidthFraction);
 	if (width < kMinColumnWidth)
 		width = kMinColumnWidth;
 	return width;
+}
+
+
+// Content-space x of the divider immediately before the notes column --
+// the only one that's ever draggable (see #19) -- or a negative value if
+// there's no notes column, or nothing to its left to negotiate width
+// with (fColumnDividerX has no earlier entry to use).
+float
+ParallelBibleView::_NotesSplitDividerX() const
+{
+	int32 notesPosition = _NotesPosition();
+	if (notesPosition <= 0)
+		return -1.0f;
+	if ((size_t)(notesPosition - 1) >= fColumnDividerX.size())
+		return -1.0f;
+	return fColumnDividerX[notesPosition - 1];
 }
 
 

@@ -110,6 +110,10 @@ public:
 			using BView::ScrollTo; // un-hide BView::ScrollTo(float, float)
 	virtual	void				MessageReceived(BMessage* message);
 	virtual	void				Draw(BRect updateRect);
+	virtual	void				MouseDown(BPoint where);
+	virtual	void				MouseMoved(BPoint where, uint32 transit,
+									const BMessage* dragMessage);
+	virtual	void				MouseUp(BPoint where);
 
 			BView*				HeaderView() const { return fHeaderView; }
 			float				HeaderHeight() const
@@ -247,6 +251,12 @@ private:
 			// fTextViews index bookkeeping AddColumn()/RemoveColumn()
 			// already maintain.
 			void				_MoveColumn(int32 from, int32 to);
+
+			// Content-space x of the one divider that's ever draggable --
+			// the one immediately before the notes column (see #19) --
+			// or < 0.0f if there's no notes column, or it's the leftmost
+			// column with nothing to its left to negotiate space with.
+			float				_NotesSplitDividerX() const;
 			status_t			_SetColumnToBible(int32 position,
 									const char* moduleName);
 			status_t			_SetColumnToNotes(int32 position);
@@ -296,6 +306,25 @@ private:
 			float				fContentHeight;
 			float				fContentWidth;
 			std::vector<float>	fColumnDividerX;
+
+			// User-set notes column width, as a fraction of total content
+			// width, from dragging the splitter (see #19); -1 (the
+			// default) means no drag has happened yet, so
+			// _NotesColumnWidth() falls back to its original automatic
+			// natural-share/kMaxNotesWidthFraction-cap behavior. Set once
+			// on MouseUp, not continuously during the drag -- see
+			// fNotesSplitDragGuideX.
+			float				fNotesWidthFraction;
+
+			// Content-space x of the live drag guide line while the
+			// splitter is being dragged, -1 when it isn't. Deliberately
+			// separate from actually resizing the notes column: only this
+			// thin guide line (drawn in Draw(), not the columns
+			// themselves) updates on every MouseMoved(), so a drag
+			// doesn't force a full relayout of every column's text per
+			// pixel moved -- the real resize (_Realign()) only happens
+			// once, in MouseUp(), from wherever the guide ended up.
+			float				fNotesSplitDragGuideX;
 
 	static	const float			kMinColumnWidth;
 	static	const float			kColumnSpacing;
