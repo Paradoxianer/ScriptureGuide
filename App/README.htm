@@ -3,31 +3,38 @@
 <title>Welcome to ScriptureGuide!</title>
 </head>
 <body>
-<h2>ScriptureGuide 0.9.0</h2>
+<h2>ScriptureGuide 1.0.0</h2>
 
-Welcome to ScriptureGuide, the bible study program for Haiku.
-<p>
+Welcome to ScriptureGuide, the Bible study program for Haiku.
 <p>
 <h3>Current features include:</h3>
 <ul>
-<li>Show bibles and commentaries</li>
-<li>Search a module or a subset of a module</li>
-<li>Additional fancy stuff like help, take notes, set font etc.</li>
+<li>Any number of Bibles, commentaries, or personal-notes columns shown side
+by side, kept aligned on the same verse</li>
+<li>Drag and drop of selected verses between columns, to the Desktop, or to
+other applications, and back again</li>
+<li>A single Go to / Search field that jumps straight to a typed reference or
+runs a search, whichever the text turns out to be</li>
+<li>Search within whichever translation is currently open, with a picker for
+which one if more than one column is open</li>
+<li>Personal notes per verse</li>
+<li>Translated interface (German among other languages) with locale-aware
+verse references</li>
+<li>A Book Manager (Program menu -- Book Manager...) to download and remove
+Bibles and commentaries, with a consent warning before any network access</li>
+<li>Set the reading font, hide verse numbers, and other display options</li>
 </ul>
-<P>
 <h3>Planned features:</h3>
 <ul>
-<li>Write a custom GBF parser.</li>
-<li>Search in more than one module at once.</li>
-<li>Support for Strong numbers.</li>
-<li>Support for all types of modules (not only Bibles and commentaries).</li>
+<li>Search across more than one open translation at once (currently one
+translation per search, selectable from whichever columns are open)</li>
+<li>Support for Strong's numbers</li>
+<li>Support for module types beyond Bibles and commentaries</li>
 </ul>
-<P>
-<h3>Version 0.9.0 known bugs are:</h3>
+<h3>Known limitations:</h3>
 <ul>
-<li>Hebrew is displayed from left to right, this due to the limitations of BTextView</li>
-<li>Riegers comment is not converted to UTF8 (problem in SWORD?)</li>
-<li>Saving preferences is buggy.</li>
+<li>Hebrew is displayed left to right, a limitation of the underlying text
+view</li>
 </ul>
 </body>
 </html>

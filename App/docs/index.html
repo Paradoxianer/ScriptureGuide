@@ -3,90 +3,180 @@
 		<title>ScriptureGuide Manual</title>
 	</head>
 <body>
-<table cellSpacing=0 cellPadding=10 border=0 width=100%> 
+<table cellSpacing=0 cellPadding=10 border=0 width=100%>
 	<tr>
 		<td valign=top width=150>
 			<img width=150 height=80 src="pics/logo1.png">
 		</td>
 		<td valign=top >
 			<center><h1>Scripture Guide Manual</h1></center>
-			<a href="index.html#text">The Text View</a><br>
+			<a href="index.html#reading">The Reading Pane</a><br>
 			<a href="index.html#toolbar">The Toolbar</a><br>
+			<a href="index.html#notes">Personal Notes</a><br>
 			<a href="index.html#menu">The Menu</a><br>
 			<a href="index.html#find">The Find Window</a><br>
-			<a href="index.html#install">Installing</a><br>
+			<a href="index.html#locale">Using a Non-English System</a><br>
+			<a href="index.html#install">Installing Bibles and Commentaries</a><br>
 		</td>
 	</tr>
 </table><br>
 
-<center><table cellSpacing=0 cellPadding=10 border=0 width="560"> 
+<center><table cellSpacing=0 cellPadding=10 border=0 width="560">
 <tr><td>
 
-<h2><a name="text">The Text View</a></h2>
+<h2><a name="reading">The Reading Pane</a></h2>
 <img src="pics/textview.png" border=1>
 
-<p>The text view shows the current chapter in the selected bible or commentary. Simply mark any text with your mouse and drag it to another window, like your notes or Gobe Productive. Greek texts will be displayed properly if you have installed a Greek font. From time to time, the text view may be empty. This is normally because the particular book or chapter is not available in the module you are looking at. An example of this would be trying to look at the book of Genesis in an Bible module that is only New Testament. A commentary with no comments on a particular chapter will also exhibit this behavior.</p>
+<p>The reading pane shows one or more translations, commentaries, or
+personal-notes columns side by side, all kept aligned on the same verse --
+scroll one, and the rest follow. Each column has its own header with a
+drop-down to switch it to any installed Bible or commentary, and a small "x"
+button to remove it. The "+" button at the right of the header row adds
+another column and lets you choose what goes in it:</p>
+
+<img src="pics/addcolumn.png" border=1>
+
+<p>Selecting text within a single column works like ordinary text selection.
+Once a selection spans more than one column, it snaps to whole verses --
+translations rarely agree on where a sentence, let alone a word, actually
+ends, so verses are the unit that lines up across all of them. Drag a
+selection to another column, to the Desktop to create a text clipping, or to
+another application entirely; dragging a reference (or a clipping created
+this way) back into any column jumps every column there. Greek and Hebrew
+modules automatically switch to a suitable font, if one is installed (see
+below).</p>
+
+<p>From time to time a column may show no text at all for the current
+chapter. This is normally because that particular book or chapter is not
+available in the module -- for example, looking at the book of Genesis in a
+New-Testament-only Bible, or a commentary with no entry for a given
+chapter.</p>
 
 <h2><a name="toolbar">The Toolbar</a></h2>
-<img src="pics/toolbar.png">
+<img src="pics/toolbar.png" border=1>
 
-<p> With the toolbar you can select any installed Bible or commentary. Additionally, it also allows you to choose a particular book, chapter, and verse. The selected verse will be highlighted for you, as well. Also, there is a Notes button which will open a document to hold any study notes you might want to enter. Should you need to find this file, they are stored in the notes folder of the settings directory from scriptureguide. Cou can find it at <tt>/boot/home/config/settings/scriptureguide/notes</tt>. This folder will be generated once you start the Scripture Guide app.</p>
+<p>The Book, Chapter, and Verse fields navigate every column in the reading
+pane together. The <b>Go to / Search</b> field on the right is a single box
+for both: type a reference (like <tt>John 3:16</tt> or, in German,
+<tt>Joh 3, 16</tt>) and pressing Enter jumps straight there and highlights it;
+type anything else and it opens the Find window with that search already
+running. Pressing Enter again re-runs whatever is in the box, even if you
+haven't changed it. The Notes button toggles the personal-notes column (see
+below) on and off.</p>
+
+<h2><a name="notes">Personal Notes</a></h2>
+<img src="pics/notes.png" border=1>
+
+<p>The notes column gives every verse its own small text field, right next to
+the translations you're reading, rather than one long document you have to
+scroll through to find the right spot. Notes are saved automatically and are
+stored per-book/chapter in your settings directory, under
+<tt>/boot/home/config/settings/scriptureguide/notes</tt>. This folder is
+created the first time you start Scripture Guide.</p>
 
 <h2><a name="menu">The Menu</a></h2>
 
-<img src="pics/program.png">
-<p> The Program menu is for opening and closing windows and quitting Scripture Guide. Also listed are keyboard shortcuts. For example, you can hold the Alt key and hit N to open a new window. This works for most items in any of the menus.</p>
+<img src="pics/program.png" border=1>
+<p>The Program menu opens and closes windows, launches the Book Manager (see
+<a href="index.html#install">Installing Bibles and Commentaries</a> below),
+and quits Scripture Guide. Most items across all three menus have a keyboard
+shortcut, shown to their right -- for example, Alt-N opens a new window from
+almost anywhere.</p>
 
-<img src="pics/navigation.png">
+<img src="pics/navigation.png" border=1>
 
-<p> The Navigation displays various ways which you can get around in Scripture Guide. Select All highlights the current chapter. Copy Verses will copy any highighted text and copy it to system clipboard. This will allow you to transfer it to another program by choosing Edit|Paste in that program.</p>
+<p>The Navigation menu is the keyboard-driven way to get around: Alt with the
+left or right cursor key changes chapters; Control-Alt with left or right
+jumps to the previous or next book (say, from Exodus to Leviticus); Alt-F
+opens the Find window.</p>
 
-<P>As mentioned above, most items in the menu have a keyboard shortcut. While it is possible to use the menus, learning the shortcuts for most of the items in the Navigation menu will allow you to quickly get around. Hold the Alt key and hit the left or right cursor keys to change chapters. Tapping left or right while holding Control <i>and</i> Alt will jump to the next or previous book in a text, such as from Exodus to Leviticus or Genesis. Alt-F will open the Find window.</P>
+<img src="pics/options.png" border=1>
 
-<img src="pics/options.png">
-
-<p> Because an effort has been made to choose good options from the start, there are only two. Unchecking 'Show Verse Numbers' hides the verse numbers. This is particularly nice when reading a devotional-style Bible module or a commentary. This menu will also allow you to choose a font for the text you are viewing.</p>
+<p>Unchecking "Show Verse Numbers" hides the verse numbers, which reads more
+naturally for a devotional-style Bible or a commentary. "Choose Font..."
+picks the font used for the reading pane.</p>
 
 <h2><a name="find">The Find Window</a></h2>
 
-<img src="pics/search1.png" align="right">
+<img src="pics/search1.png" border=1>
 
-<p>Scripture Guide possesses considerable flexibility and power in its ability to search for text. In the pictured example, we have done a search for the name Abraham in all books of the Bible. Search results are displayed in the white box, and the entire verse and the two surrounding verses are visible in the bottom box. Double-clicking on any search result will open a new window displaying that verse.</p>
+<p>The <b>Search in</b> field lists whichever translations are currently open
+as columns in the reading pane -- not the full list of everything installed
+-- so it always defaults to (and only ever offers) what you're actually
+reading. Search results are shown in the list on the left; the surrounding
+verses of whichever result is selected appear in the box below it.
+Double-clicking a result opens a new window at that verse.</p>
 
 <h4>Search Options</h4>
 
-<p> Within this box, you can choose search settings to make your search more specific. You can choose a range of books within a text, such as choosing Matthew through Acts. Checking the box marked 'Match Case' will make the search pay attention to capitalization. You can also choose to search for any verses having any of the words, the exact phrase, or something called a Regular Expression.</p>
+<p>You can narrow the search to a range of books (say, Matthew through Acts),
+match case exactly, and choose between matching any of the words, an exact
+phrase, or a regular expression.</p>
 
 <h4>Regular Expression Searches</h4>
 
-<p>Regular Expressions are a complex way of searching for patterns which were developed for the UNIX operating system. By using a string of characters (which looks like little more than gibberish to those unfamiliar), it is possible to search for just about anything. For example, to look for all words beginning with P, the search term would be <tt>P[^ ]+</tt> . Entire books have been written on Regular Expressions and, as such, are beyond the scope of this manual. If you would like to learn more about them, <a href="http://gnosis.cx/publish/programming/regular_expressions.html">click here</a> As a quick aside, the forward slashes used on both sides of a regular expression (i.e. '/') are not needed when searching in Scripture Guide.</p>
+<p>Regular expressions are a flexible way of describing text patterns -- for
+example, <tt>P[^ ]+</tt> matches any word starting with "P". They're a large
+enough topic that a full explanation is beyond this manual; if you'd like to
+learn more, <a href="http://gnosis.cx/publish/programming/regular_expressions.html">this
+is a reasonable place to start</a>. The forward slashes often used around a
+regular expression elsewhere (<tt>/like this/</tt>) aren't needed here.</p>
 
-<h4>ShortCuts</h4>
-<p>You can select multiple verses and use alt+c to copied the selcted verses.</p>
+<h2><a name="locale">Using a Non-English System</a></h2>
+
+<p>Scripture Guide's own interface is translated into several languages
+(German among them) and follows your system's locale automatically. Verse
+references also follow local convention where it differs from English -- for
+example, a German system accepts and displays <tt>Johannes 3, 16</tt> with a
+comma, rather than <tt>John 3:16</tt> with a colon, in the Go to / Search
+field, the Find window, and dragged/dropped reference text alike.</p>
 
 <h2><a name="install">Installing Bibles and Commentaries</a></h2>
 
-<p> New to the 0.8 release of Scripture Guide is a module manager which allows you to quickly and easily download and install new texts. Shown below is a picture of the most recent version of the manager. Clicking on a name will show information about a text, including its size. Double-clicking on a name will schedule a text to be installed or, if it is currently installed, to be removed. Texts which are installed are shown in bold, blue type. Once you have chosen which text modules you would like to install and/or remove. click 'Apply' and wait while the manager does its work. </p>
+<p>The easiest way to install Bibles, commentaries, and other texts is the
+Book Manager, launched from Program menu -- Book Manager... (or
+automatically, if you start Scripture Guide with no texts installed yet).
+Since it needs to contact crosswire.org over plain, unencrypted HTTP to list
+and download texts, it shows a warning the first time it needs to do that in
+a session -- accessing religious content online is risky in some countries,
+so please only continue if you're confident that's safe for you. A "Don't
+ask again" option is available if you'd rather not see it every time.</p>
 
-<img src="pics/manager.png">
+<img src="pics/manager.png" border=1>
+
+<p>Clicking a name shows information about that text, including its size.
+Double-clicking schedules it to be installed (or, if it's already installed,
+removed) -- installed texts are shown in bold, blue type. Once you've chosen
+what you want, click "Apply" and wait for it to finish.</p>
 
 <h4>Manual Installation</h4>
 
-
-<p> If you prefer to do your own installation, it is not very difficult, either.
+<p>If you'd rather not use the Book Manager, installing a module by hand
+isn't difficult either:</p>
 
 <ol>
-<li>Go to <a href="http://www.crosswire.org/sword/modules">http://www.crosswire.org/sword/modules</a> and choose a module. (Remember to select a Raw download, as Windows downloads will not work in Haiku.)</li>
-<li>Once it is downloaded, double-click on your module to start Expander if it does not start by itself.</li>
-<li> Change the Destination box to <tt>/boot/home/config/settings/sword</tt> and click 'Expand'.</li>
-<li>Restart ScriptureGuide if it is currently running and your new text will show up in the menu.</li>
+<li>Go to <a href="http://www.crosswire.org/sword/modules">http://www.crosswire.org/sword/modules</a>
+and choose a module (select a Raw download -- Windows-format downloads won't
+work on Haiku).</li>
+<li>Once it's downloaded, double-click it to start Expander, if it doesn't
+start on its own.</li>
+<li>Change the Destination field to <tt>/boot/home/config/settings/sword</tt>
+and click "Expand".</li>
+<li>Restart Scripture Guide if it's currently running, and the new text will
+show up in the menus.</li>
 </ol>
-</p>
+
 <center><img src="pics/download.png"></center>
 
-<p> Scripture Guide requires a Greek font to correctly view modules in Ancient Greek. Currently, only the <a href="http://www.russellcottrell.com/greek/license/">Aristarcoj</a> font is supported.</p> 
+<p>Scripture Guide needs a Greek font to correctly display modules in Ancient
+Greek; currently the <a href="http://www.russellcottrell.com/greek/license/">Aristarcoj</a>
+font is supported, and gets picked automatically once installed.</p>
 
-<p> Download it and move it in the directory <tt>/boot/home/config/non-packaged/fonts/ttfonts/</tt>. Once it has been moved here, choose Preferences|Fonts from the BeOS menu and then click the 'Rescan' button. If Scripture Guide is running after you have done this, restart it and Greek modules will be displayed properly. Please respect the license under which this font is provided.</p>
+<p>Download it and move it into
+<tt>/boot/home/config/non-packaged/fonts/ttfonts/</tt>. Once it's there,
+choose Preferences|Fonts and click "Rescan". Restart Scripture Guide
+afterward and Greek modules will display properly. Please respect the
+license this font is provided under.</p>
 </td></tr>
 </table>
 

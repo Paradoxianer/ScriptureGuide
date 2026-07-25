@@ -2,15 +2,18 @@
 <head><title>Installing ScriptureGuide</title></head>
 <body>
 <h2>Scripture Guide Installation</h2>
-This is for the installation from the sources. The sources are released under <a href="LICENSE">GNU Public License</a>.
+This is for installation from source. The source is released under the <a href="LICENSE">GNU Public License</a>.
 <P>
-This version is meant for developers. If you only want to use Scripture Guide, then get the binary package from the <a href="http://www.scripture-guide.org/">Scripture Guide Website</a>.
+If you just want to use Scripture Guide, the easiest way is via HaikuDepot or
+<code>pkgman install scriptureguide</code>, once the package is available in
+your repository. This page is for building it yourself.
 
 <h3>I. Compiling and installing Scripture Guide</h3>
-This software is only for Haiku. It will not compile on any other platform. It also requires the SWORD library (which can be built using <a href="https://bitbucket.org/haikuports/haikuporter">haikuporter</a>.
+This software is only for Haiku. It will not compile on any other platform. It also requires the SWORD library, which can be installed with <code>pkgman install sword sword_devel</code>, or built from the recipe in <a href="https://github.com/haikuports/haikuports">haikuports</a> using <a href="https://github.com/haikuports/haikuporter">haikuporter</a>.
 
+<ol>
 <li>Run <code>make</code> in the <code>ScriptureGuide</code> and <code>ScriptureGuideManager</code> directories and copy the <code>App</code> directory to wherever you want.</li>
-<li>Use ScriptureGuideManager to download books.</li>
+<li>Use ScriptureGuideManager (or the "Book Manager..." entry in Scripture Guide's own Program menu) to download books.</li>
 </ol>
 
 <h3>II. Other Notes</h3>
