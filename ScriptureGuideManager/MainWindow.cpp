@@ -197,10 +197,9 @@ int32 MainWindow::ApplyThread(void *data)
 	MainWindow *win=(MainWindow*)data;
 	
 	int32 i, installcount,removecount;
-	
+
 	BString zipfilename, configpath, syscmd, displaystring;
-	ConfigFile cfile;
-	
+
 	win->Lock();
 	win->fApplyButton->SetEnabled(false);
 	win->fTextView->SetText("");
@@ -213,14 +212,23 @@ int32 MainWindow::ApplyThread(void *data)
 	for(i=0; i<installcount; i++)
 	{
 		win->Lock();
-		
+
+		// A fresh ConfigFile every iteration -- see the same fix in the
+		// uninstall loop below for why sharing one across iterations is
+		// dangerous (a failed ReadConfigFile() here just means a
+		// download runs with a blank description, not a wrong
+		// deletion, so this loop was never the *unsafe* half of the
+		// bug, but reusing state across unrelated iterations was still
+		// the wrong instinct here too).
+		ConfigFile cfile;
+
 		zipfilename = win->fInstallList.StringAt(i);
 		configpath=zipfilename;
 		configpath.ToLower();
 		configpath+=".conf";
 		configpath.Prepend(SG_PKGINFO_PATH "configfiles/");
 		ReadConfigFile(configpath.String(),cfile);
-		
+
 		displaystring="Downloading ";
 		displaystring << cfile.fDescription << "\n";
 				
@@ -248,33 +256,61 @@ int32 MainWindow::ApplyThread(void *data)
 		win->fTextView->Insert("Done\n");
 		win->Unlock();
 	}
-	// ToDo make thiw waaaay more secure.. one error and all modules are gone.. like it happens now...
 	for(i=0; i<removecount; i++)
 	{
 		printf("removing %s\n ",win->fUninstallList.StringAt(i).String());
 		win->Lock();
-		
+
+		// A fresh ConfigFile every iteration, not one shared across the
+		// whole loop -- if ReadConfigFile() below fails (missing file,
+		// or a DataPath= line it didn't find) it just leaves every
+		// field untouched rather than erroring the fields out, so a
+		// shared cfile would silently keep the *previous* iteration's
+		// fDataPath, and the very first iteration would keep its
+		// default-constructed *empty* one.
+		ConfigFile cfile;
+
 		zipfilename=win->fUninstallList.StringAt(i);
 		configpath=zipfilename;
 		configpath.ToLower();
 		configpath+=".conf";
 		configpath.Prepend(SG_PKGINFO_PATH "configfiles/");
-		ReadConfigFile(configpath.String(),cfile);
-		
+		status_t readStatus = ReadConfigFile(configpath.String(),cfile);
+
+		// This is the actual data-loss bug (#36): with an empty
+		// fDataPath (ReadConfigFile() failed, or a config file with no
+		// DataPath= line at all), "rm -r SG_MODULEBASE_PATH*" -- the
+		// datapath fragment collapsing to nothing -- deletes every
+		// installed module's data, not just this one's. Confirmed by
+		// the very TODO this replaces ("one error and all modules are
+		// gone.. like it happens now"): that's not hypothetical, it's
+		// already happened at least once (see commit 4d8b6db). Skip
+		// the whole removal for this entry rather than run any of the
+		// three commands below with a path we can't trust.
+		if (readStatus != B_OK || cfile.fDataPath.IsEmpty())
+		{
+			displaystring="Error: couldn't read the config file for ";
+			displaystring << zipfilename
+				<< " -- skipping its removal rather than guessing.\n";
+			win->fTextView->Insert(displaystring.String());
+			win->Unlock();
+			continue;
+		}
+
 		displaystring="Removing ";
 		displaystring << cfile.fDescription << "\n";
-				
+
 		win->fTextView->Insert(displaystring.String());
 		win->Unlock();
-		
+
 		// The two things needed to remove a module:
 		// delete mods.d/modulename.conf
 		// delete datapath/*
 		// remove datapath
-		
+
 		configpath=zipfilename;
 		configpath.ToLower();
-		
+
 		syscmd="rm ";
 		syscmd << SG_MODULEBASE_PATH << "mods.d/" << configpath << ".conf";
 		printf("%s\n",syscmd.String());
@@ -284,7 +320,7 @@ int32 MainWindow::ApplyThread(void *data)
 		syscmd << SG_MODULEBASE_PATH << cfile.fDataPath << "*";
 		printf("%s\n",syscmd.String());
 		system(syscmd.String());
-		
+
 		syscmd="rmdir ";
 		syscmd << SG_MODULEBASE_PATH << cfile.fDataPath;
 		printf("%s\n",syscmd.String());

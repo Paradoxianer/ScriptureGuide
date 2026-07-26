@@ -23,7 +23,6 @@ public:
 	SGMApp(void);
 	~SGMApp(void);
 
-	status_t TokenizeWords(const char *source, BList *stringarray, const char *tokenstr);
 	void SetupPackageList(void);
 	bool ConfirmNetworkAccess(void);
 };
@@ -117,8 +116,29 @@ void SGMApp::SetupPackageList(void)
 	if(!entry.Exists())
 	{
 		EXEC(SG_PKGINFO_PATH, "wget " SG_DOWNLOAD_PKGS);
-		EXEC(SG_PKGINFO_PATH, "awk -F'[<>]' '{print $13}' index.html | awk 'NF' >packagelist.txt");
-		EXEC(SG_PKGINFO_PATH, "awk -F'[<>]' '{print $23}' index.html | awk 'NF' >packagesizes.txt");
+		// Extracting names and sizes as two independent lists (each
+		// piped through its own `awk 'NF'` to drop blank lines) used to
+		// pair them back up purely by array index once read back in --
+		// which breaks the instant the two lists end up different
+		// lengths. Confirmed empirically (#36) against the real
+		// crosswire index.html: the column-header row's own "Name"
+		// link matches the same $13 field position as a real package
+		// name, but its $23 position lands on an empty gap between two
+		// adjacent tags (there's no size cell to speak of in a header
+		// row) -- so packagelist.txt gets a phantom "Name" entry that
+		// `awk 'NF'` filters out of packagesizes.txt, shifting every
+		// real package's size against the wrong name from that point
+		// on (465 names, 464 sizes, live-tested).
+		//
+		// Filtering to only the lines that actually contain a ".zip"
+		// link before extracting anything (excluding the header, the
+		// parent-directory row, and the <hr> separator row in one
+		// step) and pulling name+size from the very same matched line
+		// in a single awk pass makes them structurally impossible to
+		// desync -- there is no longer a second, independently-filtered
+		// list for them to fall out of step with.
+		EXEC(SG_PKGINFO_PATH, "grep '\\.zip\">' index.html "
+			"| awk -F'[<>]' '{print $13\"\\t\"$23}' >packages.txt");
 	}
 	
 	entry.SetTo(SG_PKGINFO_PATH "mods.d.tar.gz");
@@ -137,56 +157,68 @@ void SGMApp::SetupPackageList(void)
 	dir.SetTo(SG_PKGINFO_PATH);
 	if(dir.CountEntries() != 1)
 	{
-		BFile file(SG_PKGINFO_PATH "packagelist.txt",B_READ_ONLY);
+		BFile file(SG_PKGINFO_PATH "packages.txt",B_READ_ONLY);
 		off_t filesize;
 		BString filedata;
 		status_t err = B_OK;
-		
+
 		file.GetSize(&filesize);
-		
+
 		if(filesize<=0)
 		{
 			printf("Package list file size is 0\n");
 			return;
 		}
-		
+
 		char *data=new char[filesize+1];
-		
+
 		err = file.Seek(0,SEEK_SET);
 		if (err !=B_OK)
 			printf ("Error: %s\n",strerror(err));
 		err = file.Read(data,filesize);
 		if (err !=B_OK)
 			printf ("Error: %s\n",strerror(err));
+		data[filesize] = '\0';
 		file.Unset();
-		
+
 		filedata.SetTo(data);
 		filedata.RemoveAll("\"");
 		filedata.RemoveAll("rawzip/");
-		TokenizeWords(filedata.String(),&gFileNameList,"\n");
 		delete [] data;
-		
-		err = file.SetTo(SG_PKGINFO_PATH "packagesizes.txt",B_READ_ONLY);
-		if (err !=B_OK)
-			printf ("Error: %s\n",strerror(err));
-		err = file.GetSize(&filesize);
-		if (err !=B_OK)
-			printf ("Error: %s\n",strerror(err));
-		
-		data=new char[filesize+1];
-		err = file.Seek(0,SEEK_SET);
-		if (err !=B_OK)
-			printf ("Error: %s\n",strerror(err));
-		err = file.Read(data,filesize);
-		if (err !=B_OK)
-			printf ("Error: %s\n",strerror(err));
-		file.Unset();
-		
-		filedata.SetTo(data);
-		filedata.RemoveAll(" kb");
-		TokenizeWords(filedata.String(),&gFileSizeList,"\n");
-		delete [] data;
-		
+
+		// Each line is "name\tsize", from the same source line in
+		// packages.txt (see the EXEC() call above) -- splitting each
+		// one individually here, rather than tokenizing the whole blob
+		// into two separate lists the way this used to, is what
+		// actually guarantees gFileNameList/gFileSizeList stay paired
+		// (#36).
+		int32 lineStart = 0;
+		while (lineStart < filedata.Length())
+		{
+			int32 lineEnd = filedata.FindFirst("\n", lineStart);
+			if (lineEnd < 0)
+				lineEnd = filedata.Length();
+
+			BString line;
+			filedata.CopyInto(line, lineStart, lineEnd - lineStart);
+			lineStart = lineEnd + 1;
+
+			int32 tab = line.FindFirst("\t");
+			if (tab < 0)
+				continue;
+
+			BString name, size;
+			line.CopyInto(name, 0, tab);
+			line.CopyInto(size, tab + 1, line.Length() - tab - 1);
+			name.Trim();
+			size.Trim();
+			if (name.IsEmpty() || size.IsEmpty())
+				continue;
+
+			gFileNameList.AddItem(new BString(name));
+			gFileSizeList.AddItem(new BString(size));
+		}
+
 		// Now that we have the list of filenames, we iterate through the list
 		// of filenames and derive the name of the config file by removing the .zip
 		// and making it all lowercase. Then, we read the config file, parse it, 
@@ -278,54 +310,6 @@ void SGMApp::SetupPackageList(void)
 		}
 	}
 
-}
-
-status_t SGMApp::TokenizeWords(const char *source, BList *stringarray, const char *tokenstr)
-{
-	if(!source || !stringarray || !tokenstr || !stringarray->IsEmpty())
-		return B_BAD_VALUE;
-	
-	// convert all tabs to spaces and eliminate consecutive spaces so that we can 
-	// easily use strtok() 
-	BString bstring(source);
-	bstring.ReplaceAll('\t',' ');
-	bstring.ReplaceAll("  "," ");
-
-	char *workstr=new char[strlen(source)+1];
-	strcpy(workstr,bstring.String());
-	strtok(workstr,tokenstr);
-	
-	char *token=strtok(NULL,tokenstr),*lasttoken=workstr;
-	
-	if(!token)
-	{
-		delete workstr;
-		stringarray->AddItem(new BString(bstring));
-		return B_OK;
-	}
-	
-	int32 length;
-	BString *newword;
-	
-	while(token)
-	{
-		length=token-lasttoken;
-		
-		newword=new BString(lasttoken,length+1);
-		lasttoken=token;
-		stringarray->AddItem(newword);
-
-		token=strtok(NULL,tokenstr);
-	}
-	
-	length=strlen(lasttoken);
-	newword=new BString(lasttoken,length+1);
-	lasttoken=token;
-	stringarray->AddItem(newword);
-	
-	delete [] workstr;
-
-	return B_OK;
 }
 
 int main(void)
