@@ -6,6 +6,7 @@
 #include <Button.h>
 #include <Box.h>
 #include <Catalog.h>
+#include <Clipboard.h>
 #include <Directory.h>
 #include <Entry.h>
 #include <File.h>
@@ -29,6 +30,7 @@
 #include <iostream>
 
 #include "constants.h"
+#include "ExportFormats.h"
 #include "FontPanel.h"
 #include "LogosApp.h"
 #include "Preferences.h"
@@ -165,6 +167,23 @@ void SGMainWindow::BuildGUI(void)
 		new BMessage(MENU_PROGRAM_BOOKMANAGER)));
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Dictionary…"),
 		new BMessage(MENU_PROGRAM_DICTIONARY)));
+	menu->AddSeparatorItem();
+
+	// One verse-aligned table of every open column (+ notes, if any),
+	// copied to the clipboard ready to paste into a spreadsheet/Markdown
+	// doc/etc. (#8) -- four formats rather than a file-save panel, since
+	// "paste into another tool" is the actual use case the issue asks
+	// for, not archiving a file.
+	BMenu* exportMenu = new BMenu(B_TRANSLATE("Copy Comparison"));
+	exportMenu->AddItem(new BMenuItem(B_TRANSLATE("As Plain Text"),
+		new BMessage(MENU_PROGRAM_EXPORT_PLAIN)));
+	exportMenu->AddItem(new BMenuItem(B_TRANSLATE("As Tab-Separated"),
+		new BMessage(MENU_PROGRAM_EXPORT_TSV)));
+	exportMenu->AddItem(new BMenuItem(B_TRANSLATE("As Markdown Table"),
+		new BMessage(MENU_PROGRAM_EXPORT_MARKDOWN)));
+	exportMenu->AddItem(new BMenuItem(B_TRANSLATE("As HTML Table"),
+		new BMessage(MENU_PROGRAM_EXPORT_HTML)));
+	menu->AddItem(exportMenu);
 	menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Duplicate This Window…"),
 		new BMessage(MENU_FILE_NEW), 'D'));
@@ -645,6 +664,40 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 		case MENU_PROGRAM_DICTIONARY:
 		{
 			EnsureDictionaryWindow();
+			break;
+		}
+		case MENU_PROGRAM_EXPORT_PLAIN:
+		case MENU_PROGRAM_EXPORT_TSV:
+		case MENU_PROGRAM_EXPORT_MARKDOWN:
+		case MENU_PROGRAM_EXPORT_HTML:
+		{
+			ExportFormat format = EXPORT_PLAIN_TEXT;
+			if (msg->what == MENU_PROGRAM_EXPORT_TSV)
+				format = EXPORT_TAB_SEPARATED;
+			else if (msg->what == MENU_PROGRAM_EXPORT_MARKDOWN)
+				format = EXPORT_MARKDOWN_TABLE;
+			else if (msg->what == MENU_PROGRAM_EXPORT_HTML)
+				format = EXPORT_HTML_TABLE;
+
+			std::vector<BString> columnNames = fParallelView->ColumnModuleNames();
+			bool hasNotes = fParallelView->NotesEnabled();
+			std::vector<ParallelBibleView::ExportRow> rows
+				= fParallelView->BuildExportRows();
+			BString exportText = FormatExport(format, columnNames, hasNotes,
+				rows);
+
+			if (be_clipboard->Lock())
+			{
+				be_clipboard->Clear();
+				BMessage* clip = be_clipboard->Data();
+				if (clip != NULL)
+				{
+					clip->AddData("text/plain", B_MIME_TYPE,
+						exportText.String(), exportText.Length());
+					be_clipboard->Commit();
+				}
+				be_clipboard->Unlock();
+			}
 			break;
 		}
 		case FIND_QUIT:

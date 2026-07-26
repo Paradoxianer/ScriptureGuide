@@ -1391,6 +1391,53 @@ ParallelBibleView::ColumnLayout() const
 }
 
 
+std::vector<ParallelBibleView::ExportRow>
+ParallelBibleView::BuildExportRows() const
+{
+	std::vector<ExportRow> rows;
+	if (fCurrentKey.IsEmpty())
+		return rows;
+
+	VerseKey chapterKey;
+	SetVerseKeyLocale(chapterKey);
+	chapterKey.setText(fCurrentKey.String());
+	int verseCount = chapterKey.getVerseMax();
+
+	for (int verse = 1; verse <= verseCount; verse++) {
+		ExportRow row;
+		row.verse = verse;
+
+		BString verseNumberPrefix;
+		verseNumberPrefix << " " << verse << " ";
+
+		for (size_t i = 0; i < fDocuments.size(); i++) {
+			BString cellText;
+			int32 start, end;
+			if (fDocuments[i]->TextRangeForVerseRange(verse, verse, start,
+					end)) {
+				cellText = fDocuments[i]->Text(start, end - start);
+				if (cellText.FindFirst(verseNumberPrefix) == 0)
+					cellText.Remove(0, verseNumberPrefix.Length());
+				cellText.Trim();
+			}
+			row.columnText.push_back(cellText);
+		}
+
+		if (fNotes != NULL) {
+			VerseKey verseKey;
+			SetVerseKeyLocale(verseKey);
+			verseKey.setText(fCurrentKey.String());
+			verseKey.setVerse(verse);
+			row.notesText = fNotes->GetNote(verseKey.getText());
+		}
+
+		rows.push_back(row);
+	}
+
+	return rows;
+}
+
+
 void
 ParallelBibleView::_ColumnSelectionStarted(BibleColumnView* source,
 	BPoint screenPoint)

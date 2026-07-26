@@ -31,6 +31,7 @@ APP_MIME_SIG = application/x-vnd.Scripture-Guide
 #	Also note that spaces in folder names do not work well with this Makefile.
 SRCS = \
 	 DictionaryWindow.cpp  \
+	 ExportFormats.cpp  \
 	 FontPanel.cpp  \
 	 LogosApp.cpp  \
 	 LogosMainWindow.cpp  \

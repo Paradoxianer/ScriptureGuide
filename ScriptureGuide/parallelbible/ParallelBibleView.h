@@ -174,6 +174,23 @@ public:
 			};
 			std::vector<ColumnDescription> ColumnLayout() const;
 
+			// One row per verse of the current chapter, verse-aligned
+			// across every open Bible/Commentary column (columnText,
+			// same left-to-right order as ColumnModuleNames()) and the
+			// notes column if one is open (notesText, empty otherwise)
+			// -- structured data for #8's export feature to format as
+			// plain text/TSV/Markdown/HTML, not a rendering of anything
+			// already on screen. Each cell is that verse's plain text
+			// with the leading " N " verse-number prefix _Rebuild()
+			// prepends (when ShowVerseNumbers() is on) stripped back
+			// out, since the row already carries its own verse number.
+			struct ExportRow {
+				int				verse;
+				std::vector<BString>	columnText;
+				BString			notesText;
+			};
+			std::vector<ExportRow> BuildExportRows() const;
+
 			// Cross-column selection coordination (see #23) -- called
 			// by BibleColumnView instances, not meant for other
 			// callers. A selection-drag that starts in one column and
