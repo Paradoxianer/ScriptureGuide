@@ -74,6 +74,14 @@ SGDictionaryWindow::~SGDictionaryWindow()
 }
 
 
+bool
+SGDictionaryWindow::QuitRequested()
+{
+	Hide();
+	return false;
+}
+
+
 void
 SGDictionaryWindow::_BuildGUI()
 {

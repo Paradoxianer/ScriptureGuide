@@ -42,19 +42,29 @@ public:
 							// relationship SGMainWindow already has with
 							// its own SwordBackend). Takes ownership of
 							// owner (deleted in the destructor, same as
-							// SGSearchWindow's fMessenger) -- sent
-							// DICT_QUIT right before this window's own
-							// BWindow object goes away, so SGMainWindow
-							// can null out its own now-dangling pointer
-							// instead of calling Show()/Activate() on a
-							// deleted window the next time "Dictionary..."
-							// is picked from the menu (reported: reopening
-							// after closing landed the window somewhere
-							// wrong -- undefined behavior on a deleted
-							// object, not a real bug in *where* it opened).
+							// SGSearchWindow's fMessenger) -- only actually
+							// used on real app shutdown (SGMainWindow::
+							// QuitRequested() calls Quit() on this window
+							// directly); QuitRequested() below means the
+							// user-facing close box never gets here at all.
 							SGDictionaryWindow(BRect frame,
 								SwordBackend* backend, BMessenger* owner);
 	virtual					~SGDictionaryWindow();
+	// Hides instead of actually closing -- same idiom as
+	// SGSearchWindow::QuitRequested(). The previous approach let the
+	// window really Quit()/self-delete and asynchronously told
+	// SGMainWindow to null out its now-dangling fDictionaryWindow via
+	// DICT_QUIT sent from the destructor; that notification race really
+	// crashed (confirmed via a real crash report): closing this window
+	// and triggering EnsureDictionaryWindow() again (e.g. a Strong's-
+	// number click) before SGMainWindow's message loop had actually
+	// processed the queued DICT_QUIT left fDictionaryWindow non-NULL but
+	// pointing at an already-destructed BWindow, so EnsureDictionaryWindow()
+	// skipped creating a new one and called Show()/Activate() straight
+	// into freed memory. Never actually destructing on close removes the
+	// race entirely -- the pointer stays valid for the app's whole
+	// lifetime once created, exactly like fSearchWindow already does.
+	virtual bool			QuitRequested();
 	virtual void			MessageReceived(BMessage* message);
 
 			// Looks up and displays `strongsNumber` (e.g. "G3056")
