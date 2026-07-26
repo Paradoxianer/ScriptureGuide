@@ -78,6 +78,19 @@ public:
 									int endVerse, int32& start,
 									int32& end) const;
 
+			// Verse references embedded in this column's own rendered
+			// text -- e.g. a commentary citing "(Mt 16:18)" -- are
+			// detected (see FindReferencesInText(), #28) and rendered as
+			// a distinctly-styled sub-span of the verse's text, not a
+			// separate paragraph or verse of their own. documentOffset
+			// is a plain character offset into this TextDocument (the
+			// same space TextDocumentView::TextOffsetAt() and
+			// TextRangeForVerseRange() already use); outKey is the
+			// normalized VerseKey text ready for SetKey(), untouched if
+			// this returns false.
+			bool				ReferenceLinkAt(int32 documentOffset,
+									BString& outKey) const;
+
 			// Extra bottom spacing per verse, used by VerseAligner to keep
 			// the same verse lined up across parallel columns. Replaces
 			// any previous overrides and rebuilds the document once.
@@ -94,6 +107,7 @@ private:
 
 			CharacterStyle		fVerseNumberStyle;
 			CharacterStyle		fVerseTextStyle;
+			CharacterStyle		fReferenceLinkStyle;
 			ParagraphStyle		fParagraphStyle;
 
 			bool				fShowVerseNumbers;
@@ -101,6 +115,17 @@ private:
 
 			// paragraph index -> verse number, rebuilt in _Rebuild()
 			std::vector<int>	fParagraphVerse;
+
+			// Document-wide [start, end) offset ranges for every
+			// reference link found across the whole chapter, rebuilt
+			// alongside fParagraphVerse in _Rebuild() -- see
+			// ReferenceLinkAt().
+			struct ReferenceLink {
+				int32	start;
+				int32	end;
+				BString	key;
+			};
+			std::vector<ReferenceLink>	fReferenceLinks;
 
 			// verse number -> extra SpacingBottom, set by VerseAligner
 			std::map<int, float> fVerseSpacingBottom;

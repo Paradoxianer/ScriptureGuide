@@ -12,6 +12,7 @@
 
 #include <vector>
 #include <map>
+#include <regex>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -641,4 +642,58 @@ bool ParseVerseReference(const char* input, BString& normalizedKey)
 
 	normalizedKey = key.getText();
 	return true;
+}
+
+
+std::vector<TextReference>
+FindReferencesInText(const char* text)
+{
+	std::vector<TextReference> result;
+	if (text == NULL || *text == '\0')
+		return result;
+
+	// A candidate: an optional "1 "/"2 "/"3 " numbered-book prefix, a
+	// capitalized book-ish word (with an optional trailing abbreviation
+	// period), then chapter/verse digits separated by ':' or ',' (see
+	// ParseVerseReference()'s own comment on the German comma
+	// convention), with an optional "-verseEnd" range. Deliberately
+	// liberal -- ParseVerseReference() below is the actual filter; this
+	// only needs to be cheap and not miss real references, not be
+	// precise on its own.
+	//
+	// ASCII letters only ([A-Za-z], not e.g. German "ö"/"ü"): std::regex
+	// matches individual bytes, not UTF-8 codepoints, so a multi-byte
+	// accented character in a character class here would risk matching
+	// half of one and corrupting the scan. Standard SWORD locale files
+	// already register ASCII-safe alternate abbreviations for accented
+	// book names for exactly this kind of typing/matching convenience
+	// (confirmed in this file's own German-locale reference work
+	// earlier), and the one commentary this was actually tested against
+	// (GerKingComments) uses only ASCII abbreviations ("Mt", "Off") in
+	// practice -- so this is a real but narrow gap, not a blocker.
+	static const std::regex kReferencePattern(
+		"([1-3][ ]|)"
+		"[A-Z][A-Za-z]*\\.?"
+		"[ \t]+[0-9]{1,3}[,:][ \t]?[0-9]{1,3}(-[0-9]{1,3}|)");
+
+	BString source(text);
+	const char* str = source.String();
+	std::cregex_iterator it(str, str + source.Length(), kReferencePattern);
+	std::cregex_iterator end;
+	for (; it != end; ++it) {
+		const std::cmatch& match = *it;
+		BString candidate(match.str().c_str());
+
+		BString normalizedKey;
+		if (!ParseVerseReference(candidate.String(), normalizedKey))
+			continue;
+
+		TextReference reference;
+		reference.start = (int32)match.position(0);
+		reference.length = (int32)match.length(0);
+		reference.normalizedKey = normalizedKey;
+		result.push_back(reference);
+	}
+
+	return result;
 }

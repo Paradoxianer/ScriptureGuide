@@ -47,6 +47,29 @@ int				UpperVerseFromKey(const char* key);
 bool			ParseVerseReference(const char* input,
 					BString& normalizedKey);
 
+// One occurrence of a recognized verse reference embedded in a larger
+// block of free text (a commentary's prose, not a whole search/goto
+// field) -- see FindReferencesInText() below. start/length are a byte
+// range into the ORIGINAL text passed in, suitable for splitting it into
+// TextSpans around the match (see #28, cross-reference navigation).
+struct TextReference {
+	int32	start;
+	int32	length;
+	BString	normalizedKey;
+};
+
+// Scans free-flowing text (typically a commentary's rendered verse text,
+// which -- unlike a dedicated cross-reference module -- SWORD has no
+// structured API for; see #28) for substrings that look like a verse
+// reference (a capitalized book-ish word, optionally preceded by "1 "/
+// "2 "/"3 ", followed by chapter/verse digits) and validates each
+// candidate through the exact same ParseVerseReference() every typed
+// reference already goes through -- so a candidate the regex below
+// spotted but that isn't actually a real book/chapter/verse (a stray
+// "Kapitel 5, 3" or similar) is silently dropped rather than turned into
+// a broken link, with no separate book-name dictionary to keep in sync.
+std::vector<TextReference>	FindReferencesInText(const char* text);
+
 
 std::vector<const char*>	GetBookNames(void);
 

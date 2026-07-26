@@ -173,6 +173,7 @@ public:
 
 	virtual void MouseDown(BPoint where)
 	{
+		fMouseDownPoint = where;
 		fTrackingForDrag = false;
 		if (HasSelection()) {
 			int32 start, end;
@@ -243,14 +244,32 @@ public:
 
 	virtual void MouseUp(BPoint where)
 	{
+		// A plain click, not a drag -- same threshold/rationale as
+		// MouseMoved()'s own fTrackingForDrag check just above, just
+		// measured from MouseDown() to here instead of continuously.
+		// Needed here (rather than reusing fDragStartPoint) because a
+		// fresh-selection click (the `else if` branch below) never sets
+		// fDragStartPoint at all -- only the "pressed inside an existing
+		// selection" branch does.
+		float dx = where.x - fMouseDownPoint.x;
+		float dy = where.y - fMouseDownPoint.y;
+		const float kClickThreshold = 4.0f;
+		bool wasPlainClick
+			= dx * dx + dy * dy <= kClickThreshold * kClickThreshold;
+
 		if (fTrackingForDrag) {
 			// Pressed inside the selection, released again without
 			// moving far enough to start a drag -- a plain click after
-			// all, meant to move the caret there like normal.
+			// all, meant to move the caret there like normal (unless it
+			// landed on a cross-reference -- see #28 -- in which case
+			// following that takes over instead).
 			fTrackingForDrag = false;
-			SetCaret(where, false);
+			if (!(wasPlainClick && _TryFollowReferenceAt(where)))
+				SetCaret(where, false);
 		} else if (fOwner != NULL) {
 			fOwner->_ColumnSelectionEnded();
+			if (wasPlainClick)
+				_TryFollowReferenceAt(where);
 		}
 		TextDocumentView::MouseUp(where);
 	}
@@ -455,6 +474,34 @@ private:
 		return reference;
 	}
 
+	// A plain click (not a drag) landing on a cross-reference detected in
+	// this column's own text (see #28,
+	// BibleTextDocument::ReferenceLinkAt()) jumps every column there --
+	// same SG_BIBLE path _HandleReferenceDrop() below already uses for a
+	// dropped reference, so the toolbar's book/chapter/verse fields stay
+	// in sync too, not just the reading pane. False (a no-op) anywhere
+	// else in the text.
+	bool _TryFollowReferenceAt(BPoint where)
+	{
+		if (fBibleDocument == NULL)
+			return false;
+
+		int32 offset = TextOffsetAt(where);
+		BString key;
+		if (!fBibleDocument->ReferenceLinkAt(offset, key))
+			return false;
+
+		BWindow* window = Window();
+		if (window == NULL)
+			return false;
+
+		BMessage jump(SG_BIBLE);
+		jump.AddString("key", key);
+		window->PostMessage(&jump);
+		return true;
+	}
+
+
 	// True if `message` carried a Bible reference to navigate to --
 	// "scriptureguide:reference" if this came from our own drag source
 	// (see _StartDrag()), otherwise falling back to parsing whatever
@@ -531,6 +578,7 @@ private:
 	ParallelBibleView*	fOwner;
 	bool				fTrackingForDrag;
 	BPoint				fDragStartPoint;
+	BPoint				fMouseDownPoint;
 };
 
 

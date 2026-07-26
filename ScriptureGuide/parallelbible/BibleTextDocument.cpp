@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include "constants.h"
+#include "SwordBackend.h"
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "BibleTextDocument"
@@ -62,6 +63,13 @@ BibleTextDocument::BibleTextDocument(SWModule* module)
 {
 	fVerseNumberStyle.SetBold(true);
 	fParagraphStyle.SetJustify(true);
+
+	// Distinguishes a detected cross-reference (see #28, ReferenceLinkAt())
+	// from ordinary verse text at a glance, the same way underlined blue
+	// text reads as "clickable" everywhere else.
+	rgb_color linkColor = { 0, 0, 200, 255 };
+	fReferenceLinkStyle.SetForegroundColor(linkColor);
+	fReferenceLinkStyle.SetUnderline(1);
 
 	_Rebuild();
 }
@@ -233,6 +241,13 @@ BibleTextDocument::SetBaseFont(const BFont& font)
 	fVerseNumberStyle.SetFont(effective);
 	fVerseNumberStyle.SetBold(true);
 
+	// Same reapply-after-SetFont() rationale as fVerseNumberStyle above,
+	// for the underline/color set in the constructor.
+	rgb_color linkColor = { 0, 0, 200, 255 };
+	fReferenceLinkStyle.SetFont(effective);
+	fReferenceLinkStyle.SetForegroundColor(linkColor);
+	fReferenceLinkStyle.SetUnderline(1);
+
 	_Rebuild();
 }
 
@@ -322,6 +337,20 @@ BibleTextDocument::TextRangeForVerseRange(int startVerse, int endVerse,
 }
 
 
+bool
+BibleTextDocument::ReferenceLinkAt(int32 documentOffset, BString& outKey) const
+{
+	for (size_t i = 0; i < fReferenceLinks.size(); i++) {
+		if (documentOffset >= fReferenceLinks[i].start
+			&& documentOffset < fReferenceLinks[i].end) {
+			outKey = fReferenceLinks[i].key;
+			return true;
+		}
+	}
+	return false;
+}
+
+
 void
 BibleTextDocument::SetVerseSpacing(const std::map<int, float>& spacing)
 {
@@ -355,6 +384,7 @@ BibleTextDocument::_Rebuild()
 	// are untouched since only the base-class subobject is reassigned.
 	TextDocument::operator=(TextDocument());
 	fParagraphVerse.clear();
+	fReferenceLinks.clear();
 
 	if (fModule == NULL) {
 		Paragraph paragraph(fParagraphStyle);
@@ -402,6 +432,15 @@ BibleTextDocument::_Rebuild()
 	VerseKey previousKey;
 	bool havePreviousEntry = false;
 
+	// Running character offset into this TextDocument as a whole (the
+	// same space TextDocumentView::TextOffsetAt() and
+	// TextRangeForVerseRange() already operate in) -- built up here
+	// rather than queried back from ParagraphAtIndex() after the fact,
+	// since ReferenceLinkAt() (see #28) needs it anyway to translate a
+	// reference match's offset *within one verse's text* into a
+	// document-wide one.
+	int32 documentOffset = 0;
+
 	for (int verse = 1; verse <= verseCount; verse++) {
 		iterKey.setVerse(verse);
 		fModule->setKey(iterKey);
@@ -433,10 +472,12 @@ BibleTextDocument::_Rebuild()
 			style.SetSpacingBottom(spacing->second);
 
 		Paragraph paragraph(style);
+		int32 verseNumberLength = 0;
 		if (fShowVerseNumbers) {
 			BString number;
 			number << " " << verse << " ";
 			paragraph.Append(TextSpan(number, fVerseNumberStyle));
+			verseNumberLength = number.Length();
 		} else if (text.IsEmpty()) {
 			// A paragraph whose only span is empty makes the whole
 			// document's Length() undercount how many paragraphs actually
@@ -448,9 +489,52 @@ BibleTextDocument::_Rebuild()
 			// still reads as an empty, clickable line to type a note into.
 			text = " ";
 		}
-		paragraph.Append(TextSpan(text, fVerseTextStyle));
+
+		// Cross-references (#28): a commentary citing "(Mt 16:18)" gets
+		// that substring split into its own, distinctly-styled span
+		// (see fReferenceLinkStyle) rather than the whole verse being one
+		// plain span -- FindReferencesInText() has already validated it
+		// against ParseVerseReference(), the same check a typed
+		// reference goes through, so this is never more than the
+		// occasional false negative (a real reference it missed), not a
+		// false positive turned into a broken link.
+		std::vector<TextReference> references
+			= FindReferencesInText(text.String());
+		if (references.empty()) {
+			paragraph.Append(TextSpan(text, fVerseTextStyle));
+		} else {
+			int32 cursor = 0;
+			for (size_t i = 0; i < references.size(); i++) {
+				const TextReference& reference = references[i];
+				if (reference.start > cursor) {
+					BString before;
+					text.CopyInto(before, cursor, reference.start - cursor);
+					paragraph.Append(TextSpan(before, fVerseTextStyle));
+				}
+
+				BString linkText;
+				text.CopyInto(linkText, reference.start, reference.length);
+				paragraph.Append(TextSpan(linkText, fReferenceLinkStyle));
+
+				ReferenceLink link;
+				link.start = documentOffset + verseNumberLength
+					+ reference.start;
+				link.end = link.start + reference.length;
+				link.key = reference.normalizedKey;
+				fReferenceLinks.push_back(link);
+
+				cursor = reference.start + reference.length;
+			}
+			if (cursor < text.Length()) {
+				BString after;
+				text.CopyInto(after, cursor, text.Length() - cursor);
+				paragraph.Append(TextSpan(after, fVerseTextStyle));
+			}
+		}
+
 		Append(paragraph);
 		fParagraphVerse.push_back(verse);
+		documentOffset += paragraph.Length();
 
 		if (!linkedToPrevious) {
 			previousKey = iterKey;
