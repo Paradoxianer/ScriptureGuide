@@ -44,6 +44,7 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
  	fCurrentChapter(1),
  	fFindMessenger(NULL),
 	fSearchWindow(NULL),
+	fDictionaryWindow(NULL),
 	fFontPanel(NULL)
 {
 	fCurrentVerse = selectVers;
@@ -162,6 +163,8 @@ void SGMainWindow::BuildGUI(void)
 	menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Book Manager…"),
 		new BMessage(MENU_PROGRAM_BOOKMANAGER)));
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Dictionary…"),
+		new BMessage(MENU_PROGRAM_DICTIONARY)));
 	menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Duplicate This Window…"),
 		new BMessage(MENU_FILE_NEW), 'D'));
@@ -639,6 +642,11 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			be_roster->Launch(SG_MANAGER_SIGNATURE);
 			break;
 		}
+		case MENU_PROGRAM_DICTIONARY:
+		{
+			EnsureDictionaryWindow();
+			break;
+		}
 		case FIND_QUIT:
 		{
 			// This message is received whenever the child find window quits
@@ -1005,7 +1013,22 @@ SGMainWindow::EnsureSearchWindow(void)
 }
 
 
-bool SGMainWindow::QuitRequested() 
+void
+SGMainWindow::EnsureDictionaryWindow(void)
+{
+	if (!fDictionaryWindow)
+	{
+		BRect r(Frame().OffsetByCopy(30, 40));
+		r.right = r.left + 400;
+		r.bottom = r.top + 350;
+		fDictionaryWindow = new SGDictionaryWindow(r, fModManager);
+	}
+	fDictionaryWindow->Show();
+	fDictionaryWindow->Activate(true);
+}
+
+
+bool SGMainWindow::QuitRequested()
 {
 	if (fFindMessenger)
 	{
@@ -1017,6 +1040,11 @@ bool SGMainWindow::QuitRequested()
 	{
 		if (fSearchWindow->LockLooper())
 			fSearchWindow->Quit();
+	}
+	if (fDictionaryWindow)
+	{
+		if (fDictionaryWindow->LockLooper())
+			fDictionaryWindow->Quit();
 	}
 	if (fFontPanel)
 	{

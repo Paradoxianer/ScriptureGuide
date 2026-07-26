@@ -190,6 +190,20 @@ const char* SGModule::GetParagraph(const char* key)
 }
 
 
+// Lexicon/dictionary modules (see #31) are keyed by a plain string --
+// "3056", a headword, whatever the module itself uses -- never a
+// VerseKey, so this bypasses every VerseKey-locale dance the Bible/
+// Commentary methods above need entirely and just sets the module's raw
+// key text directly. Confirmed empirically against GerStrongsGreek: its
+// keys have no "G"/"H" prefix at all (LookupStrongsNumber() below strips
+// it before calling this), and a leading zero is optional.
+const char* SGModule::GetEntry(const char* key)
+{
+	fModule->setKey(key);
+	return fModule->renderText();
+}
+
+
 const char* SGModule::GetKey(void)
 {
 	VerseKey* key = (VerseKey*)fModule->getKey();	
@@ -273,7 +287,23 @@ vector<const char*> SGModule::SearchModule(int searchType, int flags,
 	listkey.setPersist(true);
 	fModule->setKey(listkey);
 
-	for (listkey = TOP; !listkey.popError(); listkey++) 
+	for (listkey = TOP; !listkey.popError(); listkey++)
+		results.push_back((const char*) listkey);
+
+	return results;
+}
+
+
+vector<const char*> SGModule::SearchEntries(const char* searchText)
+{
+	vector<const char*> results;
+
+	ListKey &listkey = fModule->search(searchText, -2 /* multiword */,
+		REG_ICASE);
+	listkey.setPersist(true);
+	fModule->setKey(listkey);
+
+	for (listkey = TOP; !listkey.popError(); listkey++)
 		results.push_back((const char*) listkey);
 
 	return results;
@@ -427,6 +457,44 @@ SGModule* SwordBackend::LexiconAt(const int32 &index) const
 SGModule* SwordBackend::GeneralTextAt(const int32 &index) const
 {
 	return fTextList->ItemAt(index);
+}
+
+
+BString SwordBackend::LookupStrongsNumber(const char* strongsNumber) const
+{
+	if (strongsNumber == NULL || *strongsNumber == '\0')
+		return BString();
+
+	char prefix = strongsNumber[0];
+	if (prefix != 'G' && prefix != 'H')
+		return BString();
+
+	const char* wantedFeature = (prefix == 'G') ? "GreekDef" : "HebrewDef";
+	const char* number = strongsNumber + 1;
+
+	for (int32 i = 0; i < CountLexicons(); i++) {
+		SGModule* lexicon = LexiconAt(i);
+		if (lexicon == NULL)
+			continue;
+
+		const ConfigEntMap& conf = lexicon->GetModule()->getConfig();
+		std::pair<ConfigEntMap::const_iterator, ConfigEntMap::const_iterator>
+			range = conf.equal_range("Feature");
+		bool matches = false;
+		for (ConfigEntMap::const_iterator it = range.first;
+				it != range.second && !matches; ++it) {
+			if (it->second == wantedFeature)
+				matches = true;
+		}
+		if (!matches)
+			continue;
+
+		BString entry(lexicon->GetEntry(number));
+		if (!entry.IsEmpty())
+			return entry;
+	}
+
+	return BString();
 }
 
 

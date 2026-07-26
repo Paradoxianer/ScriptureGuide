@@ -48,6 +48,7 @@ const uint32 WINDOW_REGISTRY_ADDED		= 'WRdd';
 const uint32 MENU_FILE_NEW				= 'MFnw';
 const uint32 MENU_FILE_QUIT				= 'MFqu';
 const uint32 MENU_PROGRAM_BOOKMANAGER	= 'MPbm';
+const uint32 MENU_PROGRAM_DICTIONARY	= 'MPdi';
 
 const uint32 MENU_EDIT_NOTE				= 'MEno';
 const uint32 MENU_EDIT_FIND				= 'MEfi';

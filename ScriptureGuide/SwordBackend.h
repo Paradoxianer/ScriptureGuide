@@ -91,13 +91,28 @@ public:
 	const char*			GetVerse(const char* book, int chapter, int verse);
 	const char*			GetVerse(const char* key);
 	const char*			GetParagraph(const char* key);
-	
+
+	// For Lexicon/Dictionary-type modules (see #31): sets the module's
+	// own raw string key directly (no VerseKey involved -- these aren't
+	// keyed by book/chapter/verse) and renders that entry.
+	const char*			GetEntry(const char* key);
+
 	void				SetVerse(const char* book, int chapter, int verse);
 	
 	std::vector<const char*>	SearchModule(int searchType, int flags,
 								const char* searchText, const char* scopeFrom,
 								const char* scopeTo, BStatusBar* statusBar);
-	
+
+	// Same underlying SWModule::search(), but with no VerseKey scope at
+	// all (unlike SearchModule() above, built for Bible/Commentary book
+	// ranges) -- a Lexicon/Dictionary module (see #31) has no book/
+	// chapter concept to scope by, and SWModule::search()'s `scope`
+	// parameter already defaults to "search the whole module" when
+	// omitted. Multiword, case-insensitive; returns each matching
+	// entry's own raw key (suitable for GetEntry()), not the matched
+	// text itself.
+	std::vector<const char*>	SearchEntries(const char* searchText);
+
 	bool				IsGreek(void);
 	bool				IsHebrew(void);
 	
@@ -142,6 +157,20 @@ public:
 	SGModule*			FindModule(const char* name);
 	status_t			SetModule(SGModule* mod);
  	SGModule*			CurrentModule(void);
+
+	// Looks up a Strong's number (e.g. "G3056" or "H430", the exact form
+	// SWModule::getEntryAttributes()'s "Word" attributes report -- see
+	// #27) in whichever installed Lexicon/Dictionary module declares the
+	// standard SWORD Feature=GreekDef (for a "G..." number) or
+	// Feature=HebrewDef (for "H...") config entry -- the same feature
+	// tag CrossWire's own StrongsGreek/StrongsHebrew modules use, so
+	// this works for whichever compatible dictionary happens to be
+	// installed rather than hardcoding a specific module name. Empty if
+	// no matching dictionary is installed, or the number isn't found in
+	// it. The "G"/"H" prefix itself is stripped before the lookup --
+	// confirmed empirically that keeping it silently mismatches to a
+	// nearby, unrelated entry instead of failing outright.
+	BString				LookupStrongsNumber(const char* strongsNumber) const;
 
 	sword::SWMgr*		Manager(void) const
 							{ return fManager; }

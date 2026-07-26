@@ -15,6 +15,7 @@
 
 #include <vector>
 
+#include "DictionaryWindow.h"
 #include "LogosSearchWindow.h"
 #include "SwordBackend.h"
 #include "parallelbible/ParallelBibleView.h"
@@ -89,6 +90,10 @@ private:
 	// the search window to front -- shared by MENU_EDIT_FIND and
 	// UNIVERSAL_SEARCH's fall-back-to-search path.
 	void EnsureSearchWindow(void);
+	// Same idea for the dictionary window (#31) -- shared by the
+	// Program menu's "Dictionary..." entry and a clicked Strong's
+	// number (#27, PARALLEL_STRONGS_CLICKED).
+	void EnsureDictionaryWindow(void);
 
 	BMenuBar		*fMenuBar;
 	BMenuItem		*fShowVerseNumItem;
@@ -105,6 +110,7 @@ private:
 	BScrollView			*fScrollView;
 
 	SGSearchWindow	*fSearchWindow;
+	SGDictionaryWindow	*fDictionaryWindow;
 
 
 	SwordBackend	*fModManager;
