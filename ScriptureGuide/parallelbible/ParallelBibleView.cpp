@@ -1846,7 +1846,20 @@ ParallelBibleView::_Realign()
 	std::vector<float> widths;
 	for (size_t i = 0; i < fDocuments.size(); i++) {
 		columns.push_back(fDocuments[i].Get());
-		widths.push_back(_ColumnWidth());
+		// The live TextDocumentView wraps at _ColumnWidth() minus its own
+		// kBibleColumnInset on each side (see TextDocumentView::
+		// _TextLayoutWidth()) -- measuring at the full column width here
+		// let VerseAligner's standalone ParagraphLayout plan for more
+		// horizontal room than a verse's text actually gets, so a
+		// borderline-wrapping line the real view wraps one line further
+		// than planned, which no alignment padding then accounted for.
+		// Confirmed via two real screenshots: the Notes column (and
+		// _ScrollToVerse(), both driven by _RowHeight() -- same fix
+		// there) drifted away from the actual Bible-column rows even
+		// with two perfectly ordinary, unlinked translations open
+		// (GerElb1871/GerBoLut), where no linked-commentary grouping
+		// was even in play.
+		widths.push_back(_ColumnWidth() - 2.0f * kBibleColumnInset);
 	}
 
 	if (columns.size() >= 2) {
@@ -2052,6 +2065,19 @@ ParallelBibleView::_ScrollToVerse(int verse)
 // paragraph's height without a live TextDocumentView. Falls back to
 // kHeaderHeight when there's no Bible column to measure against (a notes-
 // only view) or the verse was skipped from that column's document.
+//
+// ParagraphLayout::Height() only ever sums wrapped-line heights -- it has
+// no idea about ParagraphStyle::SpacingBottom() at all, which is exactly
+// the extra padding VerseAligner::SetVerseSpacing() adds to make a
+// shorter column's verse match a taller one. Reporting Height() alone
+// therefore under-counted every row VerseAligner had actually padded,
+// by exactly that padding -- confirmed via two real screenshots (drift
+// between the Notes column and two plain, unlinked Bible-text columns,
+// e.g. GerElb1871/GerBoLut, where nothing about linked commentary
+// entries is even in play): the Notes column's rows, and _ScrollToVerse()'s
+// target, both drifted earlier/shorter than the actual Bible-column rows,
+// accumulating verse after verse. Adding the paragraph's own
+// SpacingBottom back in gives the true on-screen row height.
 float
 ParallelBibleView::_RowHeight(int verse) const
 {
@@ -2059,10 +2085,15 @@ ParallelBibleView::_RowHeight(int verse) const
 		BibleTextDocument* document = fDocuments[0].Get();
 		int32 index = document->ParagraphIndexForVerse(verse);
 		if (index >= 0) {
+			const Paragraph& paragraph = document->ParagraphAtIndex(index);
 			ParagraphLayout layout;
-			layout.SetWidth(_ColumnWidth());
-			layout.SetParagraph(document->ParagraphAtIndex(index));
-			return layout.Height();
+			// Same effective width the live TextDocumentView actually
+			// wraps at (see _Realign()'s widths.push_back()) -- measuring
+			// at the full column width here would under-count wrapped
+			// lines the same way it did for VerseAligner's own planning.
+			layout.SetWidth(_ColumnWidth() - 2.0f * kBibleColumnInset);
+			layout.SetParagraph(paragraph);
+			return layout.Height() + paragraph.Style().SpacingBottom();
 		}
 	}
 	return kHeaderHeight;
