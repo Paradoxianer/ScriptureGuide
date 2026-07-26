@@ -8,7 +8,6 @@
 #include <localemgr.h>
 #include <markupfiltmgr.h>
 #include <gbfplain.h>
-#include <gbfstrongs.h>
 
 #include <vector>
 #include <map>
@@ -313,7 +312,17 @@ vector<const char*> SGModule::SearchEntries(const char* searchText)
 SwordBackend::SwordBackend(void)
 {
 	fManager = new SWMgr(CONFIGPATH, true, new MarkupFilterMgr(FMT_GBF, ENC_UTF8));
-	
+
+	// Harmless for every module that doesn't declare
+	// GlobalOptionFilter=*Strongs in its own .conf (this is a no-op for
+	// them, confirmed empirically) -- only modules that both support it
+	// AND have this filter attached start emitting <w lemma="strong:
+	// G1063"...>word</w> markup in renderText() at all (see #27,
+	// StripStrongsMarkup()). No separate on/off UI toggle for now,
+	// matching how cross-reference detection (#28) is likewise always
+	// on rather than adding another preference to plumb through/persist.
+	fManager->setGlobalOption("Strong's Numbers", "On");
+
 	// We are going to replace GetModuleDescriptions with some methods which
 	// are a little easier to deal with outside the class
 	
@@ -327,11 +336,11 @@ SwordBackend::SwordBackend(void)
 	SWModule* currentmodule = 0;
 	vector<const char*> tmp;
 	
-	for (it = fManager->Modules.begin(); it != fManager->Modules.end(); it++) 
+	for (it = fManager->Modules.begin(); it != fManager->Modules.end(); it++)
 	{
 		currentmodule = (*it).second;
 		currentmodule->addRenderFilter(new GBFPlain());
-		
+
 		if (!strcmp(currentmodule->getType(), "Biblical Texts"))
 			fBibleList->AddItem(new SGModule(currentmodule));
 		else
@@ -761,6 +770,60 @@ FindReferencesInText(const char* text)
 		reference.length = (int32)match.length(0);
 		reference.normalizedKey = normalizedKey;
 		result.push_back(reference);
+	}
+
+	return result;
+}
+
+
+std::vector<StrongsWord>
+FindStrongsWordsInText(SWModule* module, const BString& renderedText)
+{
+	std::vector<StrongsWord> result;
+	if (module == NULL)
+		return result;
+
+	AttributeTypeList& attrs = module->getEntryAttributes();
+	AttributeTypeList::iterator wordType = attrs.find("Word");
+	if (wordType == attrs.end())
+		return result;
+
+	int32 searchCursor = 0;
+	for (AttributeList::iterator it = wordType->second.begin();
+			it != wordType->second.end(); ++it) {
+		AttributeValue& value = it->second;
+
+		AttributeValue::iterator classIt = value.find("LemmaClass");
+		if (classIt == value.end() || classIt->second != "strong")
+			continue;
+
+		AttributeValue::iterator lemmaIt = value.find("Lemma");
+		AttributeValue::iterator textIt = value.find("Text");
+		if (lemmaIt == value.end() || textIt == value.end())
+			continue;
+
+		BString lemma(lemmaIt->second.c_str());
+		int32 spacePos = lemma.FindFirst(' ');
+		if (spacePos >= 0)
+			lemma.Truncate(spacePos);
+		if (lemma.IsEmpty())
+			continue;
+
+		BString wordText(textIt->second.c_str());
+		if (wordText.IsEmpty())
+			continue;
+
+		int32 foundAt = renderedText.FindFirst(wordText, searchCursor);
+		if (foundAt < 0)
+			continue;
+
+		StrongsWord word;
+		word.start = foundAt;
+		word.length = wordText.Length();
+		word.strongsNumber = lemma;
+		result.push_back(word);
+
+		searchCursor = foundAt + wordText.Length();
 	}
 
 	return result;

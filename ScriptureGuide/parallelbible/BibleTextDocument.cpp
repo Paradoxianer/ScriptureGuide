@@ -5,6 +5,8 @@
 
 #include "BibleTextDocument.h"
 
+#include <algorithm>
+
 #include <Language.h>
 #include <Locale.h>
 #include <String.h>
@@ -70,6 +72,14 @@ BibleTextDocument::BibleTextDocument(SWModule* module)
 	rgb_color linkColor = { 0, 0, 200, 255 };
 	fReferenceLinkStyle.SetForegroundColor(linkColor);
 	fReferenceLinkStyle.SetUnderline(1);
+
+	// A different color from fReferenceLinkStyle (dark green, not blue)
+	// -- both are "clickable", but a Strong's number (#27) opens a
+	// dictionary lookup, not a verse jump, so they shouldn't read as the
+	// same kind of link at a glance.
+	rgb_color strongsColor = { 0, 120, 0, 255 };
+	fStrongsNumberStyle.SetForegroundColor(strongsColor);
+	fStrongsNumberStyle.SetUnderline(1);
 
 	_Rebuild();
 }
@@ -248,6 +258,11 @@ BibleTextDocument::SetBaseFont(const BFont& font)
 	fReferenceLinkStyle.SetForegroundColor(linkColor);
 	fReferenceLinkStyle.SetUnderline(1);
 
+	rgb_color strongsColor = { 0, 120, 0, 255 };
+	fStrongsNumberStyle.SetFont(effective);
+	fStrongsNumberStyle.SetForegroundColor(strongsColor);
+	fStrongsNumberStyle.SetUnderline(1);
+
 	_Rebuild();
 }
 
@@ -351,6 +366,21 @@ BibleTextDocument::ReferenceLinkAt(int32 documentOffset, BString& outKey) const
 }
 
 
+bool
+BibleTextDocument::StrongsNumberAt(int32 documentOffset,
+	BString& outNumber) const
+{
+	for (size_t i = 0; i < fStrongsLinks.size(); i++) {
+		if (documentOffset >= fStrongsLinks[i].start
+			&& documentOffset < fStrongsLinks[i].end) {
+			outNumber = fStrongsLinks[i].number;
+			return true;
+		}
+	}
+	return false;
+}
+
+
 void
 BibleTextDocument::SetVerseSpacing(const std::map<int, float>& spacing)
 {
@@ -385,6 +415,7 @@ BibleTextDocument::_Rebuild()
 	TextDocument::operator=(TextDocument());
 	fParagraphVerse.clear();
 	fReferenceLinks.clear();
+	fStrongsLinks.clear();
 
 	if (fModule == NULL) {
 		Paragraph paragraph(fParagraphStyle);
@@ -465,6 +496,14 @@ BibleTextDocument::_Rebuild()
 		text.RemoveAll("\xc2\xb6 ");
 		text.RemoveAll("<P> ");
 
+		// Strong's numbers (#27): fModule->getEntryAttributes() reflects
+		// whatever the most recent renderText() call above populated --
+		// stale (and, since text is still empty here, harmless either
+		// way) if linkedToPrevious skipped calling it this iteration.
+		std::vector<StrongsWord> strongsWords;
+		if (!linkedToPrevious)
+			strongsWords = FindStrongsWordsInText(fModule, text);
+
 		ParagraphStyle style(fParagraphStyle);
 		std::map<int, float>::const_iterator spacing
 			= fVerseSpacingBottom.find(verse);
@@ -500,30 +539,83 @@ BibleTextDocument::_Rebuild()
 		// false positive turned into a broken link.
 		std::vector<TextReference> references
 			= FindReferencesInText(text.String());
-		if (references.empty()) {
+
+		// One merged, position-sorted list of every special span in this
+		// verse's text -- Strong's-tagged words (#27) and cross-
+		// references (#28) alike -- so both can be laid down in a
+		// single left-to-right walk instead of two independent passes
+		// that would have no way to agree on which one wins if they
+		// ever overlapped (they shouldn't in practice: a Strong's tag
+		// wraps a single word, a reference is a whole "(Book Ch:V)"
+		// citation, not the same text).
+		struct SpecialSpan {
+			int32	start;
+			int32	length;
+			bool	isStrongs;
+			BString	strongsNumber;
+			BString	referenceKey;
+		};
+		std::vector<SpecialSpan> spans;
+		for (size_t i = 0; i < strongsWords.size(); i++) {
+			SpecialSpan span;
+			span.start = strongsWords[i].start;
+			span.length = strongsWords[i].length;
+			span.isStrongs = true;
+			span.strongsNumber = strongsWords[i].strongsNumber;
+			spans.push_back(span);
+		}
+		for (size_t i = 0; i < references.size(); i++) {
+			SpecialSpan span;
+			span.start = references[i].start;
+			span.length = references[i].length;
+			span.isStrongs = false;
+			span.referenceKey = references[i].normalizedKey;
+			spans.push_back(span);
+		}
+		std::sort(spans.begin(), spans.end(),
+			[](const SpecialSpan& a, const SpecialSpan& b) {
+				return a.start < b.start;
+			});
+
+		if (spans.empty()) {
 			paragraph.Append(TextSpan(text, fVerseTextStyle));
 		} else {
 			int32 cursor = 0;
-			for (size_t i = 0; i < references.size(); i++) {
-				const TextReference& reference = references[i];
-				if (reference.start > cursor) {
+			for (size_t i = 0; i < spans.size(); i++) {
+				const SpecialSpan& span = spans[i];
+				if (span.start < cursor)
+					continue; // overlapping match -- keep the earlier one
+
+				if (span.start > cursor) {
 					BString before;
-					text.CopyInto(before, cursor, reference.start - cursor);
+					text.CopyInto(before, cursor, span.start - cursor);
 					paragraph.Append(TextSpan(before, fVerseTextStyle));
 				}
 
-				BString linkText;
-				text.CopyInto(linkText, reference.start, reference.length);
-				paragraph.Append(TextSpan(linkText, fReferenceLinkStyle));
+				BString spanText;
+				text.CopyInto(spanText, span.start, span.length);
 
-				ReferenceLink link;
-				link.start = documentOffset + verseNumberLength
-					+ reference.start;
-				link.end = link.start + reference.length;
-				link.key = reference.normalizedKey;
-				fReferenceLinks.push_back(link);
+				int32 linkStart = documentOffset + verseNumberLength
+					+ span.start;
+				if (span.isStrongs) {
+					paragraph.Append(
+						TextSpan(spanText, fStrongsNumberStyle));
+					StrongsLink link;
+					link.start = linkStart;
+					link.end = linkStart + span.length;
+					link.number = span.strongsNumber;
+					fStrongsLinks.push_back(link);
+				} else {
+					paragraph.Append(
+						TextSpan(spanText, fReferenceLinkStyle));
+					ReferenceLink link;
+					link.start = linkStart;
+					link.end = linkStart + span.length;
+					link.key = span.referenceKey;
+					fReferenceLinks.push_back(link);
+				}
 
-				cursor = reference.start + reference.length;
+				cursor = span.start + span.length;
 			}
 			if (cursor < text.Length()) {
 				BString after;

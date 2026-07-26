@@ -101,6 +101,7 @@ const uint32 FIND_TMP					= 'FTmp';
 const uint32 DOCS_UNAVAILABLE			= 'DCUN';
 
 const uint32 SG_BIBLE					= 'SGbl';
+const uint32 SG_STRONGS_LOOKUP			= 'SGsl';
 
 // search flags
 

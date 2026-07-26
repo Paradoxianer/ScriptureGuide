@@ -718,6 +718,15 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 				JumpToKey(key.String());
 			break;
 		}
+		case SG_STRONGS_LOOKUP:
+		{
+			BString number;
+			if (msg->FindString("number", &number) == B_OK) {
+				EnsureDictionaryWindow();
+				fDictionaryWindow->ShowStrongsNumber(number.String());
+			}
+			break;
+		}
 		case UNIVERSAL_SEARCH:
 		{
 			BString input(fUniversalSearchBox->Text());

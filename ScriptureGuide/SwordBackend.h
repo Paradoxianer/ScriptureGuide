@@ -70,6 +70,40 @@ struct TextReference {
 // a broken link, with no separate book-name dictionary to keep in sync.
 std::vector<TextReference>	FindReferencesInText(const char* text);
 
+// One word tagged with a Strong's number -- start/length are a byte
+// range into the ALREADY fully-rendered verse text (the same string
+// BibleTextDocument builds its TextSpans from), not some intermediate
+// tag-laden form. See #27, FindStrongsWordsInText().
+struct StrongsWord {
+	int32	start;
+	int32	length;
+	BString	strongsNumber;	// e.g. "G3056" or "H430"
+};
+
+// A Strong's-capable module's <w lemma="strong:G1063" ...>word</w>
+// markup never survives to renderText()'s actual output as inline text
+// (confirmed empirically both ways: it's completely absent from this
+// app's own rendering, which always appends an extra GBFPlain filter
+// for good reason -- see the comment where that's added -- and, more
+// fundamentally, even withOUT that extra filter, using the tag itself
+// as the source of truth is fragile), so this uses SWORD's own
+// structured side-channel instead: `module`'s getEntryAttributes()
+// (populated as a side effect of the render filter chain processing
+// the raw markup, regardless of what any later filter does to the
+// visible text) reports each word's Lemma/Text under the "Word"
+// attribute type, in reading order. Each Word entry's Text is located
+// in `renderedText` by sequential search starting where the previous
+// one left off -- correct even when several words share identical text
+// ("the", "and", ...), since a forward-only cursor naturally lands on
+// each successive real occurrence rather than always the first one.
+// Only entries whose LemmaClass is "strong" are considered (a module
+// could in principle tag other kinds of lemmas); a Lemma with more than
+// one space-separated token (SWORD merges several English words
+// sharing one Greek/Hebrew word into a single tag) only keeps the
+// first.
+std::vector<StrongsWord> FindStrongsWordsInText(sword::SWModule* module,
+					const BString& renderedText);
+
 
 std::vector<const char*>	GetBookNames(void);
 

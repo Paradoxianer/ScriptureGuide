@@ -91,6 +91,14 @@ public:
 			bool				ReferenceLinkAt(int32 documentOffset,
 									BString& outKey) const;
 
+			// Same idea as ReferenceLinkAt(), for a word SWORD tagged
+			// with a Strong's number (see StripStrongsMarkup(), #27) --
+			// outNumber (e.g. "G3056") is what
+			// SwordBackend::LookupStrongsNumber() expects, untouched if
+			// this returns false.
+			bool				StrongsNumberAt(int32 documentOffset,
+									BString& outNumber) const;
+
 			// Extra bottom spacing per verse, used by VerseAligner to keep
 			// the same verse lined up across parallel columns. Replaces
 			// any previous overrides and rebuilds the document once.
@@ -108,6 +116,7 @@ private:
 			CharacterStyle		fVerseNumberStyle;
 			CharacterStyle		fVerseTextStyle;
 			CharacterStyle		fReferenceLinkStyle;
+			CharacterStyle		fStrongsNumberStyle;
 			ParagraphStyle		fParagraphStyle;
 
 			bool				fShowVerseNumbers;
@@ -126,6 +135,15 @@ private:
 				BString	key;
 			};
 			std::vector<ReferenceLink>	fReferenceLinks;
+
+			// Same idea, for Strong's-tagged words (see StrongsNumberAt(),
+			// #27).
+			struct StrongsLink {
+				int32	start;
+				int32	end;
+				BString	number;
+			};
+			std::vector<StrongsLink>	fStrongsLinks;
 
 			// verse number -> extra SpacingBottom, set by VerseAligner
 			std::map<int, float> fVerseSpacingBottom;

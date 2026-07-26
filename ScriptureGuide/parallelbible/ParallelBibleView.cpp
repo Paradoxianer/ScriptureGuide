@@ -261,15 +261,21 @@ public:
 			// Pressed inside the selection, released again without
 			// moving far enough to start a drag -- a plain click after
 			// all, meant to move the caret there like normal (unless it
-			// landed on a cross-reference -- see #28 -- in which case
-			// following that takes over instead).
+			// landed on a cross-reference -- see #28 -- or a Strong's
+			// number -- see #27 -- in which case following that takes
+			// over instead).
 			fTrackingForDrag = false;
-			if (!(wasPlainClick && _TryFollowReferenceAt(where)))
+			bool followedLink = wasPlainClick
+				&& (_TryFollowReferenceAt(where)
+					|| _TryFollowStrongsNumberAt(where));
+			if (!followedLink)
 				SetCaret(where, false);
 		} else if (fOwner != NULL) {
 			fOwner->_ColumnSelectionEnded();
-			if (wasPlainClick)
-				_TryFollowReferenceAt(where);
+			if (wasPlainClick) {
+				if (!_TryFollowReferenceAt(where))
+					_TryFollowStrongsNumberAt(where);
+			}
 		}
 		TextDocumentView::MouseUp(where);
 	}
@@ -498,6 +504,30 @@ private:
 		BMessage jump(SG_BIBLE);
 		jump.AddString("key", key);
 		window->PostMessage(&jump);
+		return true;
+	}
+
+
+	// Same idea as _TryFollowReferenceAt() above, for a word tagged with
+	// a Strong's number (see #27, BibleTextDocument::StrongsNumberAt())
+	// -- opens/reuses the dictionary window instead of jumping a verse.
+	bool _TryFollowStrongsNumberAt(BPoint where)
+	{
+		if (fBibleDocument == NULL)
+			return false;
+
+		int32 offset = TextOffsetAt(where);
+		BString number;
+		if (!fBibleDocument->StrongsNumberAt(offset, number))
+			return false;
+
+		BWindow* window = Window();
+		if (window == NULL)
+			return false;
+
+		BMessage lookup(SG_STRONGS_LOOKUP);
+		lookup.AddString("number", number);
+		window->PostMessage(&lookup);
 		return true;
 	}
 
