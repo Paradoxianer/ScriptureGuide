@@ -834,6 +834,29 @@ ParallelBibleView::FrameResized(float width, float height)
 {
 	BView::FrameResized(width, height);
 	_Realign();
+
+	// Re-applies whatever verse SetKey() last scrolled to. Confirmed
+	// empirically (a real bug report, not theoretical): during startup
+	// restore, SetKey()'s own _ScrollToVerse() call runs while this
+	// view is still attached but not yet actually shown on screen --
+	// Bounds().Height() reads as a degenerate placeholder at that
+	// point, not this view's real, final viewport size, so the scroll
+	// position it computes and applies is against the wrong range.
+	// This view's *first* FrameResized() with the real on-screen size
+	// fires strictly afterward, once the window is actually shown --
+	// and before this fix, nothing ever re-scrolled once that real
+	// size arrived, silently landing back at the top instead of the
+	// verse that was actually being navigated to. Re-deriving the
+	// verse from fCurrentKey and re-scrolling here fixes that, and
+	// keeps the same verse at the top across any later resize too
+	// (including ones the user triggers by hand) -- both harmless when
+	// nothing about the scroll position actually needed to change.
+	if (!fCurrentKey.IsEmpty()) {
+		VerseKey verseKey;
+		SetVerseKeyLocale(verseKey);
+		verseKey.setText(fCurrentKey.String());
+		_ScrollToVerse(verseKey.getVerse());
+	}
 }
 
 

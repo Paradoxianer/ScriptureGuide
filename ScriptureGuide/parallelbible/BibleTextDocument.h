@@ -50,6 +50,23 @@ public:
 			bool				ShowVerseNumbers() const
 									{ return fShowVerseNumbers; }
 
+			// Whether Strong's-tagged words (#27) get their own
+			// clickable span at all -- when off, _Rebuild() skips
+			// FindStrongsWordsInText() entirely rather than finding
+			// spans and not styling them, so a verse renders as one
+			// plain span exactly like it did before #27 existed. Same
+			// idea for cross-reference detection (#28) and
+			// SetShowCrossReferences()/ShowCrossReferences() below.
+			// Both default to on, matching this app's behavior before
+			// either had a way to be turned off.
+			void				SetShowStrongsNumbers(bool show);
+			bool				ShowStrongsNumbers() const
+									{ return fShowStrongsNumbers; }
+
+			void				SetShowCrossReferences(bool show);
+			bool				ShowCrossReferences() const
+									{ return fShowCrossReferences; }
+
 			// Family/size apply to both verse text and verse
 			// numbers; verse numbers keep their bold weight
 			// regardless. The family is overridden for Greek/
@@ -68,6 +85,17 @@ public:
 			// -1 if the verse is not part of the currently loaded chapter
 			int32				ParagraphIndexForVerse(int verse) const;
 			int					VerseForParagraphIndex(int32 index) const;
+
+			// True if this verse's paragraph is a continuation of the
+			// same linked commentary entry as the verse before it (see
+			// #10's linked-entry fix in _Rebuild()) -- i.e. this verse
+			// has no real text of its own here, just a share of an
+			// entry that actually covers a whole range starting at some
+			// earlier verse. VerseAligner (#10) uses this to align a
+			// whole linked span as one group instead of forcing all of
+			// that span's height onto the one verse where the real text
+			// landed. False for a verse not in this document at all.
+			bool				IsLinkedToPrevious(int verse) const;
 
 			// Text offset range covering verses startVerse..endVerse
 			// (inclusive) -- for a TextDocumentView::SetSelection() call
@@ -121,9 +149,15 @@ private:
 
 			bool				fShowVerseNumbers;
 			bool				fSkipEmptyVerses;
+			bool				fShowStrongsNumbers;
+			bool				fShowCrossReferences;
 
 			// paragraph index -> verse number, rebuilt in _Rebuild()
 			std::vector<int>	fParagraphVerse;
+
+			// verse number -> IsLinkedToPrevious(), rebuilt alongside
+			// fParagraphVerse in _Rebuild().
+			std::map<int, bool>	fLinkedToPrevious;
 
 			// Document-wide [start, end) offset ranges for every
 			// reference link found across the whole chapter, rebuilt

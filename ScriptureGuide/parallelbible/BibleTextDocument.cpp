@@ -13,7 +13,6 @@
 
 #include <Catalog.h>
 
-#include <stdio.h>
 #include <string.h>
 
 #include "constants.h"
@@ -327,6 +326,16 @@ BibleTextDocument::VerseForParagraphIndex(int32 index) const
 
 
 bool
+BibleTextDocument::IsLinkedToPrevious(int verse) const
+{
+	std::map<int, bool>::const_iterator it = fLinkedToPrevious.find(verse);
+	if (it == fLinkedToPrevious.end())
+		return false;
+	return it->second;
+}
+
+
+bool
 BibleTextDocument::TextRangeForVerseRange(int startVerse, int endVerse,
 	int32& start, int32& end) const
 {
@@ -413,6 +422,7 @@ BibleTextDocument::_Rebuild()
 	// are untouched since only the base-class subobject is reassigned.
 	TextDocument::operator=(TextDocument());
 	fParagraphVerse.clear();
+	fLinkedToPrevious.clear();
 	fReferenceLinks.clear();
 	fStrongsLinks.clear();
 
@@ -481,10 +491,6 @@ BibleTextDocument::_Rebuild()
 		BString text;
 		if (!linkedToPrevious)
 			text = fModule->renderText();
-
-		fprintf(stderr, "[BibleTextDocument %s] verse %d linked=%d "
-			"textLen=%d\n", fModule->getName(), verse, linkedToPrevious,
-			(int)text.CountChars());
 
 		if (text.CountChars() < 1 && fSkipEmptyVerses && !linkedToPrevious)
 			continue;
@@ -625,6 +631,7 @@ BibleTextDocument::_Rebuild()
 
 		Append(paragraph);
 		fParagraphVerse.push_back(verse);
+		fLinkedToPrevious[verse] = linkedToPrevious;
 		documentOffset += paragraph.Length();
 
 		if (!linkedToPrevious) {
