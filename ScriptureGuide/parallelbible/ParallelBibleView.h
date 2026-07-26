@@ -134,6 +134,14 @@ public:
 			bool				ShowVerseNumbers() const
 									{ return fShowVerseNumbers; }
 
+			status_t			SetShowStrongsNumbers(bool show);
+			bool				ShowStrongsNumbers() const
+									{ return fShowStrongsNumbers; }
+
+			status_t			SetShowCrossReferences(bool show);
+			bool				ShowCrossReferences() const
+									{ return fShowCrossReferences; }
+
 			// Family/style/size for verse text and (still bold)
 			// verse numbers, applied to every current Bible/
 			// Commentary column and remembered for columns
@@ -316,6 +324,8 @@ private:
 			int					fSelectionLastEndVerse;
 
 			bool				fShowVerseNumbers;
+			bool				fShowStrongsNumbers;
+			bool				fShowCrossReferences;
 			BFont				fBaseFont;
 
 			BString				fCurrentKey;

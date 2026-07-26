@@ -57,6 +57,8 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	// well after BuildGUI() -- default to the same "on" LoadPrefsForModule()
 	// itself falls back to when there's nothing saved yet.
 	fShowVerseNumbers = true;
+	fShowStrongsNumbers = true;
+	fShowCrossReferences = true;
 
 	fModManager = new SwordBackend();
 	BuildGUI();
@@ -214,6 +216,14 @@ void SGMainWindow::BuildGUI(void)
 		new BMessage(MENU_OPTIONS_VERSENUMBERS));
 	fShowVerseNumItem->SetMarked(fShowVerseNumbers);
 	menu->AddItem(fShowVerseNumItem);
+	fShowStrongsNumItem = new BMenuItem(B_TRANSLATE("Show Strong's Numbers"),
+		new BMessage(MENU_OPTIONS_STRONGS));
+	fShowStrongsNumItem->SetMarked(fShowStrongsNumbers);
+	menu->AddItem(fShowStrongsNumItem);
+	fShowCrossRefItem = new BMenuItem(B_TRANSLATE("Show Cross-References"),
+		new BMessage(MENU_OPTIONS_CROSSREF));
+	fShowCrossRefItem->SetMarked(fShowCrossReferences);
+	menu->AddItem(fShowCrossRefItem);
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Choose Font…"),
 		new BMessage(MENU_OPTIONS_FONT)));
 	fMenuBar->AddItem(menu);
@@ -336,15 +346,19 @@ void SGMainWindow::LoadPrefsForModule(void)
 		// Detect need for linebreak insertion
 		fIsLineBreak = NeedsLineBreaks();
 		
-		// Normally show verse numbers
+		// Normally show verse numbers, Strong's numbers, and cross-references
 		fShowVerseNumbers = true;
-		
+		fShowStrongsNumbers = true;
+		fShowCrossReferences = true;
+
 		msg.AddInt16("fontsize",fFontSize);
 		msg.AddString("family",fam);
 		msg.AddString("style",sty);
 		msg.AddBool("linebreaks",fIsLineBreak);
 		msg.AddBool("versenumbers",fShowVerseNumbers);
-		
+		msg.AddBool("strongsnumbers",fShowStrongsNumbers);
+		msg.AddBool("crossreferences",fShowCrossReferences);
+
 		SaveModulePreferences(fCurrentModule->Name(),&msg);
 	} else
 	{
@@ -373,7 +387,21 @@ void SGMainWindow::LoadPrefsForModule(void)
 			msg.AddBool("versenumbers",fShowVerseNumbers);
 			saveprefs = true;
 		}
-		
+
+		if (msg.FindBool("strongsnumbers",&fShowStrongsNumbers)!=B_OK)
+		{
+			fShowStrongsNumbers = true;
+			msg.AddBool("strongsnumbers",fShowStrongsNumbers);
+			saveprefs = true;
+		}
+
+		if (msg.FindBool("crossreferences",&fShowCrossReferences)!=B_OK)
+		{
+			fShowCrossReferences = true;
+			msg.AddBool("crossreferences",fShowCrossReferences);
+			saveprefs = true;
+		}
+
 		fDisplayFont = font;
 		
 		BString sfam, ssty;
@@ -400,6 +428,10 @@ void SGMainWindow::LoadPrefsForModule(void)
 	// has actually changed (see BibleTextDocument::SetShowVerseNumbers()).
 	fShowVerseNumItem->SetMarked(fShowVerseNumbers);
 	fParallelView->SetShowVerseNumbers(fShowVerseNumbers);
+	fShowStrongsNumItem->SetMarked(fShowStrongsNumbers);
+	fParallelView->SetShowStrongsNumbers(fShowStrongsNumbers);
+	fShowCrossRefItem->SetMarked(fShowCrossReferences);
+	fParallelView->SetShowCrossReferences(fShowCrossReferences);
 
 	// Same idea for fDisplayFont -- was dead state before this (see #21):
 	// loaded/saved but never actually applied to the reading pane.
@@ -423,6 +455,8 @@ void SGMainWindow::SavePrefsForModule(void)
 	msg.AddString("family",fam);
 	msg.AddString("style",sty);
 	msg.AddBool("versenumbers",fShowVerseNumbers);
+	msg.AddBool("strongsnumbers",fShowStrongsNumbers);
+	msg.AddBool("crossreferences",fShowCrossReferences);
 	SaveModulePreferences(fCurrentModule->Name(),&msg);
 	
 	// We also need to write to the application's main preferences so that the last
@@ -722,6 +756,24 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fShowVerseNumbers = !fShowVerseNumbers;
 			fShowVerseNumItem->SetMarked(fShowVerseNumbers);
 			fParallelView->SetShowVerseNumbers(fShowVerseNumbers);
+			SavePrefsForModule();
+			break;
+		}
+
+		case MENU_OPTIONS_STRONGS:
+		{
+			fShowStrongsNumbers = !fShowStrongsNumbers;
+			fShowStrongsNumItem->SetMarked(fShowStrongsNumbers);
+			fParallelView->SetShowStrongsNumbers(fShowStrongsNumbers);
+			SavePrefsForModule();
+			break;
+		}
+
+		case MENU_OPTIONS_CROSSREF:
+		{
+			fShowCrossReferences = !fShowCrossReferences;
+			fShowCrossRefItem->SetMarked(fShowCrossReferences);
+			fParallelView->SetShowCrossReferences(fShowCrossReferences);
 			SavePrefsForModule();
 			break;
 		}

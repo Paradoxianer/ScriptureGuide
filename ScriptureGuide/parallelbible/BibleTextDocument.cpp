@@ -60,7 +60,9 @@ BibleTextDocument::BibleTextDocument(SWModule* module)
 	TextDocument(),
 	fModule(module),
 	fShowVerseNumbers(true),
-	fSkipEmptyVerses(true)
+	fSkipEmptyVerses(true),
+	fShowStrongsNumbers(true),
+	fShowCrossReferences(true)
 {
 	fVerseNumberStyle.SetBold(true);
 	fParagraphStyle.SetJustify(true);
@@ -235,6 +237,28 @@ BibleTextDocument::SetShowVerseNumbers(bool show)
 		return;
 
 	fShowVerseNumbers = show;
+	_Rebuild();
+}
+
+
+void
+BibleTextDocument::SetShowStrongsNumbers(bool show)
+{
+	if (fShowStrongsNumbers == show)
+		return;
+
+	fShowStrongsNumbers = show;
+	_Rebuild();
+}
+
+
+void
+BibleTextDocument::SetShowCrossReferences(bool show)
+{
+	if (fShowCrossReferences == show)
+		return;
+
+	fShowCrossReferences = show;
 	_Rebuild();
 }
 
@@ -506,7 +530,7 @@ BibleTextDocument::_Rebuild()
 		// stale (and, since text is still empty here, harmless either
 		// way) if linkedToPrevious skipped calling it this iteration.
 		std::vector<StrongsWord> strongsWords;
-		if (!linkedToPrevious)
+		if (!linkedToPrevious && fShowStrongsNumbers)
 			strongsWords = FindStrongsWordsInText(fModule, text);
 
 		ParagraphStyle style(fParagraphStyle);
@@ -542,8 +566,9 @@ BibleTextDocument::_Rebuild()
 		// reference goes through, so this is never more than the
 		// occasional false negative (a real reference it missed), not a
 		// false positive turned into a broken link.
-		std::vector<TextReference> references
-			= FindReferencesInText(text.String());
+		std::vector<TextReference> references;
+		if (fShowCrossReferences)
+			references = FindReferencesInText(text.String());
 
 		// One merged, position-sorted list of every special span in this
 		// verse's text -- Strong's-tagged words (#27) and cross-

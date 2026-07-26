@@ -97,6 +97,8 @@ private:
 
 	BMenuBar		*fMenuBar;
 	BMenuItem		*fShowVerseNumItem;
+	BMenuItem		*fShowStrongsNumItem;
+	BMenuItem		*fShowCrossRefItem;
 
 	BMenu			*fBookMenu;
 
@@ -124,7 +126,9 @@ private:
 	FontPanel		*fFontPanel;
 
 	bool			fIsLineBreak,
-					fShowVerseNumbers;
+					fShowVerseNumbers,
+					fShowStrongsNumbers,
+					fShowCrossReferences;
 
 	BMessenger		*fFindMessenger;
 };

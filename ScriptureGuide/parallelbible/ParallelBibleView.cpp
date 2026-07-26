@@ -761,6 +761,8 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fActiveSelectionColumn(NULL),
 	fSelectionLastEndVerse(-1),
 	fShowVerseNumbers(true),
+	fShowStrongsNumbers(true),
+	fShowCrossReferences(true),
 	fInitialWidth(initialWidth),
 	fContentHeight(0.0f),
 	fContentWidth(0.0f),
@@ -1144,6 +1146,30 @@ ParallelBibleView::SetShowVerseNumbers(bool show)
 }
 
 
+// Same idea as SetShowVerseNumbers() above.
+status_t
+ParallelBibleView::SetShowStrongsNumbers(bool show)
+{
+	fShowStrongsNumbers = show;
+	for (size_t i = 0; i < fDocuments.size(); i++)
+		fDocuments[i]->SetShowStrongsNumbers(show);
+	_Realign();
+	return B_OK;
+}
+
+
+// Same idea as SetShowVerseNumbers() above.
+status_t
+ParallelBibleView::SetShowCrossReferences(bool show)
+{
+	fShowCrossReferences = show;
+	for (size_t i = 0; i < fDocuments.size(); i++)
+		fDocuments[i]->SetShowCrossReferences(show);
+	_Realign();
+	return B_OK;
+}
+
+
 // Applies to every current Bible/Commentary column, and is remembered
 // (fBaseFont) so columns added afterward (see _SetColumnToBible()) start
 // out matching it too -- same rationale as SetShowVerseNumbers() above.
@@ -1268,6 +1294,8 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 	// SetShowVerseNumbers()) -- BibleTextDocument defaults to true, so
 	// this only matters when the setting has been turned off.
 	document->SetShowVerseNumbers(fShowVerseNumbers);
+	document->SetShowStrongsNumbers(fShowStrongsNumbers);
+	document->SetShowCrossReferences(fShowCrossReferences);
 	// Match the current base font (see SetBaseFont()) -- only matters once
 	// the user has actually picked something other than be_plain_font.
 	document->SetBaseFont(fBaseFont);

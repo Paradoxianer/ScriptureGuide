@@ -60,6 +60,8 @@ const uint32 MENU_EDIT_FIND				= 'MEfi';
 const uint32 MENU_OPTIONS_LINE			= 'MOli';
 const uint32 MENU_OPTIONS_FONT			= 'MOfo';
 const uint32 MENU_OPTIONS_VERSENUMBERS	= 'MOvn';
+const uint32 MENU_OPTIONS_STRONGS		= 'MOsn';
+const uint32 MENU_OPTIONS_CROSSREF		= 'MOcr';
 const uint32 MENU_OPTIONS_PARALLEL_VIEW	= 'MOpv';
 
 const uint32 PARALLEL_ADD_COLUMN		= 'PVac';
