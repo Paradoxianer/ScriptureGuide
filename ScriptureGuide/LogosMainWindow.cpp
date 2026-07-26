@@ -727,6 +727,16 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			}
 			break;
 		}
+		case DICT_QUIT:
+		{
+			// fDictionaryWindow is about to be destroyed (sent from its
+			// own destructor) -- null it out so EnsureDictionaryWindow()
+			// creates a fresh one next time instead of calling Show()/
+			// Activate() on a deleted BWindow (reported: reopening after
+			// closing behaved oddly, exactly this class of bug).
+			fDictionaryWindow = NULL;
+			break;
+		}
 		case UNIVERSAL_SEARCH:
 		{
 			BString input(fUniversalSearchBox->Text());
@@ -1030,7 +1040,8 @@ SGMainWindow::EnsureDictionaryWindow(void)
 		BRect r(Frame().OffsetByCopy(30, 40));
 		r.right = r.left + 400;
 		r.bottom = r.top + 350;
-		fDictionaryWindow = new SGDictionaryWindow(r, fModManager);
+		fDictionaryWindow = new SGDictionaryWindow(r, fModManager,
+			new BMessenger(this));
 	}
 	fDictionaryWindow->Show();
 	fDictionaryWindow->Activate(true);

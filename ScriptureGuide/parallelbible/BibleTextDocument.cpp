@@ -73,12 +73,13 @@ BibleTextDocument::BibleTextDocument(SWModule* module)
 	fReferenceLinkStyle.SetForegroundColor(linkColor);
 	fReferenceLinkStyle.SetUnderline(1);
 
-	// A different color from fReferenceLinkStyle (dark green, not blue)
-	// -- both are "clickable", but a Strong's number (#27) opens a
-	// dictionary lookup, not a verse jump, so they shouldn't read as the
-	// same kind of link at a glance.
-	rgb_color strongsColor = { 0, 120, 0, 255 };
-	fStrongsNumberStyle.SetForegroundColor(strongsColor);
+	// Deliberately no color change here, unlike fReferenceLinkStyle --
+	// a colored underline under nearly every word of a fully Strong's-
+	// tagged translation (which is most of them) made the text hard to
+	// read at a glance (reported). Just a plain underline in the text's
+	// own color, plus the hover cursor MouseMoved() sets (see
+	// BibleColumnView), is enough to read as "clickable" without
+	// fighting the prose for attention.
 	fStrongsNumberStyle.SetUnderline(1);
 
 	_Rebuild();
@@ -258,9 +259,7 @@ BibleTextDocument::SetBaseFont(const BFont& font)
 	fReferenceLinkStyle.SetForegroundColor(linkColor);
 	fReferenceLinkStyle.SetUnderline(1);
 
-	rgb_color strongsColor = { 0, 120, 0, 255 };
 	fStrongsNumberStyle.SetFont(effective);
-	fStrongsNumberStyle.SetForegroundColor(strongsColor);
 	fStrongsNumberStyle.SetUnderline(1);
 
 	_Rebuild();

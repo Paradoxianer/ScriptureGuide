@@ -11,6 +11,7 @@
 #include <Bitmap.h>
 #include <Button.h>
 #include <Catalog.h>
+#include <Cursor.h>
 #include <Entry.h>
 #include <File.h>
 #include <Font.h>
@@ -154,7 +155,8 @@ public:
 		fBibleDocument(document),
 		fTranslationName(translationName),
 		fOwner(owner),
-		fTrackingForDrag(false)
+		fTrackingForDrag(false),
+		fShowingLinkCursor(false)
 	{
 	}
 
@@ -206,6 +208,8 @@ public:
 	virtual void MouseMoved(BPoint where, uint32 transit,
 		const BMessage* dragMessage)
 	{
+		_UpdateLinkCursor(where, transit);
+
 		if (fTrackingForDrag) {
 			// Squared-distance check avoids pulling in libm for a plain
 			// sqrt() just to compare against a threshold.
@@ -602,6 +606,34 @@ private:
 		return true;
 	}
 
+	// Swaps in the system's "follow link" cursor while hovering a
+	// cross-reference or Strong's number (either kind of clickable span
+	// -- see _TryFollowReferenceAt()/_TryFollowStrongsNumberAt() above),
+	// the plain arrow everywhere else -- requested alongside toning
+	// down the Strong's highlight color, since a plain underline alone
+	// doesn't read as "clickable" as clearly as the color did.
+	// fShowingLinkCursor avoids calling SetViewCursor() on every single
+	// MouseMoved() when the hover state hasn't actually changed.
+	void _UpdateLinkCursor(BPoint where, uint32 transit)
+	{
+		bool overLink = false;
+		if (fBibleDocument != NULL && transit != B_EXITED_VIEW
+			&& transit != B_OUTSIDE_VIEW) {
+			int32 offset = TextOffsetAt(where);
+			BString unused;
+			overLink = fBibleDocument->ReferenceLinkAt(offset, unused)
+				|| fBibleDocument->StrongsNumberAt(offset, unused);
+		}
+
+		if (overLink == fShowingLinkCursor)
+			return;
+		fShowingLinkCursor = overLink;
+
+		static BCursor sLinkCursor(B_CURSOR_ID_FOLLOW_LINK);
+		static BCursor sDefaultCursor(B_CURSOR_ID_SYSTEM_DEFAULT);
+		SetViewCursor(overLink ? &sLinkCursor : &sDefaultCursor);
+	}
+
 private:
 	BibleTextDocument*	fBibleDocument;
 	BString				fTranslationName;
@@ -609,6 +641,7 @@ private:
 	bool				fTrackingForDrag;
 	BPoint				fDragStartPoint;
 	BPoint				fMouseDownPoint;
+	bool				fShowingLinkCursor;
 };
 
 

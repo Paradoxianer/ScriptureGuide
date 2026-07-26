@@ -54,12 +54,14 @@ StripTags(const BString& text)
 }
 
 
-SGDictionaryWindow::SGDictionaryWindow(BRect frame, SwordBackend* backend)
+SGDictionaryWindow::SGDictionaryWindow(BRect frame, SwordBackend* backend,
+	BMessenger* owner)
 	:
 	BWindow(frame, B_TRANSLATE("Dictionary"), B_TITLED_WINDOW,
 		B_ASYNCHRONOUS_CONTROLS),
 	fBackend(backend),
-	fCurrentLexicon(NULL)
+	fCurrentLexicon(NULL),
+	fOwner(owner)
 {
 	_BuildGUI();
 }
@@ -67,6 +69,8 @@ SGDictionaryWindow::SGDictionaryWindow(BRect frame, SwordBackend* backend)
 
 SGDictionaryWindow::~SGDictionaryWindow()
 {
+	fOwner->SendMessage(DICT_QUIT);
+	delete fOwner;
 }
 
 
@@ -85,11 +89,26 @@ SGDictionaryWindow::_BuildGUI()
 	BButton* lookupButton = new BButton("dictLookupButton",
 		B_TRANSLATE("Look up"), new BMessage(DICT_LOOKUP));
 
+	// Labeled explicitly (reported: with no label, it wasn't obvious
+	// what the *first* of the two scroll areas below was even for --
+	// it's normally empty, only ever holding something after a lookup
+	// that *didn't* match a key directly falls back to a search). Also
+	// hidden by default and only shown once it actually has candidates
+	// to pick from (see _LookupKey()/_ShowResults()) -- effectively the
+	// "expand only when relevant" behavior asked for, without a real
+	// collapse/expand control to build and wire up.
+	fResultsLabel = new BStringView("dictResultsLabel",
+		B_TRANSLATE("Search results (only shown if a lookup finds more "
+			"than one match):"));
 	fResultList = new BListView("dictResults", B_SINGLE_SELECTION_LIST);
 	fResultList->SetSelectionMessage(new BMessage(DICT_SELECT_RESULT));
 	fResultScroll = new BScrollView("dictResultsScroll", fResultList,
 		0, false, true);
 	fResultScroll->SetExplicitMinSize(BSize(B_SIZE_UNSET, 80.0f));
+	fResultsLabel->Hide();
+	fResultScroll->Hide();
+
+	fEntryLabel = new BStringView("dictEntryLabel", B_TRANSLATE("Entry:"));
 
 	fEntryView = new BTextView("dictEntry");
 	fEntryView->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
@@ -106,13 +125,30 @@ SGDictionaryWindow::_BuildGUI()
 			.Add(fLookupField)
 			.Add(lookupButton)
 		.End()
+		.Add(fResultsLabel)
 		.Add(fResultScroll)
+		.Add(fEntryLabel)
 		.Add(entryScroll)
 	.End();
 
 	_RebuildModuleMenu();
 
 	SetSizeLimits(300.0f, 4000.0f, 300.0f, 4000.0f);
+}
+
+
+void
+SGDictionaryWindow::_ShowResultsList(bool show)
+{
+	if (fResultsLabel->IsHidden() == !show)
+		return;
+	if (show) {
+		fResultsLabel->Show();
+		fResultScroll->Show();
+	} else {
+		fResultsLabel->Hide();
+		fResultScroll->Hide();
+	}
 }
 
 
@@ -153,6 +189,7 @@ SGDictionaryWindow::_LookupKey(const char* key)
 
 	BString entry(fCurrentLexicon->GetEntry(key));
 	if (!entry.IsEmpty()) {
+		_ShowResultsList(false);
 		_ShowEntry(entry);
 		return;
 	}
@@ -170,8 +207,10 @@ SGDictionaryWindow::_LookupKey(const char* key)
 		fResultList->AddItem(new BStringItem(matches[i]));
 
 	if (matches.empty()) {
+		_ShowResultsList(false);
 		fEntryView->SetText(B_TRANSLATE("No matching entry found."));
 	} else {
+		_ShowResultsList(true);
 		BString status;
 		status.SetToFormat(
 			B_TRANSLATE("%d matching entries -- pick one below."),
@@ -213,6 +252,7 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 			}
 			while (fResultList->CountItems() > 0)
 				delete fResultList->RemoveItem((int32)0);
+			_ShowResultsList(false);
 			break;
 		}
 
@@ -237,6 +277,7 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 		{
 			BString number;
 			if (message->FindString("number", &number) == B_OK) {
+				_ShowResultsList(false);
 				BString entry = fBackend->LookupStrongsNumber(
 					number.String());
 				if (entry.IsEmpty()) {

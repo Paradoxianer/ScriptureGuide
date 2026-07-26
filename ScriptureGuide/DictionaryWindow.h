@@ -5,6 +5,7 @@
 #ifndef DICTIONARY_WINDOW_H
 #define DICTIONARY_WINDOW_H
 
+#include <Messenger.h>
 #include <String.h>
 #include <Window.h>
 
@@ -14,6 +15,7 @@ class BButton;
 class BListView;
 class BMenuField;
 class BScrollView;
+class BStringView;
 class BTextControl;
 class BTextView;
 
@@ -21,6 +23,7 @@ class BTextView;
 #define DICT_LOOKUP			'DClk'
 #define DICT_SELECT_RESULT	'DCsr'
 #define DICT_SHOW_STRONGS	'DCst'
+#define DICT_QUIT			'DCqu'
 
 // A small, single-purpose lookup window for installed Lexicon/Dictionary
 // modules (#31) -- pick a module, type a key or word, see the rendered
@@ -37,9 +40,20 @@ public:
 							// Does not take ownership of backend; it must
 							// outlive this window (same lifetime
 							// relationship SGMainWindow already has with
-							// its own SwordBackend).
+							// its own SwordBackend). Takes ownership of
+							// owner (deleted in the destructor, same as
+							// SGSearchWindow's fMessenger) -- sent
+							// DICT_QUIT right before this window's own
+							// BWindow object goes away, so SGMainWindow
+							// can null out its own now-dangling pointer
+							// instead of calling Show()/Activate() on a
+							// deleted window the next time "Dictionary..."
+							// is picked from the menu (reported: reopening
+							// after closing landed the window somewhere
+							// wrong -- undefined behavior on a deleted
+							// object, not a real bug in *where* it opened).
 							SGDictionaryWindow(BRect frame,
-								SwordBackend* backend);
+								SwordBackend* backend, BMessenger* owner);
 	virtual					~SGDictionaryWindow();
 	virtual void			MessageReceived(BMessage* message);
 
@@ -55,14 +69,21 @@ private:
 			void			_RebuildModuleMenu();
 			void			_LookupKey(const char* key);
 			void			_ShowEntry(const BString& rawEntry);
+			// Shows or hides fResultsLabel/fResultScroll together --
+			// kept hidden except right after a lookup that fell back to
+			// a multi-match search (see _LookupKey()).
+			void			_ShowResultsList(bool show);
 
 			SwordBackend*	fBackend;
 			SGModule*		fCurrentLexicon;
+			BMessenger*		fOwner;
 
 			BMenuField*		fModuleField;
 			BTextControl*	fLookupField;
+			BStringView*	fResultsLabel;
 			BListView*		fResultList;
 			BScrollView*	fResultScroll;
+			BStringView*	fEntryLabel;
 			BTextView*		fEntryView;
 };
 
