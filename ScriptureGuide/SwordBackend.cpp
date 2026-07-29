@@ -440,7 +440,13 @@ vector<const char*> GetBookNames(void)
 	for (i = 1; i<=2; i++)
 	{
 		myKey.setTestament(i);
-		for (j = 0; j<=myKey.getBookMax(); j++)
+		// VerseKey::setBook() is 1-indexed (valid range [1, getBookMax()]);
+		// setBook(0) is out of range and silently clamps to book 1 instead
+		// of failing, so starting this loop at 0 didn't skip a "book 0" --
+		// it just asked for book 1 (Genesis/Matthew) twice, duplicating
+		// each testament's first entry in the book menu (confirmed live:
+		// the Book dropdown listed "1. Mose" twice before "2. Mose").
+		for (j = 1; j<=myKey.getBookMax(); j++)
 		{
 			myKey.setTestament(i);
 			myKey.setBook(j);
