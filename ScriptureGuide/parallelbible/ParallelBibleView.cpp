@@ -933,10 +933,21 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 		// locale set first or it fails silently and the module's key is
 		// left at whatever it defaulted to, same class of bug already
 		// worked around elsewhere in this file (see SetVerseKeyLocale()
-		// above). Missing this exact call is why a freshly added column
-		// used to land on the module's own default position instead of
-		// matching the other columns.
-		VerseKey verseKey(module->getKeyText());
+		// above). Deliberately default-constructed rather than seeded via
+		// the VerseKey(const char*) constructor -- that form parses its
+		// argument immediately, before SetVerseKeyLocale() below ever
+		// runs, so if the module's own current key text (getKeyText())
+		// already happens to be localized (e.g. this module was
+		// previously navigated in another column sharing the same
+		// fManager), that parse fails at the still-default locale and
+		// left the key -- and every setText() call after it, including
+		// the one actually meant to apply fCurrentKey -- stuck on
+		// SWORD's failed-parse fallback of "Revelation of John" 1:1
+		// instead of matching the other columns (confirmed empirically:
+		// this is exactly the bug already root-caused and fixed in
+		// BibleTextDocument::SetKey() -- same anti-pattern, different
+		// call site).
+		VerseKey verseKey;
 		SetVerseKeyLocale(verseKey);
 		verseKey.setText(fCurrentKey.String());
 		module->setKey(verseKey);
