@@ -44,7 +44,7 @@ SetVerseKeyLocale(VerseKey& key)
 // class shouldn't need to know about its owner's internals beyond what's
 // handed to it) so a detached group's spacing/inset always matches a
 // group-0 column's, keeping the two visually consistent.
-const float ParallelColumnGroup::kColumnSpacing = 8.0f;
+const float ParallelColumnGroup::kColumnSpacing = 24.0f;
 const float ParallelColumnGroup::kNoteVerseLabelWidth = 20.0f;
 const float ParallelColumnGroup::kBibleColumnInset = 4.0f;
 

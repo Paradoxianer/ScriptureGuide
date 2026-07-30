@@ -54,7 +54,13 @@ SetVerseKeyLocale(VerseKey& key)
 }
 
 const float ParallelBibleView::kMinColumnWidth = 150.0f;
-const float ParallelBibleView::kColumnSpacing = 8.0f;
+// Wide enough to fit the link-toggle button (see SetColumnsLinked()) that
+// now lives centered in this gap, right on the divider line it toggles --
+// widened from the original 8.0f for that reason. Shared by every column
+// gap (header AND content, group 0 or not -- see ParallelColumnGroup's
+// own identical constant), so gaps stay visually consistent everywhere,
+// not just where a link button happens to render.
+const float ParallelBibleView::kColumnSpacing = 24.0f;
 const float ParallelBibleView::kHeaderHeight = 24.0f;
 const float ParallelBibleView::kHeaderBottomGap = 2.0f;
 const float ParallelBibleView::kRemoveButtonWidth = 20.0f;
@@ -1155,34 +1161,31 @@ ParallelBibleView::SetColumnsLinked(int32 position, bool linked)
 	if (linked == (leftGroup == rightGroup))
 		return B_OK;
 
-	if (!linked) {
-		// Peel the whole right-hand run (rightGroup) off into a fresh
-		// group -- every Bible column and notes column currently sharing
-		// rightGroup, not just the one immediately at position + 1, so
-		// the rest of that run stays linked to each other.
-		int32 newGroup = fNextGroupId++;
-		for (size_t i = 0; i < fColumnGroup.size(); i++) {
-			if (fColumnGroup[i] == rightGroup)
-				fColumnGroup[i] = newGroup;
-		}
-		for (size_t i = 0; i < fNotesColumns.size(); i++) {
-			if (fNotesColumns[i].group == rightGroup)
-				fNotesColumns[i].group = newGroup;
-		}
-		SetActiveGroup(newGroup);
-	} else {
-		// Merge: every column currently in rightGroup joins leftGroup.
-		for (size_t i = 0; i < fColumnGroup.size(); i++) {
-			if (fColumnGroup[i] == rightGroup)
-				fColumnGroup[i] = leftGroup;
-		}
-		for (size_t i = 0; i < fNotesColumns.size(); i++) {
-			if (fNotesColumns[i].group == rightGroup)
-				fNotesColumns[i].group = leftGroup;
-		}
-		if (fActiveGroup == rightGroup)
-			SetActiveGroup(leftGroup);
+	// Either direction only ever touches the CONTIGUOUS run starting at
+	// position + 1 that currently shares rightGroup -- walking outward
+	// from there, not "every column anywhere that happens to be in
+	// rightGroup". That distinction matters specifically for group 0:
+	// it isn't one single run, it's whatever every column defaults to
+	// until explicitly split off, so several disconnected runs can all
+	// be "group 0" at once (e.g. a column spliced in on the far side of
+	// an already-detached group). Sweeping the whole array by group id
+	// would incorrectly reassign every one of those, including ones on
+	// the *left* of `position` when rightGroup == leftGroup == 0, not
+	// just the intended right-hand run.
+	int32 targetGroup = linked ? leftGroup : fNextGroupId++;
+	for (size_t p = (size_t)(position + 1);
+			p < fColumnOrder.size() && _GroupForPosition((int32)p) == rightGroup;
+			p++) {
+		if (fColumnOrder[p] == COLUMN_BIBLE)
+			fColumnGroup[_BibleIndexForPosition((int32)p)] = targetGroup;
+		else
+			fNotesColumns[_NotesIndexForPosition((int32)p)].group = targetGroup;
 	}
+
+	if (!linked)
+		SetActiveGroup(targetGroup);
+	else if (fActiveGroup == rightGroup)
+		SetActiveGroup(leftGroup);
 
 	_RebuildLayout();
 	return B_OK;
@@ -1909,8 +1912,11 @@ ParallelBibleView::_RebuildHeader()
 		fRemoveButtons.push_back(removeButton);
 
 		// One fewer than columns -- nothing to link the last column to.
-		// Sits at this column's own right edge (see _PositionColumns()),
-		// not literally in the narrow kColumnSpacing gap.
+		// Centered on the divider line between this column and the next
+		// (see _PositionColumns()) -- right on the seam it toggles,
+		// which is what actually makes it read as "these two belong
+		// together" at a glance rather than being just another button
+		// floating inside one column's own cell.
 		if (i + 1 < fColumnOrder.size()) {
 			BMessage* linkMessage = new BMessage(PARALLEL_TOGGLE_LINK);
 			linkMessage->AddInt32("index", (int32)i);
@@ -2102,8 +2108,11 @@ ParallelBibleView::_PositionColumns()
 			float preferredWidth, preferredHeight;
 			fHeaderFields[i]->GetPreferredSize(&preferredWidth,
 				&preferredHeight);
-			float reserved = kRemoveButtonWidth + kInsertButtonWidth
-				+ (hasLinkButton ? kLinkButtonWidth : 0.0f);
+			// The link button (positioned below, once x has advanced
+			// into the gap after this column) lives in the gap between
+			// columns now, not in this column's own cell -- only the
+			// insert/remove buttons are reserved for here.
+			float reserved = kRemoveButtonWidth + kInsertButtonWidth;
 			float fieldWidth = std::min(preferredWidth,
 				std::max(0.0f, width - reserved));
 
@@ -2118,12 +2127,6 @@ ParallelBibleView::_PositionColumns()
 
 			fRemoveButtons[i]->MoveTo(cellX, 0.0f);
 			fRemoveButtons[i]->ResizeTo(kRemoveButtonWidth, kHeaderHeight);
-			cellX += kRemoveButtonWidth;
-
-			if (hasLinkButton) {
-				fLinkButtons[i]->MoveTo(cellX, 0.0f);
-				fLinkButtons[i]->ResizeTo(kLinkButtonWidth, kHeaderHeight);
-			}
 
 			if (group != 0 && group == fActiveGroup) {
 				if (fActiveGroupHeaderRight <= fActiveGroupHeaderLeft) {
@@ -2225,7 +2228,18 @@ ParallelBibleView::_PositionColumns()
 			bibleIndex++;
 
 		x += width + kColumnSpacing;
-		fColumnDividerX.push_back(x - kColumnSpacing / 2.0f);
+		float dividerX = x - kColumnSpacing / 2.0f;
+		fColumnDividerX.push_back(dividerX);
+
+		// Centered right on the divider line it toggles, between this
+		// column's own cell and the next one's -- see the class comment
+		// on SetColumnsLinked() for why it belongs exactly here rather
+		// than tucked inside either column's own cell.
+		if (hasLinkButton) {
+			fLinkButtons[i]->MoveTo(dividerX - kLinkButtonWidth / 2.0f,
+				0.0f);
+			fLinkButtons[i]->ResizeTo(kLinkButtonWidth, kHeaderHeight);
+		}
 	}
 
 	// A run that reached the very end of fColumnOrder never got flushed
