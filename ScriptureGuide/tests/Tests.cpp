@@ -23,6 +23,7 @@
 
 #include "BibleTextDocument.h"
 #include "ParagraphLayout.h"
+#include "ParallelBibleView.h"
 #include "PersonalNotesModule.h"
 #include "VerseAligner.h"
 #include "constants.h"
@@ -247,6 +248,123 @@ TestListenerSurvivesRepeatedRebuilds(SWModule* notesModule)
 }
 
 
+// Regression tests for issue #12 (per-column scroll-lock groups): a group
+// is a contiguous run of columns sharing verse alignment/scroll, formed by
+// breaking/restoring the link between ADJACENT columns
+// (SetColumnsLinked()) rather than picking one column in isolation -- see
+// ParallelBibleView's own class comment for why. These exercise the real
+// _RebuildLayout()/ParallelColumnGroup construction and teardown path (a
+// crash or double-free there would fail loudly) via what's actually
+// observable from the public API (AreColumnsLinked()/ActiveGroup()/
+// CountColumns()/status_t returns) -- there's no public accessor for a
+// column's raw internal group id, by design (see the header comment on
+// SetColumnsLinked()), so these check structure, not the private ids.
+static void
+TestColumnLinkingSplitsAndMerges(SWMgr* manager, SWModule* moduleA,
+	SWModule* moduleB)
+{
+	const char* name = "ParallelBibleView: breaking/restoring a column "
+		"link splits/merges groups";
+	if (manager == NULL || moduleA == NULL || moduleB == NULL) {
+		Skip(name, "need two distinct Bible modules installed");
+		return;
+	}
+
+	ParallelBibleView view("test", manager, 800.0f);
+	view.AddColumn(moduleA->getName());
+	view.AddColumn(moduleB->getName());
+
+	bool ok = true;
+	ok = ok && view.CountColumns() == 2;
+	ok = ok && view.AreColumnsLinked(0); // default: everything linked
+	ok = ok && view.ActiveGroup() == 0;
+
+	view.SetColumnsLinked(0, false); // split column 1 off
+	ok = ok && !view.AreColumnsLinked(0);
+	ok = ok && view.ActiveGroup() != 0; // the new group becomes active
+
+	view.SetColumnsLinked(0, true); // re-merge
+	ok = ok && view.AreColumnsLinked(0);
+	ok = ok && view.ActiveGroup() == 0; // fell back once its group emptied
+
+	Check(ok, name);
+}
+
+
+static void
+TestInsertColumnInheritsNeighborGroup(SWMgr* manager, SWModule* moduleA,
+	SWModule* moduleB)
+{
+	const char* name = "ParallelBibleView: InsertColumn()/"
+		"InsertNotesColumn() inherit the anchor column's group";
+	if (manager == NULL || moduleA == NULL || moduleB == NULL) {
+		Skip(name, "need two distinct Bible modules installed");
+		return;
+	}
+
+	ParallelBibleView view("test", manager, 800.0f);
+	view.AddColumn(moduleA->getName());
+	view.AddColumn(moduleB->getName());
+	view.SetColumnsLinked(0, false); // column 1 (moduleB) now its own group
+
+	status_t status = view.InsertColumn(1, moduleA->getName());
+
+	bool ok = true;
+	ok = ok && status == B_OK;
+	ok = ok && view.CountColumns() == 3;
+	// The new column (position 2) was inserted right after moduleB's own
+	// (now detached) group -- it should have joined that same group, not
+	// fallen back to group 0.
+	ok = ok && !view.AreColumnsLinked(0); // group 0 | detached group: still split
+	ok = ok && view.AreColumnsLinked(1); // detached group | new column: joined
+
+	status_t notesStatus = view.InsertNotesColumn(2);
+	ok = ok && notesStatus == B_OK;
+	ok = ok && view.CountColumns() == 4;
+	ok = ok && view.AreColumnsLinked(2); // notes column joined the same group
+
+	// A second notes column for the SAME group must fail -- only one per
+	// group (they'd all share the same PersonalNotesModule).
+	status_t secondNotesStatus = view.InsertNotesColumn(1);
+	ok = ok && secondNotesStatus == B_NOT_ALLOWED;
+
+	Check(ok, name);
+}
+
+
+static void
+TestRemoveColumnOrphansNotesBackToGroupZero(SWMgr* manager, SWModule* moduleA)
+{
+	const char* name = "ParallelBibleView: removing a group's last Bible "
+		"column falls its notes column back to group 0";
+	if (manager == NULL || moduleA == NULL) {
+		Skip(name, "need a Bible module installed");
+		return;
+	}
+
+	ParallelBibleView view("test", manager, 800.0f);
+	view.AddColumn(moduleA->getName());
+	// Build: [group0][detached][notes-of-detached]
+	view.InsertColumn(0, moduleA->getName()); // position 1, still group 0
+	view.SetColumnsLinked(0, false); // position 1 becomes its own group
+	view.InsertNotesColumn(1); // position 2, joins that new group
+
+	bool ok = true;
+	ok = ok && view.CountColumns() == 3;
+	ok = ok && view.AreColumnsLinked(1); // bible(pos1) <-> notes(pos2)
+
+	// Removing the detached Bible column (position 1) leaves its notes
+	// column (shifting down to position 1) an orphan -- it should fall
+	// back to group 0, lining back up with position 0.
+	view.RemoveColumn(1);
+	ok = ok && view.CountColumns() == 2;
+	ok = ok && view.AreColumnsLinked(0);
+	ok = ok && view.ActiveGroup() == 0;
+
+	Check(ok, name);
+}
+
+
 int
 main()
 {
@@ -275,6 +393,10 @@ main()
 	SWModule* notesModule = notes.Open() == B_OK ? notes.Module() : NULL;
 	TestEmptyNotesDocumentRebuildIsIdempotent(notesModule);
 	TestListenerSurvivesRepeatedRebuilds(notesModule);
+
+	TestColumnLinkingSplitsAndMerges(&manager, moduleA, moduleB);
+	TestInsertColumnInheritsNeighborGroup(&manager, moduleA, moduleB);
+	TestRemoveColumnOrphansNotesBackToGroupZero(&manager, moduleA);
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;
