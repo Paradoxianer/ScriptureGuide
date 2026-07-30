@@ -40,9 +40,11 @@ SRCS = \
 	 SwordBackend.cpp  \
 	 \
 	 parallelbible/BibleTextDocument.cpp  \
+	 parallelbible/NoteFieldView.cpp  \
 	 parallelbible/PersonalNotesModule.cpp  \
 	 parallelbible/VerseAligner.cpp  \
 	 parallelbible/ParallelBibleView.cpp  \
+	 parallelbible/ParallelColumnGroup.cpp  \
 	 \
 	 textview/Bullet.cpp  \
 	 textview/BulletData.cpp  \
