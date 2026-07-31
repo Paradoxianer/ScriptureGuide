@@ -15,8 +15,10 @@ SRCS = \
 	 Tests.cpp  \
 	 \
 	 ../parallelbible/BibleTextDocument.cpp  \
+	 ../parallelbible/ParallelBibleView.cpp  \
 	 ../parallelbible/PersonalNotesModule.cpp  \
 	 ../parallelbible/VerseAligner.cpp  \
+	 ../SwordBackend.cpp  \
 	 \
 	 ../textview/Bullet.cpp  \
 	 ../textview/BulletData.cpp  \
@@ -29,7 +31,10 @@ SRCS = \
 	 ../textview/ParagraphStyleData.cpp  \
 	 ../textview/TextDocument.cpp  \
 	 ../textview/TextDocumentLayout.cpp  \
+	 ../textview/TextDocumentView.cpp  \
+	 ../textview/TextEditor.cpp  \
 	 ../textview/TextListener.cpp  \
+	 ../textview/TextSelection.cpp  \
 	 ../textview/TextSpan.cpp  \
 	 ../textview/UndoableEditListener.cpp  \
 	 \

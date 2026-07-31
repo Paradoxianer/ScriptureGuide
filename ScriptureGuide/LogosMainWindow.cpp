@@ -286,8 +286,11 @@ void SGMainWindow::BuildGUI(void)
 	// simple" discussion that led to this merge).
 	fParallelView = new ParallelBibleView("parallelView",
 		fModManager->Manager(), Frame().Width());
+	// Vertical scrolling is now per-column (see the class comment on
+	// ParallelBibleView, issue #12) -- this outer BScrollView only ever
+	// needs its horizontal bar any more.
 	fScrollView = new BScrollView("scroll_view", fParallelView,
-		0, true, true, B_NO_BORDER);
+		0, true, false, B_NO_BORDER);
 
 	BToolBar *toolBar = new BToolBar();
 	toolBar->AddView(bookfield);
@@ -302,12 +305,11 @@ void SGMainWindow::BuildGUI(void)
 		.Add(toolBar)
 		.AddGroup(B_HORIZONTAL, 0)
 			.Add(fParallelView->HeaderView())
-			// fScrollView reserves this much width on its right edge for
-			// its own vertical BScrollBar; fParallelView->HeaderView() is
-			// a plain sibling BView with no such reservation, so without
-			// this strut its row would be wider than fScrollView's actual
-			// content area and end up misaligned with it.
-			.AddStrut(B_V_SCROLL_BAR_WIDTH)
+			// fScrollView is horizontal-only now (see above) -- it no
+			// longer reserves any width for a vertical BScrollBar of its
+			// own, so fParallelView->HeaderView() no longer needs a
+			// compensating strut to keep its row the same width as
+			// fScrollView's actual content area.
 		.End()
 		.Add(fScrollView)
 	.End();
@@ -488,11 +490,13 @@ void SGMainWindow::SavePrefsForModule(void)
 	// row produced a 5-entry array from what should've stayed 3).
 	preferences.RemoveName("columnIsNotes");
 	preferences.RemoveName("columnModule");
+	preferences.RemoveName("columnLinkedToNext");
 	std::vector<ParallelBibleView::ColumnDescription> columns
 		= fParallelView->ColumnLayout();
 	for (size_t i = 0; i < columns.size(); i++) {
 		preferences.AddBool("columnIsNotes", columns[i].isNotes);
 		preferences.AddString("columnModule", columns[i].moduleName);
+		preferences.AddBool("columnLinkedToNext", columns[i].linkedToNext);
 	}
 	prefsLock.Unlock();
 }
@@ -509,14 +513,29 @@ void SGMainWindow::RestoreColumnLayout(void)
 
 	std::vector<bool> isNotes;
 	std::vector<BString> moduleNames;
+	std::vector<bool> linkedToNext;
 	if (haveSavedLayout) {
 		for (int32 i = 0; i < count; i++) {
 			bool notesFlag = false;
 			BString moduleName;
 			preferences.FindBool("columnIsNotes", i, &notesFlag);
 			preferences.FindString("columnModule", i, &moduleName);
+			// Absent for a preferences file saved before #12's linking
+			// existed -- defaults to true, matching every column's
+			// starting state (see the class comment on ParallelBibleView).
+			// Checked explicitly rather than relying on FindBool() to
+			// leave the out-param untouched on B_NAME_NOT_FOUND -- it
+			// doesn't (confirmed empirically: every restored gap came
+			// back false instead of the intended true default, splitting
+			// every column into its own single-member chain).
+			bool linkedFlag = true;
+			if (preferences.FindBool("columnLinkedToNext", i, &linkedFlag)
+					!= B_OK) {
+				linkedFlag = true;
+			}
 			isNotes.push_back(notesFlag);
 			moduleNames.push_back(moduleName);
+			linkedToNext.push_back(linkedFlag);
 		}
 	}
 	prefsLock.Unlock();
@@ -533,10 +552,21 @@ void SGMainWindow::RestoreColumnLayout(void)
 
 	for (int32 i = 0; i < count; i++) {
 		if (isNotes[i])
-			fParallelView->SetNotesEnabled(true);
+			// AddNotesColumn(), not SetNotesEnabled(true) -- the latter
+			// is a coarse "is there one anywhere yet" toggle (see the
+			// class comment on ParallelBibleView) that would silently
+			// skip every notes column after the first one a saved
+			// layout had more than one of.
+			fParallelView->AddNotesColumn();
 		else if (!moduleNames[i].IsEmpty())
 			fParallelView->AddColumn(moduleNames[i].String());
 	}
+
+	// Every AddColumn()/AddNotesColumn() call above appended its column
+	// fully linked to whatever was already last (see the class comment)
+	// -- restore whichever gaps the saved layout actually had broken.
+	for (int32 i = 0; i + 1 < count; i++)
+		fParallelView->SetColumnLinked(i, linkedToNext[i]);
 }
 
 

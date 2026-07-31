@@ -23,6 +23,7 @@
 
 #include "BibleTextDocument.h"
 #include "ParagraphLayout.h"
+#include "ParallelBibleView.h"
 #include "PersonalNotesModule.h"
 #include "VerseAligner.h"
 #include "constants.h"
@@ -247,6 +248,79 @@ TestListenerSurvivesRepeatedRebuilds(SWModule* notesModule)
 }
 
 
+// Regression test for issue #12's neighbor-relink rule (see
+// ParallelBibleView::RemoveColumn()): removing a linked middle column
+// from a 3-column chain must leave its two former neighbors linked to
+// each other, not orphaned into separate chains.
+static void
+TestRemoveMiddleColumnRelinksNeighbors(SWMgr* manager, SWModule* moduleA,
+	SWModule* moduleB)
+{
+	const char* name = "ParallelBibleView::RemoveColumn: removing a "
+		"linked middle column re-links its two former neighbors";
+	if (manager == NULL || moduleA == NULL || moduleB == NULL) {
+		Skip(name, "need two distinct Bible modules installed");
+		return;
+	}
+
+	ParallelBibleView view("testParallelView", manager, 900.0f);
+	view.AddColumn(moduleA->getName());
+	view.AddColumn(moduleB->getName());
+	view.AddColumn(moduleA->getName());
+
+	bool startedFullyLinked
+		= view.AreColumnsLinked(0) && view.AreColumnsLinked(1);
+
+	view.RemoveColumn(1);
+
+	bool endedUpLinked
+		= view.CountColumns() == 2 && view.AreColumnsLinked(0);
+
+	Check(startedFullyLinked && endedUpLinked, name);
+}
+
+
+// Regression test for issue #12's per-chain scroll/key independence:
+// splitting a chain and navigating the newly-split-off (active) chain
+// must leave the other chain's own current key completely untouched.
+static void
+TestSplitChainKeepsOtherChainUnaffected(SWMgr* manager, SWModule* moduleA,
+	SWModule* moduleB)
+{
+	const char* name = "ParallelBibleView::SetColumnLinked/SetKey: "
+		"navigating a split-off chain doesn't move the other chain";
+	if (manager == NULL || moduleA == NULL || moduleB == NULL) {
+		Skip(name, "need two distinct Bible modules installed");
+		return;
+	}
+
+	ParallelBibleView view("testParallelView", manager, 900.0f);
+	view.AddColumn(moduleA->getName());
+	view.AddColumn(moduleB->getName());
+
+	// Both columns start in one chain -- SetKey() (acting on whichever
+	// column is active, here column 0 by default, the first one added)
+	// moves both.
+	view.SetKey("Gen 1:1");
+	BString chain0KeyBefore = view.ChainKey(0);
+	BString chain1KeyBefore = view.ChainKey(1);
+
+	// Split the two apart into independent chains, then navigate chain 0
+	// (still active -- splitting doesn't change fActivePosition unless it
+	// was unset) to a different chapter.
+	view.SetColumnLinked(0, false);
+	bool splitOk = !view.AreColumnsLinked(0);
+
+	view.SetKey("Gen 2:1");
+
+	BString chain0KeyAfter = view.ChainKey(0);
+	BString chain1KeyAfter = view.ChainKey(1);
+
+	Check(splitOk && chain0KeyAfter != chain0KeyBefore
+		&& chain1KeyAfter == chain1KeyBefore, name);
+}
+
+
 int
 main()
 {
@@ -270,6 +344,8 @@ main()
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestVerseAlignerIsIdempotent(moduleA, moduleB);
 	TestPersonalNotesRoundTrip();
+	TestRemoveMiddleColumnRelinksNeighbors(&manager, moduleA, moduleB);
+	TestSplitChainKeepsOtherChainUnaffected(&manager, moduleA, moduleB);
 
 	PersonalNotesModule notes;
 	SWModule* notesModule = notes.Open() == B_OK ? notes.Module() : NULL;

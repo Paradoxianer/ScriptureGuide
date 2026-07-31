@@ -70,6 +70,7 @@ const uint32 PARALLEL_SELECT_NOTES		= 'PVsn';
 const uint32 PARALLEL_ADD_COLUMN_MENU	= 'PVam';
 const uint32 PARALLEL_REMOVE_COLUMN	= 'PVrc';
 const uint32 PARALLEL_REORDER_COLUMN	= 'PVro';
+const uint32 PARALLEL_TOGGLE_LINK		= 'PVtl';
 
 const uint32 MENU_HELP_LOGOS			= 'MHlo';
 const uint32 MENU_HELP_HOWTO			= 'MHho';
