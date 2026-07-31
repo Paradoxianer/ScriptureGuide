@@ -47,6 +47,63 @@ int				UpperVerseFromKey(const char* key);
 bool			ParseVerseReference(const char* input,
 					BString& normalizedKey);
 
+// One occurrence of a recognized verse reference embedded in a larger
+// block of free text (a commentary's prose, not a whole search/goto
+// field) -- see FindReferencesInText() below. start/length are a byte
+// range into the ORIGINAL text passed in, suitable for splitting it into
+// TextSpans around the match (see #28, cross-reference navigation).
+struct TextReference {
+	int32	start;
+	int32	length;
+	BString	normalizedKey;
+};
+
+// Scans free-flowing text (typically a commentary's rendered verse text,
+// which -- unlike a dedicated cross-reference module -- SWORD has no
+// structured API for; see #28) for substrings that look like a verse
+// reference (a capitalized book-ish word, optionally preceded by "1 "/
+// "2 "/"3 ", followed by chapter/verse digits) and validates each
+// candidate through the exact same ParseVerseReference() every typed
+// reference already goes through -- so a candidate the regex below
+// spotted but that isn't actually a real book/chapter/verse (a stray
+// "Kapitel 5, 3" or similar) is silently dropped rather than turned into
+// a broken link, with no separate book-name dictionary to keep in sync.
+std::vector<TextReference>	FindReferencesInText(const char* text);
+
+// One word tagged with a Strong's number -- start/length are a byte
+// range into the ALREADY fully-rendered verse text (the same string
+// BibleTextDocument builds its TextSpans from), not some intermediate
+// tag-laden form. See #27, FindStrongsWordsInText().
+struct StrongsWord {
+	int32	start;
+	int32	length;
+	BString	strongsNumber;	// e.g. "G3056" or "H430"
+};
+
+// A Strong's-capable module's <w lemma="strong:G1063" ...>word</w>
+// markup never survives to renderText()'s actual output as inline text
+// (confirmed empirically both ways: it's completely absent from this
+// app's own rendering, which always appends an extra GBFPlain filter
+// for good reason -- see the comment where that's added -- and, more
+// fundamentally, even withOUT that extra filter, using the tag itself
+// as the source of truth is fragile), so this uses SWORD's own
+// structured side-channel instead: `module`'s getEntryAttributes()
+// (populated as a side effect of the render filter chain processing
+// the raw markup, regardless of what any later filter does to the
+// visible text) reports each word's Lemma/Text under the "Word"
+// attribute type, in reading order. Each Word entry's Text is located
+// in `renderedText` by sequential search starting where the previous
+// one left off -- correct even when several words share identical text
+// ("the", "and", ...), since a forward-only cursor naturally lands on
+// each successive real occurrence rather than always the first one.
+// Only entries whose LemmaClass is "strong" are considered (a module
+// could in principle tag other kinds of lemmas); a Lemma with more than
+// one space-separated token (SWORD merges several English words
+// sharing one Greek/Hebrew word into a single tag) only keeps the
+// first.
+std::vector<StrongsWord> FindStrongsWordsInText(sword::SWModule* module,
+					const BString& renderedText);
+
 
 std::vector<const char*>	GetBookNames(void);
 
@@ -68,13 +125,28 @@ public:
 	const char*			GetVerse(const char* book, int chapter, int verse);
 	const char*			GetVerse(const char* key);
 	const char*			GetParagraph(const char* key);
-	
+
+	// For Lexicon/Dictionary-type modules (see #31): sets the module's
+	// own raw string key directly (no VerseKey involved -- these aren't
+	// keyed by book/chapter/verse) and renders that entry.
+	const char*			GetEntry(const char* key);
+
 	void				SetVerse(const char* book, int chapter, int verse);
 	
 	std::vector<const char*>	SearchModule(int searchType, int flags,
 								const char* searchText, const char* scopeFrom,
 								const char* scopeTo, BStatusBar* statusBar);
-	
+
+	// Same underlying SWModule::search(), but with no VerseKey scope at
+	// all (unlike SearchModule() above, built for Bible/Commentary book
+	// ranges) -- a Lexicon/Dictionary module (see #31) has no book/
+	// chapter concept to scope by, and SWModule::search()'s `scope`
+	// parameter already defaults to "search the whole module" when
+	// omitted. Multiword, case-insensitive; returns each matching
+	// entry's own raw key (suitable for GetEntry()), not the matched
+	// text itself.
+	std::vector<const char*>	SearchEntries(const char* searchText);
+
 	bool				IsGreek(void);
 	bool				IsHebrew(void);
 	
@@ -119,6 +191,20 @@ public:
 	SGModule*			FindModule(const char* name);
 	status_t			SetModule(SGModule* mod);
  	SGModule*			CurrentModule(void);
+
+	// Looks up a Strong's number (e.g. "G3056" or "H430", the exact form
+	// SWModule::getEntryAttributes()'s "Word" attributes report -- see
+	// #27) in whichever installed Lexicon/Dictionary module declares the
+	// standard SWORD Feature=GreekDef (for a "G..." number) or
+	// Feature=HebrewDef (for "H...") config entry -- the same feature
+	// tag CrossWire's own StrongsGreek/StrongsHebrew modules use, so
+	// this works for whichever compatible dictionary happens to be
+	// installed rather than hardcoding a specific module name. Empty if
+	// no matching dictionary is installed, or the number isn't found in
+	// it. The "G"/"H" prefix itself is stripped before the lookup --
+	// confirmed empirically that keeping it silently mismatches to a
+	// nearby, unrelated entry instead of failing outright.
+	BString				LookupStrongsNumber(const char* strongsNumber) const;
 
 	sword::SWMgr*		Manager(void) const
 							{ return fManager; }

@@ -110,6 +110,10 @@ public:
 			using BView::ScrollTo; // un-hide BView::ScrollTo(float, float)
 	virtual	void				MessageReceived(BMessage* message);
 	virtual	void				Draw(BRect updateRect);
+	virtual	void				MouseDown(BPoint where);
+	virtual	void				MouseMoved(BPoint where, uint32 transit,
+									const BMessage* dragMessage);
+	virtual	void				MouseUp(BPoint where);
 
 			BView*				HeaderView() const { return fHeaderView; }
 			float				HeaderHeight() const
@@ -129,6 +133,14 @@ public:
 			status_t			SetShowVerseNumbers(bool show);
 			bool				ShowVerseNumbers() const
 									{ return fShowVerseNumbers; }
+
+			status_t			SetShowStrongsNumbers(bool show);
+			bool				ShowStrongsNumbers() const
+									{ return fShowStrongsNumbers; }
+
+			status_t			SetShowCrossReferences(bool show);
+			bool				ShowCrossReferences() const
+									{ return fShowCrossReferences; }
 
 			// Family/style/size for verse text and (still bold)
 			// verse numbers, applied to every current Bible/
@@ -157,6 +169,35 @@ public:
 			// (SGMainWindow::EnsureSearchWindow()), which otherwise has
 			// no way to know what's actually shown in the reading pane.
 			std::vector<BString> ColumnModuleNames() const;
+
+			// One entry per on-screen column, left to right, including
+			// the notes column at its actual position -- unlike
+			// ColumnModuleNames() above, which drops position
+			// information because it only serves the search window's
+			// module picker. Used to save/restore a window's whole
+			// layout (see #9); moduleName is empty when isNotes is true.
+			struct ColumnDescription {
+				bool	isNotes;
+				BString	moduleName;
+			};
+			std::vector<ColumnDescription> ColumnLayout() const;
+
+			// One row per verse of the current chapter, verse-aligned
+			// across every open Bible/Commentary column (columnText,
+			// same left-to-right order as ColumnModuleNames()) and the
+			// notes column if one is open (notesText, empty otherwise)
+			// -- structured data for #8's export feature to format as
+			// plain text/TSV/Markdown/HTML, not a rendering of anything
+			// already on screen. Each cell is that verse's plain text
+			// with the leading " N " verse-number prefix _Rebuild()
+			// prepends (when ShowVerseNumbers() is on) stripped back
+			// out, since the row already carries its own verse number.
+			struct ExportRow {
+				int				verse;
+				std::vector<BString>	columnText;
+				BString			notesText;
+			};
+			std::vector<ExportRow> BuildExportRows() const;
 
 			// Cross-column selection coordination (see #23) -- called
 			// by BibleColumnView instances, not meant for other
@@ -211,6 +252,36 @@ private:
 			float				_NotesColumnWidth() const;
 			int32				_BibleIndexForPosition(int32 position) const;
 			int32				_NotesPosition() const;
+
+			// Column index whose on-screen cell contains content-space x
+			// (same coordinate space as fColumnDividerX/the header
+			// fields' own MoveTo() calls), clamped to the last column if
+			// x falls past every divider. -1 if there are no columns at
+			// all. Used for column-header drag-to-reorder (see #23):
+			// ParallelHeaderView::MouseDown() to find which column a
+			// drag started on, MessageReceived() to find where it was
+			// dropped.
+			int32				_ColumnIndexForX(float x) const;
+
+			// Moves the column currently at `from` so it ends up at
+			// `to` in the final on-screen order (not "insert before the
+			// element currently at `to`" -- `to` is the position in the
+			// array *after* `from` has already been removed from it).
+			// Implemented by reading the current order via
+			// ColumnLayout(), reordering that list, tearing down every
+			// column, and re-adding them via the same AddColumn()/
+			// SetNotesEnabled() calls RestoreColumnLayout() (see #9)
+			// uses -- simplest way to keep this correct without
+			// duplicating the COLUMN_BIBLE/fModules/fDocuments/
+			// fTextViews index bookkeeping AddColumn()/RemoveColumn()
+			// already maintain.
+			void				_MoveColumn(int32 from, int32 to);
+
+			// Content-space x of the one divider that's ever draggable --
+			// the one immediately before the notes column (see #19) --
+			// or < 0.0f if there's no notes column, or it's the leftmost
+			// column with nothing to its left to negotiate space with.
+			float				_NotesSplitDividerX() const;
 			status_t			_SetColumnToBible(int32 position,
 									const char* moduleName);
 			status_t			_SetColumnToNotes(int32 position);
@@ -253,6 +324,8 @@ private:
 			int					fSelectionLastEndVerse;
 
 			bool				fShowVerseNumbers;
+			bool				fShowStrongsNumbers;
+			bool				fShowCrossReferences;
 			BFont				fBaseFont;
 
 			BString				fCurrentKey;
@@ -260,6 +333,25 @@ private:
 			float				fContentHeight;
 			float				fContentWidth;
 			std::vector<float>	fColumnDividerX;
+
+			// User-set notes column width, as a fraction of total content
+			// width, from dragging the splitter (see #19); -1 (the
+			// default) means no drag has happened yet, so
+			// _NotesColumnWidth() falls back to its original automatic
+			// natural-share/kMaxNotesWidthFraction-cap behavior. Set once
+			// on MouseUp, not continuously during the drag -- see
+			// fNotesSplitDragGuideX.
+			float				fNotesWidthFraction;
+
+			// Content-space x of the live drag guide line while the
+			// splitter is being dragged, -1 when it isn't. Deliberately
+			// separate from actually resizing the notes column: only this
+			// thin guide line (drawn in Draw(), not the columns
+			// themselves) updates on every MouseMoved(), so a drag
+			// doesn't force a full relayout of every column's text per
+			// pixel moved -- the real resize (_Realign()) only happens
+			// once, in MouseUp(), from wherever the guide ended up.
+			float				fNotesSplitDragGuideX;
 
 	static	const float			kMinColumnWidth;
 	static	const float			kColumnSpacing;

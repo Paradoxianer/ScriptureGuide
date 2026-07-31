@@ -50,6 +50,23 @@ public:
 			bool				ShowVerseNumbers() const
 									{ return fShowVerseNumbers; }
 
+			// Whether Strong's-tagged words (#27) get their own
+			// clickable span at all -- when off, _Rebuild() skips
+			// FindStrongsWordsInText() entirely rather than finding
+			// spans and not styling them, so a verse renders as one
+			// plain span exactly like it did before #27 existed. Same
+			// idea for cross-reference detection (#28) and
+			// SetShowCrossReferences()/ShowCrossReferences() below.
+			// Both default to on, matching this app's behavior before
+			// either had a way to be turned off.
+			void				SetShowStrongsNumbers(bool show);
+			bool				ShowStrongsNumbers() const
+									{ return fShowStrongsNumbers; }
+
+			void				SetShowCrossReferences(bool show);
+			bool				ShowCrossReferences() const
+									{ return fShowCrossReferences; }
+
 			// Family/size apply to both verse text and verse
 			// numbers; verse numbers keep their bold weight
 			// regardless. The family is overridden for Greek/
@@ -69,6 +86,17 @@ public:
 			int32				ParagraphIndexForVerse(int verse) const;
 			int					VerseForParagraphIndex(int32 index) const;
 
+			// True if this verse's paragraph is a continuation of the
+			// same linked commentary entry as the verse before it (see
+			// #10's linked-entry fix in _Rebuild()) -- i.e. this verse
+			// has no real text of its own here, just a share of an
+			// entry that actually covers a whole range starting at some
+			// earlier verse. VerseAligner (#10) uses this to align a
+			// whole linked span as one group instead of forcing all of
+			// that span's height onto the one verse where the real text
+			// landed. False for a verse not in this document at all.
+			bool				IsLinkedToPrevious(int verse) const;
+
 			// Text offset range covering verses startVerse..endVerse
 			// (inclusive) -- for a TextDocumentView::SetSelection() call
 			// to highlight a verse jumped to from search (see #22).
@@ -77,6 +105,27 @@ public:
 			bool				TextRangeForVerseRange(int startVerse,
 									int endVerse, int32& start,
 									int32& end) const;
+
+			// Verse references embedded in this column's own rendered
+			// text -- e.g. a commentary citing "(Mt 16:18)" -- are
+			// detected (see FindReferencesInText(), #28) and rendered as
+			// a distinctly-styled sub-span of the verse's text, not a
+			// separate paragraph or verse of their own. documentOffset
+			// is a plain character offset into this TextDocument (the
+			// same space TextDocumentView::TextOffsetAt() and
+			// TextRangeForVerseRange() already use); outKey is the
+			// normalized VerseKey text ready for SetKey(), untouched if
+			// this returns false.
+			bool				ReferenceLinkAt(int32 documentOffset,
+									BString& outKey) const;
+
+			// Same idea as ReferenceLinkAt(), for a word SWORD tagged
+			// with a Strong's number (see StripStrongsMarkup(), #27) --
+			// outNumber (e.g. "G3056") is what
+			// SwordBackend::LookupStrongsNumber() expects, untouched if
+			// this returns false.
+			bool				StrongsNumberAt(int32 documentOffset,
+									BString& outNumber) const;
 
 			// Extra bottom spacing per verse, used by VerseAligner to keep
 			// the same verse lined up across parallel columns. Replaces
@@ -94,13 +143,41 @@ private:
 
 			CharacterStyle		fVerseNumberStyle;
 			CharacterStyle		fVerseTextStyle;
+			CharacterStyle		fReferenceLinkStyle;
+			CharacterStyle		fStrongsNumberStyle;
 			ParagraphStyle		fParagraphStyle;
 
 			bool				fShowVerseNumbers;
 			bool				fSkipEmptyVerses;
+			bool				fShowStrongsNumbers;
+			bool				fShowCrossReferences;
 
 			// paragraph index -> verse number, rebuilt in _Rebuild()
 			std::vector<int>	fParagraphVerse;
+
+			// verse number -> IsLinkedToPrevious(), rebuilt alongside
+			// fParagraphVerse in _Rebuild().
+			std::map<int, bool>	fLinkedToPrevious;
+
+			// Document-wide [start, end) offset ranges for every
+			// reference link found across the whole chapter, rebuilt
+			// alongside fParagraphVerse in _Rebuild() -- see
+			// ReferenceLinkAt().
+			struct ReferenceLink {
+				int32	start;
+				int32	end;
+				BString	key;
+			};
+			std::vector<ReferenceLink>	fReferenceLinks;
+
+			// Same idea, for Strong's-tagged words (see StrongsNumberAt(),
+			// #27).
+			struct StrongsLink {
+				int32	start;
+				int32	end;
+				BString	number;
+			};
+			std::vector<StrongsLink>	fStrongsLinks;
 
 			// verse number -> extra SpacingBottom, set by VerseAligner
 			std::map<int, float> fVerseSpacingBottom;

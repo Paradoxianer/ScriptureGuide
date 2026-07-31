@@ -8,10 +8,10 @@
 #include <localemgr.h>
 #include <markupfiltmgr.h>
 #include <gbfplain.h>
-#include <gbfstrongs.h>
 
 #include <vector>
 #include <map>
+#include <regex>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -189,6 +189,20 @@ const char* SGModule::GetParagraph(const char* key)
 }
 
 
+// Lexicon/dictionary modules (see #31) are keyed by a plain string --
+// "3056", a headword, whatever the module itself uses -- never a
+// VerseKey, so this bypasses every VerseKey-locale dance the Bible/
+// Commentary methods above need entirely and just sets the module's raw
+// key text directly. Confirmed empirically against GerStrongsGreek: its
+// keys have no "G"/"H" prefix at all (LookupStrongsNumber() below strips
+// it before calling this), and a leading zero is optional.
+const char* SGModule::GetEntry(const char* key)
+{
+	fModule->setKey(key);
+	return fModule->renderText();
+}
+
+
 const char* SGModule::GetKey(void)
 {
 	VerseKey* key = (VerseKey*)fModule->getKey();	
@@ -272,7 +286,23 @@ vector<const char*> SGModule::SearchModule(int searchType, int flags,
 	listkey.setPersist(true);
 	fModule->setKey(listkey);
 
-	for (listkey = TOP; !listkey.popError(); listkey++) 
+	for (listkey = TOP; !listkey.popError(); listkey++)
+		results.push_back((const char*) listkey);
+
+	return results;
+}
+
+
+vector<const char*> SGModule::SearchEntries(const char* searchText)
+{
+	vector<const char*> results;
+
+	ListKey &listkey = fModule->search(searchText, -2 /* multiword */,
+		REG_ICASE);
+	listkey.setPersist(true);
+	fModule->setKey(listkey);
+
+	for (listkey = TOP; !listkey.popError(); listkey++)
 		results.push_back((const char*) listkey);
 
 	return results;
@@ -282,7 +312,17 @@ vector<const char*> SGModule::SearchModule(int searchType, int flags,
 SwordBackend::SwordBackend(void)
 {
 	fManager = new SWMgr(CONFIGPATH, true, new MarkupFilterMgr(FMT_GBF, ENC_UTF8));
-	
+
+	// Harmless for every module that doesn't declare
+	// GlobalOptionFilter=*Strongs in its own .conf (this is a no-op for
+	// them, confirmed empirically) -- only modules that both support it
+	// AND have this filter attached start emitting <w lemma="strong:
+	// G1063"...>word</w> markup in renderText() at all (see #27,
+	// StripStrongsMarkup()). No separate on/off UI toggle for now,
+	// matching how cross-reference detection (#28) is likewise always
+	// on rather than adding another preference to plumb through/persist.
+	fManager->setGlobalOption("Strong's Numbers", "On");
+
 	// We are going to replace GetModuleDescriptions with some methods which
 	// are a little easier to deal with outside the class
 	
@@ -296,11 +336,11 @@ SwordBackend::SwordBackend(void)
 	SWModule* currentmodule = 0;
 	vector<const char*> tmp;
 	
-	for (it = fManager->Modules.begin(); it != fManager->Modules.end(); it++) 
+	for (it = fManager->Modules.begin(); it != fManager->Modules.end(); it++)
 	{
 		currentmodule = (*it).second;
 		currentmodule->addRenderFilter(new GBFPlain());
-		
+
 		if (!strcmp(currentmodule->getType(), "Biblical Texts"))
 			fBibleList->AddItem(new SGModule(currentmodule));
 		else
@@ -426,6 +466,44 @@ SGModule* SwordBackend::LexiconAt(const int32 &index) const
 SGModule* SwordBackend::GeneralTextAt(const int32 &index) const
 {
 	return fTextList->ItemAt(index);
+}
+
+
+BString SwordBackend::LookupStrongsNumber(const char* strongsNumber) const
+{
+	if (strongsNumber == NULL || *strongsNumber == '\0')
+		return BString();
+
+	char prefix = strongsNumber[0];
+	if (prefix != 'G' && prefix != 'H')
+		return BString();
+
+	const char* wantedFeature = (prefix == 'G') ? "GreekDef" : "HebrewDef";
+	const char* number = strongsNumber + 1;
+
+	for (int32 i = 0; i < CountLexicons(); i++) {
+		SGModule* lexicon = LexiconAt(i);
+		if (lexicon == NULL)
+			continue;
+
+		const ConfigEntMap& conf = lexicon->GetModule()->getConfig();
+		std::pair<ConfigEntMap::const_iterator, ConfigEntMap::const_iterator>
+			range = conf.equal_range("Feature");
+		bool matches = false;
+		for (ConfigEntMap::const_iterator it = range.first;
+				it != range.second && !matches; ++it) {
+			if (it->second == wantedFeature)
+				matches = true;
+		}
+		if (!matches)
+			continue;
+
+		BString entry(lexicon->GetEntry(number));
+		if (!entry.IsEmpty())
+			return entry;
+	}
+
+	return BString();
 }
 
 
@@ -647,4 +725,112 @@ bool ParseVerseReference(const char* input, BString& normalizedKey)
 
 	normalizedKey = key.getText();
 	return true;
+}
+
+
+std::vector<TextReference>
+FindReferencesInText(const char* text)
+{
+	std::vector<TextReference> result;
+	if (text == NULL || *text == '\0')
+		return result;
+
+	// A candidate: an optional "1 "/"2 "/"3 " numbered-book prefix, a
+	// capitalized book-ish word (with an optional trailing abbreviation
+	// period), then chapter/verse digits separated by ':' or ',' (see
+	// ParseVerseReference()'s own comment on the German comma
+	// convention), with an optional "-verseEnd" range. Deliberately
+	// liberal -- ParseVerseReference() below is the actual filter; this
+	// only needs to be cheap and not miss real references, not be
+	// precise on its own.
+	//
+	// ASCII letters only ([A-Za-z], not e.g. German "ö"/"ü"): std::regex
+	// matches individual bytes, not UTF-8 codepoints, so a multi-byte
+	// accented character in a character class here would risk matching
+	// half of one and corrupting the scan. Standard SWORD locale files
+	// already register ASCII-safe alternate abbreviations for accented
+	// book names for exactly this kind of typing/matching convenience
+	// (confirmed in this file's own German-locale reference work
+	// earlier), and the one commentary this was actually tested against
+	// (GerKingComments) uses only ASCII abbreviations ("Mt", "Off") in
+	// practice -- so this is a real but narrow gap, not a blocker.
+	static const std::regex kReferencePattern(
+		"([1-3][ ]|)"
+		"[A-Z][A-Za-z]*\\.?"
+		"[ \t]+[0-9]{1,3}[,:][ \t]?[0-9]{1,3}(-[0-9]{1,3}|)");
+
+	BString source(text);
+	const char* str = source.String();
+	std::cregex_iterator it(str, str + source.Length(), kReferencePattern);
+	std::cregex_iterator end;
+	for (; it != end; ++it) {
+		const std::cmatch& match = *it;
+		BString candidate(match.str().c_str());
+
+		BString normalizedKey;
+		if (!ParseVerseReference(candidate.String(), normalizedKey))
+			continue;
+
+		TextReference reference;
+		reference.start = (int32)match.position(0);
+		reference.length = (int32)match.length(0);
+		reference.normalizedKey = normalizedKey;
+		result.push_back(reference);
+	}
+
+	return result;
+}
+
+
+std::vector<StrongsWord>
+FindStrongsWordsInText(SWModule* module, const BString& renderedText)
+{
+	std::vector<StrongsWord> result;
+	if (module == NULL)
+		return result;
+
+	AttributeTypeList& attrs = module->getEntryAttributes();
+	AttributeTypeList::iterator wordType = attrs.find("Word");
+	if (wordType == attrs.end())
+		return result;
+
+	int32 searchCursor = 0;
+	for (AttributeList::iterator it = wordType->second.begin();
+			it != wordType->second.end(); ++it) {
+		AttributeValue& value = it->second;
+
+		AttributeValue::iterator classIt = value.find("LemmaClass");
+		if (classIt == value.end() || classIt->second != "strong")
+			continue;
+
+		AttributeValue::iterator lemmaIt = value.find("Lemma");
+		AttributeValue::iterator textIt = value.find("Text");
+		if (lemmaIt == value.end() || textIt == value.end())
+			continue;
+
+		BString lemma(lemmaIt->second.c_str());
+		int32 spacePos = lemma.FindFirst(' ');
+		if (spacePos >= 0)
+			lemma.Truncate(spacePos);
+		if (lemma.IsEmpty())
+			continue;
+
+		BString wordText(textIt->second.c_str());
+		if (wordText.IsEmpty())
+			continue;
+
+		int32 foundAt = renderedText.FindFirst(wordText, searchCursor);
+		if (foundAt < 0)
+			continue;
+
+		StrongsWord word;
+		word.start = foundAt;
+		word.length = wordText.Length();
+		word.strongsNumber = lemma;
+		result.push_back(word);
+
+		searchCursor = foundAt + wordText.Length();
+	}
+
+	return result;
 }

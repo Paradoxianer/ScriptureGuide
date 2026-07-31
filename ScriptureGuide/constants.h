@@ -48,6 +48,11 @@ const uint32 WINDOW_REGISTRY_ADDED		= 'WRdd';
 const uint32 MENU_FILE_NEW				= 'MFnw';
 const uint32 MENU_FILE_QUIT				= 'MFqu';
 const uint32 MENU_PROGRAM_BOOKMANAGER	= 'MPbm';
+const uint32 MENU_PROGRAM_DICTIONARY	= 'MPdi';
+const uint32 MENU_PROGRAM_EXPORT_PLAIN		= 'MPe1';
+const uint32 MENU_PROGRAM_EXPORT_TSV		= 'MPe2';
+const uint32 MENU_PROGRAM_EXPORT_MARKDOWN	= 'MPe3';
+const uint32 MENU_PROGRAM_EXPORT_HTML		= 'MPe4';
 
 const uint32 MENU_EDIT_NOTE				= 'MEno';
 const uint32 MENU_EDIT_FIND				= 'MEfi';
@@ -55,6 +60,8 @@ const uint32 MENU_EDIT_FIND				= 'MEfi';
 const uint32 MENU_OPTIONS_LINE			= 'MOli';
 const uint32 MENU_OPTIONS_FONT			= 'MOfo';
 const uint32 MENU_OPTIONS_VERSENUMBERS	= 'MOvn';
+const uint32 MENU_OPTIONS_STRONGS		= 'MOsn';
+const uint32 MENU_OPTIONS_CROSSREF		= 'MOcr';
 const uint32 MENU_OPTIONS_PARALLEL_VIEW	= 'MOpv';
 
 const uint32 PARALLEL_ADD_COLUMN		= 'PVac';
@@ -62,6 +69,7 @@ const uint32 PARALLEL_SELECT_MODULE	= 'PVsm';
 const uint32 PARALLEL_SELECT_NOTES		= 'PVsn';
 const uint32 PARALLEL_ADD_COLUMN_MENU	= 'PVam';
 const uint32 PARALLEL_REMOVE_COLUMN	= 'PVrc';
+const uint32 PARALLEL_REORDER_COLUMN	= 'PVro';
 
 const uint32 MENU_HELP_LOGOS			= 'MHlo';
 const uint32 MENU_HELP_HOWTO			= 'MHho';
@@ -99,6 +107,7 @@ const uint32 FIND_TMP					= 'FTmp';
 const uint32 DOCS_UNAVAILABLE			= 'DCUN';
 
 const uint32 SG_BIBLE					= 'SGbl';
+const uint32 SG_STRONGS_LOOKUP			= 'SGsl';
 
 // search flags
 

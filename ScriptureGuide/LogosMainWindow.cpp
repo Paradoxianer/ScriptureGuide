@@ -6,6 +6,7 @@
 #include <Button.h>
 #include <Box.h>
 #include <Catalog.h>
+#include <Clipboard.h>
 #include <Directory.h>
 #include <Entry.h>
 #include <File.h>
@@ -29,6 +30,7 @@
 #include <iostream>
 
 #include "constants.h"
+#include "ExportFormats.h"
 #include "FontPanel.h"
 #include "LogosApp.h"
 #include "Preferences.h"
@@ -44,6 +46,7 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
  	fCurrentChapter(1),
  	fFindMessenger(NULL),
 	fSearchWindow(NULL),
+	fDictionaryWindow(NULL),
 	fFontPanel(NULL)
 {
 	fCurrentVerse = selectVers;
@@ -54,6 +57,8 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	// well after BuildGUI() -- default to the same "on" LoadPrefsForModule()
 	// itself falls back to when there's nothing saved yet.
 	fShowVerseNumbers = true;
+	fShowStrongsNumbers = true;
+	fShowCrossReferences = true;
 
 	fModManager = new SwordBackend();
 	BuildGUI();
@@ -118,6 +123,15 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	if (fParallelView->CountColumns() == 0 && fCurrentModule != NULL)
 		fParallelView->AddColumn(fCurrentModule->Name());
 
+	// A saved column layout (see #9) takes over from whatever single
+	// column SetModuleFromString()/the fallback above just built --
+	// replacing it with the exact set of columns (Bible/Commentary
+	// modules and the notes column, in position) the window had the
+	// last time it was closed. Absent one (fresh install, or a
+	// preferences file from before this existed), the single column
+	// already built stands as-is.
+	RestoreColumnLayout();
+
 	// Load the preferences for the individual module
 	LoadPrefsForModule();
 
@@ -153,6 +167,25 @@ void SGMainWindow::BuildGUI(void)
 	menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Book Manager…"),
 		new BMessage(MENU_PROGRAM_BOOKMANAGER)));
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Dictionary…"),
+		new BMessage(MENU_PROGRAM_DICTIONARY)));
+	menu->AddSeparatorItem();
+
+	// One verse-aligned table of every open column (+ notes, if any),
+	// copied to the clipboard ready to paste into a spreadsheet/Markdown
+	// doc/etc. (#8) -- four formats rather than a file-save panel, since
+	// "paste into another tool" is the actual use case the issue asks
+	// for, not archiving a file.
+	BMenu* exportMenu = new BMenu(B_TRANSLATE("Copy Comparison"));
+	exportMenu->AddItem(new BMenuItem(B_TRANSLATE("As Plain Text"),
+		new BMessage(MENU_PROGRAM_EXPORT_PLAIN)));
+	exportMenu->AddItem(new BMenuItem(B_TRANSLATE("As Tab-Separated"),
+		new BMessage(MENU_PROGRAM_EXPORT_TSV)));
+	exportMenu->AddItem(new BMenuItem(B_TRANSLATE("As Markdown Table"),
+		new BMessage(MENU_PROGRAM_EXPORT_MARKDOWN)));
+	exportMenu->AddItem(new BMenuItem(B_TRANSLATE("As HTML Table"),
+		new BMessage(MENU_PROGRAM_EXPORT_HTML)));
+	menu->AddItem(exportMenu);
 	menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Duplicate This Window…"),
 		new BMessage(MENU_FILE_NEW), 'D'));
@@ -183,6 +216,14 @@ void SGMainWindow::BuildGUI(void)
 		new BMessage(MENU_OPTIONS_VERSENUMBERS));
 	fShowVerseNumItem->SetMarked(fShowVerseNumbers);
 	menu->AddItem(fShowVerseNumItem);
+	fShowStrongsNumItem = new BMenuItem(B_TRANSLATE("Show Strong's Numbers"),
+		new BMessage(MENU_OPTIONS_STRONGS));
+	fShowStrongsNumItem->SetMarked(fShowStrongsNumbers);
+	menu->AddItem(fShowStrongsNumItem);
+	fShowCrossRefItem = new BMenuItem(B_TRANSLATE("Show Cross-References"),
+		new BMessage(MENU_OPTIONS_CROSSREF));
+	fShowCrossRefItem->SetMarked(fShowCrossReferences);
+	menu->AddItem(fShowCrossRefItem);
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Choose Font…"),
 		new BMessage(MENU_OPTIONS_FONT)));
 	fMenuBar->AddItem(menu);
@@ -305,15 +346,19 @@ void SGMainWindow::LoadPrefsForModule(void)
 		// Detect need for linebreak insertion
 		fIsLineBreak = NeedsLineBreaks();
 		
-		// Normally show verse numbers
+		// Normally show verse numbers, Strong's numbers, and cross-references
 		fShowVerseNumbers = true;
-		
+		fShowStrongsNumbers = true;
+		fShowCrossReferences = true;
+
 		msg.AddInt16("fontsize",fFontSize);
 		msg.AddString("family",fam);
 		msg.AddString("style",sty);
 		msg.AddBool("linebreaks",fIsLineBreak);
 		msg.AddBool("versenumbers",fShowVerseNumbers);
-		
+		msg.AddBool("strongsnumbers",fShowStrongsNumbers);
+		msg.AddBool("crossreferences",fShowCrossReferences);
+
 		SaveModulePreferences(fCurrentModule->Name(),&msg);
 	} else
 	{
@@ -342,7 +387,21 @@ void SGMainWindow::LoadPrefsForModule(void)
 			msg.AddBool("versenumbers",fShowVerseNumbers);
 			saveprefs = true;
 		}
-		
+
+		if (msg.FindBool("strongsnumbers",&fShowStrongsNumbers)!=B_OK)
+		{
+			fShowStrongsNumbers = true;
+			msg.AddBool("strongsnumbers",fShowStrongsNumbers);
+			saveprefs = true;
+		}
+
+		if (msg.FindBool("crossreferences",&fShowCrossReferences)!=B_OK)
+		{
+			fShowCrossReferences = true;
+			msg.AddBool("crossreferences",fShowCrossReferences);
+			saveprefs = true;
+		}
+
 		fDisplayFont = font;
 		
 		BString sfam, ssty;
@@ -369,6 +428,10 @@ void SGMainWindow::LoadPrefsForModule(void)
 	// has actually changed (see BibleTextDocument::SetShowVerseNumbers()).
 	fShowVerseNumItem->SetMarked(fShowVerseNumbers);
 	fParallelView->SetShowVerseNumbers(fShowVerseNumbers);
+	fShowStrongsNumItem->SetMarked(fShowStrongsNumbers);
+	fParallelView->SetShowStrongsNumbers(fShowStrongsNumbers);
+	fShowCrossRefItem->SetMarked(fShowCrossReferences);
+	fParallelView->SetShowCrossReferences(fShowCrossReferences);
 
 	// Same idea for fDisplayFont -- was dead state before this (see #21):
 	// loaded/saved but never actually applied to the reading pane.
@@ -392,6 +455,8 @@ void SGMainWindow::SavePrefsForModule(void)
 	msg.AddString("family",fam);
 	msg.AddString("style",sty);
 	msg.AddBool("versenumbers",fShowVerseNumbers);
+	msg.AddBool("strongsnumbers",fShowStrongsNumbers);
+	msg.AddBool("crossreferences",fShowCrossReferences);
 	SaveModulePreferences(fCurrentModule->Name(),&msg);
 	
 	// We also need to write to the application's main preferences so that the last
@@ -404,7 +469,74 @@ void SGMainWindow::SavePrefsForModule(void)
 	preferences.AddString("module",fCurrentModule->Name());
 	preferences.RemoveData("key");
 	preferences.AddString("key",fCurrentModule->GetKey());
+
+	// Full column layout (#9): every column's type and, for Bible/
+	// Commentary columns, its module -- in on-screen order, so a saved
+	// workspace restores the notes column at the position it was
+	// actually in rather than always appending it last. Only one
+	// layout is ever persisted app-wide (matching how "module"/"key"
+	// above already work): whichever window last saved wins, same
+	// simplification the pre-existing single-module/key persistence
+	// already made for multiple open windows.
+	// RemoveData() (used just above for the single-value fields) only
+	// clears the entry at its default index 0, not the whole array --
+	// harmless there since those fields only ever hold one value, but
+	// these two are genuine arrays (one pair per column). RemoveName()
+	// is what actually clears all of them; without it, every save
+	// appended another copy of the old layout in front of the new one
+	// instead of replacing it (confirmed empirically: two saves in a
+	// row produced a 5-entry array from what should've stayed 3).
+	preferences.RemoveName("columnIsNotes");
+	preferences.RemoveName("columnModule");
+	std::vector<ParallelBibleView::ColumnDescription> columns
+		= fParallelView->ColumnLayout();
+	for (size_t i = 0; i < columns.size(); i++) {
+		preferences.AddBool("columnIsNotes", columns[i].isNotes);
+		preferences.AddString("columnModule", columns[i].moduleName);
+	}
 	prefsLock.Unlock();
+}
+
+
+void SGMainWindow::RestoreColumnLayout(void)
+{
+	prefsLock.Lock();
+
+	int32 count = 0;
+	type_code type;
+	bool haveSavedLayout
+		= preferences.GetInfo("columnIsNotes", &type, &count) == B_OK;
+
+	std::vector<bool> isNotes;
+	std::vector<BString> moduleNames;
+	if (haveSavedLayout) {
+		for (int32 i = 0; i < count; i++) {
+			bool notesFlag = false;
+			BString moduleName;
+			preferences.FindBool("columnIsNotes", i, &notesFlag);
+			preferences.FindString("columnModule", i, &moduleName);
+			isNotes.push_back(notesFlag);
+			moduleNames.push_back(moduleName);
+		}
+	}
+	prefsLock.Unlock();
+
+	// No saved layout at all (fresh install, or a preferences file from
+	// before this existed) -- leave the single column
+	// SetModuleFromString()/the fallback in the constructor already
+	// built alone.
+	if (!haveSavedLayout || count == 0)
+		return;
+
+	while (fParallelView->CountColumns() > 0)
+		fParallelView->RemoveColumn(0);
+
+	for (int32 i = 0; i < count; i++) {
+		if (isNotes[i])
+			fParallelView->SetNotesEnabled(true);
+		else if (!moduleNames[i].IsEmpty())
+			fParallelView->AddColumn(moduleNames[i].String());
+	}
 }
 
 
@@ -563,6 +695,45 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			be_roster->Launch(SG_MANAGER_SIGNATURE);
 			break;
 		}
+		case MENU_PROGRAM_DICTIONARY:
+		{
+			EnsureDictionaryWindow();
+			break;
+		}
+		case MENU_PROGRAM_EXPORT_PLAIN:
+		case MENU_PROGRAM_EXPORT_TSV:
+		case MENU_PROGRAM_EXPORT_MARKDOWN:
+		case MENU_PROGRAM_EXPORT_HTML:
+		{
+			ExportFormat format = EXPORT_PLAIN_TEXT;
+			if (msg->what == MENU_PROGRAM_EXPORT_TSV)
+				format = EXPORT_TAB_SEPARATED;
+			else if (msg->what == MENU_PROGRAM_EXPORT_MARKDOWN)
+				format = EXPORT_MARKDOWN_TABLE;
+			else if (msg->what == MENU_PROGRAM_EXPORT_HTML)
+				format = EXPORT_HTML_TABLE;
+
+			std::vector<BString> columnNames = fParallelView->ColumnModuleNames();
+			bool hasNotes = fParallelView->NotesEnabled();
+			std::vector<ParallelBibleView::ExportRow> rows
+				= fParallelView->BuildExportRows();
+			BString exportText = FormatExport(format, columnNames, hasNotes,
+				rows);
+
+			if (be_clipboard->Lock())
+			{
+				be_clipboard->Clear();
+				BMessage* clip = be_clipboard->Data();
+				if (clip != NULL)
+				{
+					clip->AddData("text/plain", B_MIME_TYPE,
+						exportText.String(), exportText.Length());
+					be_clipboard->Commit();
+				}
+				be_clipboard->Unlock();
+			}
+			break;
+		}
 		case FIND_QUIT:
 		{
 			// This message is received whenever the child find window quits
@@ -585,6 +756,24 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fShowVerseNumbers = !fShowVerseNumbers;
 			fShowVerseNumItem->SetMarked(fShowVerseNumbers);
 			fParallelView->SetShowVerseNumbers(fShowVerseNumbers);
+			SavePrefsForModule();
+			break;
+		}
+
+		case MENU_OPTIONS_STRONGS:
+		{
+			fShowStrongsNumbers = !fShowStrongsNumbers;
+			fShowStrongsNumItem->SetMarked(fShowStrongsNumbers);
+			fParallelView->SetShowStrongsNumbers(fShowStrongsNumbers);
+			SavePrefsForModule();
+			break;
+		}
+
+		case MENU_OPTIONS_CROSSREF:
+		{
+			fShowCrossReferences = !fShowCrossReferences;
+			fShowCrossRefItem->SetMarked(fShowCrossReferences);
+			fParallelView->SetShowCrossReferences(fShowCrossReferences);
 			SavePrefsForModule();
 			break;
 		}
@@ -632,6 +821,25 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			BString key;
 			if (msg->FindString("key",&key) == B_OK)
 				JumpToKey(key.String());
+			break;
+		}
+		case SG_STRONGS_LOOKUP:
+		{
+			BString number;
+			if (msg->FindString("number", &number) == B_OK) {
+				EnsureDictionaryWindow();
+				fDictionaryWindow->ShowStrongsNumber(number.String());
+			}
+			break;
+		}
+		case DICT_QUIT:
+		{
+			// fDictionaryWindow is about to be destroyed (sent from its
+			// own destructor) -- null it out so EnsureDictionaryWindow()
+			// creates a fresh one next time instead of calling Show()/
+			// Activate() on a deleted BWindow (reported: reopening after
+			// closing behaved oddly, exactly this class of bug).
+			fDictionaryWindow = NULL;
 			break;
 		}
 		case UNIVERSAL_SEARCH:
@@ -929,7 +1137,23 @@ SGMainWindow::EnsureSearchWindow(void)
 }
 
 
-bool SGMainWindow::QuitRequested() 
+void
+SGMainWindow::EnsureDictionaryWindow(void)
+{
+	if (!fDictionaryWindow)
+	{
+		BRect r(Frame().OffsetByCopy(30, 40));
+		r.right = r.left + 400;
+		r.bottom = r.top + 350;
+		fDictionaryWindow = new SGDictionaryWindow(r, fModManager,
+			new BMessenger(this));
+	}
+	fDictionaryWindow->Show();
+	fDictionaryWindow->Activate(true);
+}
+
+
+bool SGMainWindow::QuitRequested()
 {
 	if (fFindMessenger)
 	{
@@ -941,6 +1165,11 @@ bool SGMainWindow::QuitRequested()
 	{
 		if (fSearchWindow->LockLooper())
 			fSearchWindow->Quit();
+	}
+	if (fDictionaryWindow)
+	{
+		if (fDictionaryWindow->LockLooper())
+			fDictionaryWindow->Quit();
 	}
 	if (fFontPanel)
 	{

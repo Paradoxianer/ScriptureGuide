@@ -11,6 +11,7 @@
 #include <Bitmap.h>
 #include <Button.h>
 #include <Catalog.h>
+#include <Cursor.h>
 #include <Entry.h>
 #include <File.h>
 #include <Font.h>
@@ -154,7 +155,8 @@ public:
 		fBibleDocument(document),
 		fTranslationName(translationName),
 		fOwner(owner),
-		fTrackingForDrag(false)
+		fTrackingForDrag(false),
+		fShowingLinkCursor(false)
 	{
 	}
 
@@ -173,6 +175,7 @@ public:
 
 	virtual void MouseDown(BPoint where)
 	{
+		fMouseDownPoint = where;
 		fTrackingForDrag = false;
 		if (HasSelection()) {
 			int32 start, end;
@@ -205,6 +208,8 @@ public:
 	virtual void MouseMoved(BPoint where, uint32 transit,
 		const BMessage* dragMessage)
 	{
+		_UpdateLinkCursor(where, transit);
+
 		if (fTrackingForDrag) {
 			// Squared-distance check avoids pulling in libm for a plain
 			// sqrt() just to compare against a threshold.
@@ -243,14 +248,38 @@ public:
 
 	virtual void MouseUp(BPoint where)
 	{
+		// A plain click, not a drag -- same threshold/rationale as
+		// MouseMoved()'s own fTrackingForDrag check just above, just
+		// measured from MouseDown() to here instead of continuously.
+		// Needed here (rather than reusing fDragStartPoint) because a
+		// fresh-selection click (the `else if` branch below) never sets
+		// fDragStartPoint at all -- only the "pressed inside an existing
+		// selection" branch does.
+		float dx = where.x - fMouseDownPoint.x;
+		float dy = where.y - fMouseDownPoint.y;
+		const float kClickThreshold = 4.0f;
+		bool wasPlainClick
+			= dx * dx + dy * dy <= kClickThreshold * kClickThreshold;
+
 		if (fTrackingForDrag) {
 			// Pressed inside the selection, released again without
 			// moving far enough to start a drag -- a plain click after
-			// all, meant to move the caret there like normal.
+			// all, meant to move the caret there like normal (unless it
+			// landed on a cross-reference -- see #28 -- or a Strong's
+			// number -- see #27 -- in which case following that takes
+			// over instead).
 			fTrackingForDrag = false;
-			SetCaret(where, false);
+			bool followedLink = wasPlainClick
+				&& (_TryFollowReferenceAt(where)
+					|| _TryFollowStrongsNumberAt(where));
+			if (!followedLink)
+				SetCaret(where, false);
 		} else if (fOwner != NULL) {
 			fOwner->_ColumnSelectionEnded();
+			if (wasPlainClick) {
+				if (!_TryFollowReferenceAt(where))
+					_TryFollowStrongsNumberAt(where);
+			}
 		}
 		TextDocumentView::MouseUp(where);
 	}
@@ -455,6 +484,58 @@ private:
 		return reference;
 	}
 
+	// A plain click (not a drag) landing on a cross-reference detected in
+	// this column's own text (see #28,
+	// BibleTextDocument::ReferenceLinkAt()) jumps every column there --
+	// same SG_BIBLE path _HandleReferenceDrop() below already uses for a
+	// dropped reference, so the toolbar's book/chapter/verse fields stay
+	// in sync too, not just the reading pane. False (a no-op) anywhere
+	// else in the text.
+	bool _TryFollowReferenceAt(BPoint where)
+	{
+		if (fBibleDocument == NULL)
+			return false;
+
+		int32 offset = TextOffsetAt(where);
+		BString key;
+		if (!fBibleDocument->ReferenceLinkAt(offset, key))
+			return false;
+
+		BWindow* window = Window();
+		if (window == NULL)
+			return false;
+
+		BMessage jump(SG_BIBLE);
+		jump.AddString("key", key);
+		window->PostMessage(&jump);
+		return true;
+	}
+
+
+	// Same idea as _TryFollowReferenceAt() above, for a word tagged with
+	// a Strong's number (see #27, BibleTextDocument::StrongsNumberAt())
+	// -- opens/reuses the dictionary window instead of jumping a verse.
+	bool _TryFollowStrongsNumberAt(BPoint where)
+	{
+		if (fBibleDocument == NULL)
+			return false;
+
+		int32 offset = TextOffsetAt(where);
+		BString number;
+		if (!fBibleDocument->StrongsNumberAt(offset, number))
+			return false;
+
+		BWindow* window = Window();
+		if (window == NULL)
+			return false;
+
+		BMessage lookup(SG_STRONGS_LOOKUP);
+		lookup.AddString("number", number);
+		window->PostMessage(&lookup);
+		return true;
+	}
+
+
 	// True if `message` carried a Bible reference to navigate to --
 	// "scriptureguide:reference" if this came from our own drag source
 	// (see _StartDrag()), otherwise falling back to parsing whatever
@@ -525,12 +606,42 @@ private:
 		return true;
 	}
 
+	// Swaps in the system's "follow link" cursor while hovering a
+	// cross-reference or Strong's number (either kind of clickable span
+	// -- see _TryFollowReferenceAt()/_TryFollowStrongsNumberAt() above),
+	// the plain arrow everywhere else -- requested alongside toning
+	// down the Strong's highlight color, since a plain underline alone
+	// doesn't read as "clickable" as clearly as the color did.
+	// fShowingLinkCursor avoids calling SetViewCursor() on every single
+	// MouseMoved() when the hover state hasn't actually changed.
+	void _UpdateLinkCursor(BPoint where, uint32 transit)
+	{
+		bool overLink = false;
+		if (fBibleDocument != NULL && transit != B_EXITED_VIEW
+			&& transit != B_OUTSIDE_VIEW) {
+			int32 offset = TextOffsetAt(where);
+			BString unused;
+			overLink = fBibleDocument->ReferenceLinkAt(offset, unused)
+				|| fBibleDocument->StrongsNumberAt(offset, unused);
+		}
+
+		if (overLink == fShowingLinkCursor)
+			return;
+		fShowingLinkCursor = overLink;
+
+		static BCursor sLinkCursor(B_CURSOR_ID_FOLLOW_LINK);
+		static BCursor sDefaultCursor(B_CURSOR_ID_SYSTEM_DEFAULT);
+		SetViewCursor(overLink ? &sLinkCursor : &sDefaultCursor);
+	}
+
 private:
 	BibleTextDocument*	fBibleDocument;
 	BString				fTranslationName;
 	ParallelBibleView*	fOwner;
 	bool				fTrackingForDrag;
 	BPoint				fDragStartPoint;
+	BPoint				fMouseDownPoint;
+	bool				fShowingLinkCursor;
 };
 
 
@@ -578,6 +689,62 @@ public:
 			fOwner->_HeaderViewDestroyed();
 	}
 
+	// Reordering a column (see #23) is started from a MouseDown that
+	// lands directly on this view rather than on one of its children --
+	// Haiku only dispatches MouseDown() here when the point isn't inside
+	// a child's frame, so this only fires on the blank strip of header
+	// background a column's BMenuField/remove button don't cover (their
+	// own width is their *preferred* size, not the full column width --
+	// see _PositionColumns()), never hijacking an actual click on either
+	// control. No separate drag handle needed as a result.
+	virtual void MouseDown(BPoint where)
+	{
+		if (fOwner == NULL) {
+			BView::MouseDown(where);
+			return;
+		}
+
+		uint32 buttons = 0;
+		BMessage* message = Window()->CurrentMessage();
+		if (message != NULL)
+			message->FindInt32("buttons", (int32*)&buttons);
+		if (buttons != B_PRIMARY_MOUSE_BUTTON) {
+			BView::MouseDown(where);
+			return;
+		}
+
+		int32 index = fOwner->_ColumnIndexForX(where.x);
+		if (index < 0) {
+			BView::MouseDown(where);
+			return;
+		}
+
+		BMessage dragMessage(PARALLEL_REORDER_COLUMN);
+		dragMessage.AddInt32("from", index);
+		DragMessage(&dragMessage, Bounds());
+	}
+
+	// The other half of the gesture MouseDown() above starts: a dropped
+	// PARALLEL_REORDER_COLUMN message lands here via the normal
+	// MessageReceived() path (Haiku delivers a dropped BMessage to
+	// whatever view is under the drop point, the same as any other
+	// message), not through some separate drag-and-drop callback.
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->WasDropped() && message->what == PARALLEL_REORDER_COLUMN
+			&& fOwner != NULL) {
+			int32 from;
+			if (message->FindInt32("from", &from) == B_OK) {
+				BPoint dropPoint = message->DropPoint();
+				ConvertFromScreen(&dropPoint);
+				int32 to = fOwner->_ColumnIndexForX(dropPoint.x);
+				fOwner->_MoveColumn(from, to);
+			}
+			return;
+		}
+		BView::MessageReceived(message);
+	}
+
 private:
 	ParallelBibleView*	fOwner;
 };
@@ -594,9 +761,13 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fActiveSelectionColumn(NULL),
 	fSelectionLastEndVerse(-1),
 	fShowVerseNumbers(true),
+	fShowStrongsNumbers(true),
+	fShowCrossReferences(true),
 	fInitialWidth(initialWidth),
 	fContentHeight(0.0f),
-	fContentWidth(0.0f)
+	fContentWidth(0.0f),
+	fNotesWidthFraction(-1.0f),
+	fNotesSplitDragGuideX(-1.0f)
 {
 	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 
@@ -665,6 +836,29 @@ ParallelBibleView::FrameResized(float width, float height)
 {
 	BView::FrameResized(width, height);
 	_Realign();
+
+	// Re-applies whatever verse SetKey() last scrolled to. Confirmed
+	// empirically (a real bug report, not theoretical): during startup
+	// restore, SetKey()'s own _ScrollToVerse() call runs while this
+	// view is still attached but not yet actually shown on screen --
+	// Bounds().Height() reads as a degenerate placeholder at that
+	// point, not this view's real, final viewport size, so the scroll
+	// position it computes and applies is against the wrong range.
+	// This view's *first* FrameResized() with the real on-screen size
+	// fires strictly afterward, once the window is actually shown --
+	// and before this fix, nothing ever re-scrolled once that real
+	// size arrived, silently landing back at the top instead of the
+	// verse that was actually being navigated to. Re-deriving the
+	// verse from fCurrentKey and re-scrolling here fixes that, and
+	// keeps the same verse at the top across any later resize too
+	// (including ones the user triggers by hand) -- both harmless when
+	// nothing about the scroll position actually needed to change.
+	if (!fCurrentKey.IsEmpty()) {
+		VerseKey verseKey;
+		SetVerseKeyLocale(verseKey);
+		verseKey.setText(fCurrentKey.String());
+		_ScrollToVerse(verseKey.getVerse());
+	}
 }
 
 
@@ -705,6 +899,91 @@ ParallelBibleView::Draw(BRect updateRect)
 			continue;
 		StrokeLine(BPoint(x, top), BPoint(x, bottom));
 	}
+
+	// The notes-splitter drag in progress (see MouseDown()/MouseMoved()
+	// below) -- a plain guide line at the tracked x, not an actual
+	// resize; only MouseUp() commits a real width/relayout, so this is
+	// the only visual feedback while the drag is live.
+	if (fNotesSplitDragGuideX >= 0.0f
+		&& fNotesSplitDragGuideX >= updateRect.left
+		&& fNotesSplitDragGuideX <= updateRect.right) {
+		StrokeLine(BPoint(fNotesSplitDragGuideX, top),
+			BPoint(fNotesSplitDragGuideX, bottom));
+	}
+}
+
+
+// Starts dragging the notes-column splitter (see #19) if the click landed
+// within a few pixels of _NotesSplitDividerX() -- the only divider that's
+// ever draggable, all the others being purely cosmetic boundaries between
+// equal-share Bible/Commentary columns. Falls through to the base class
+// otherwise, same as ParallelHeaderView::MouseDown() does for its own
+// column-reorder gesture (see #23) -- both rely on this view only ever
+// getting MouseDown() at all when the point isn't inside a child view's
+// frame, i.e. only in the gap between columns.
+void
+ParallelBibleView::MouseDown(BPoint where)
+{
+	float dividerX = _NotesSplitDividerX();
+	static const float kSplitDragTolerance = 4.0f;
+	if (dividerX >= 0.0f) {
+		float distance = where.x > dividerX ? where.x - dividerX
+			: dividerX - where.x;
+		if (distance <= kSplitDragTolerance) {
+			fNotesSplitDragGuideX = dividerX;
+			SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
+			Invalidate();
+			return;
+		}
+	}
+	BView::MouseDown(where);
+}
+
+
+void
+ParallelBibleView::MouseMoved(BPoint where, uint32 transit,
+	const BMessage* dragMessage)
+{
+	if (fNotesSplitDragGuideX >= 0.0f) {
+		fNotesSplitDragGuideX = where.x;
+		Invalidate();
+		return;
+	}
+	BView::MouseMoved(where, transit, dragMessage);
+}
+
+
+// Commits the drag started in MouseDown(): the notes column always sits
+// immediately after _NotesSplitDividerX(), regardless of what's on the
+// other side (including after #23's column reordering), so the space to
+// the right of wherever the guide ended up, as a fraction of total
+// width, becomes fNotesWidthFraction -- _NotesColumnWidth() applies it
+// from here on. A single _Realign() here is the only relayout the whole
+// drag causes, however far the mouse moved (see fNotesSplitDragGuideX's
+// class comment).
+void
+ParallelBibleView::MouseUp(BPoint where)
+{
+	if (fNotesSplitDragGuideX >= 0.0f) {
+		float totalWidth = Bounds().Width();
+		if (totalWidth <= 0.0f)
+			totalWidth = fInitialWidth;
+
+		if (totalWidth > 0.0f) {
+			float notesWidth = totalWidth - fNotesSplitDragGuideX;
+			float fraction = notesWidth / totalWidth;
+			if (fraction < 0.0f)
+				fraction = 0.0f;
+			if (fraction > 1.0f)
+				fraction = 1.0f;
+			fNotesWidthFraction = fraction;
+		}
+
+		fNotesSplitDragGuideX = -1.0f;
+		_Realign();
+		return;
+	}
+	BView::MouseUp(where);
 }
 
 
@@ -867,6 +1146,30 @@ ParallelBibleView::SetShowVerseNumbers(bool show)
 }
 
 
+// Same idea as SetShowVerseNumbers() above.
+status_t
+ParallelBibleView::SetShowStrongsNumbers(bool show)
+{
+	fShowStrongsNumbers = show;
+	for (size_t i = 0; i < fDocuments.size(); i++)
+		fDocuments[i]->SetShowStrongsNumbers(show);
+	_Realign();
+	return B_OK;
+}
+
+
+// Same idea as SetShowVerseNumbers() above.
+status_t
+ParallelBibleView::SetShowCrossReferences(bool show)
+{
+	fShowCrossReferences = show;
+	for (size_t i = 0; i < fDocuments.size(); i++)
+		fDocuments[i]->SetShowCrossReferences(show);
+	_Realign();
+	return B_OK;
+}
+
+
 // Applies to every current Bible/Commentary column, and is remembered
 // (fBaseFont) so columns added afterward (see _SetColumnToBible()) start
 // out matching it too -- same rationale as SetShowVerseNumbers() above.
@@ -907,6 +1210,49 @@ ParallelBibleView::_NotesPosition() const
 			return (int32)i;
 	}
 	return -1;
+}
+
+
+int32
+ParallelBibleView::_ColumnIndexForX(float x) const
+{
+	if (fColumnOrder.empty())
+		return -1;
+
+	for (size_t i = 0; i < fColumnDividerX.size(); i++) {
+		if (x < fColumnDividerX[i])
+			return (int32)i;
+	}
+	return (int32)fColumnOrder.size() - 1;
+}
+
+
+void
+ParallelBibleView::_MoveColumn(int32 from, int32 to)
+{
+	if (from < 0 || (size_t)from >= fColumnOrder.size())
+		return;
+	if (to < 0)
+		to = (int32)fColumnOrder.size() - 1;
+	if ((size_t)to > fColumnOrder.size() - 1)
+		to = (int32)fColumnOrder.size() - 1;
+	if (from == to)
+		return;
+
+	std::vector<ColumnDescription> columns = ColumnLayout();
+	ColumnDescription moved = columns[from];
+	columns.erase(columns.begin() + from);
+	columns.insert(columns.begin() + to, moved);
+
+	while (CountColumns() > 0)
+		RemoveColumn(0);
+
+	for (size_t i = 0; i < columns.size(); i++) {
+		if (columns[i].isNotes)
+			SetNotesEnabled(true);
+		else if (!columns[i].moduleName.IsEmpty())
+			AddColumn(columns[i].moduleName.String());
+	}
 }
 
 
@@ -959,6 +1305,8 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 	// SetShowVerseNumbers()) -- BibleTextDocument defaults to true, so
 	// this only matters when the setting has been turned off.
 	document->SetShowVerseNumbers(fShowVerseNumbers);
+	document->SetShowStrongsNumbers(fShowStrongsNumbers);
+	document->SetShowCrossReferences(fShowCrossReferences);
 	// Match the current base font (see SetBaseFont()) -- only matters once
 	// the user has actually picked something other than be_plain_font.
 	document->SetBaseFont(fBaseFont);
@@ -1082,6 +1430,73 @@ ParallelBibleView::ColumnModuleNames() const
 	for (size_t i = 0; i < fModules.size(); i++)
 		names.push_back(fModules[i]->getName());
 	return names;
+}
+
+
+std::vector<ParallelBibleView::ColumnDescription>
+ParallelBibleView::ColumnLayout() const
+{
+	std::vector<ColumnDescription> result;
+	for (size_t i = 0; i < fColumnOrder.size(); i++) {
+		ColumnDescription desc;
+		if (fColumnOrder[i] == COLUMN_NOTES) {
+			desc.isNotes = true;
+		} else {
+			desc.isNotes = false;
+			int32 bibleIndex = _BibleIndexForPosition((int32)i);
+			if (bibleIndex >= 0 && (size_t)bibleIndex < fModules.size())
+				desc.moduleName = fModules[bibleIndex]->getName();
+		}
+		result.push_back(desc);
+	}
+	return result;
+}
+
+
+std::vector<ParallelBibleView::ExportRow>
+ParallelBibleView::BuildExportRows() const
+{
+	std::vector<ExportRow> rows;
+	if (fCurrentKey.IsEmpty())
+		return rows;
+
+	VerseKey chapterKey;
+	SetVerseKeyLocale(chapterKey);
+	chapterKey.setText(fCurrentKey.String());
+	int verseCount = chapterKey.getVerseMax();
+
+	for (int verse = 1; verse <= verseCount; verse++) {
+		ExportRow row;
+		row.verse = verse;
+
+		BString verseNumberPrefix;
+		verseNumberPrefix << " " << verse << " ";
+
+		for (size_t i = 0; i < fDocuments.size(); i++) {
+			BString cellText;
+			int32 start, end;
+			if (fDocuments[i]->TextRangeForVerseRange(verse, verse, start,
+					end)) {
+				cellText = fDocuments[i]->Text(start, end - start);
+				if (cellText.FindFirst(verseNumberPrefix) == 0)
+					cellText.Remove(0, verseNumberPrefix.Length());
+				cellText.Trim();
+			}
+			row.columnText.push_back(cellText);
+		}
+
+		if (fNotes != NULL) {
+			VerseKey verseKey;
+			SetVerseKeyLocale(verseKey);
+			verseKey.setText(fCurrentKey.String());
+			verseKey.setVerse(verse);
+			row.notesText = fNotes->GetNote(verseKey.getText());
+		}
+
+		rows.push_back(row);
+	}
+
+	return rows;
 }
 
 
@@ -1442,7 +1857,20 @@ ParallelBibleView::_Realign()
 	std::vector<float> widths;
 	for (size_t i = 0; i < fDocuments.size(); i++) {
 		columns.push_back(fDocuments[i].Get());
-		widths.push_back(_ColumnWidth());
+		// The live TextDocumentView wraps at _ColumnWidth() minus its own
+		// kBibleColumnInset on each side (see TextDocumentView::
+		// _TextLayoutWidth()) -- measuring at the full column width here
+		// let VerseAligner's standalone ParagraphLayout plan for more
+		// horizontal room than a verse's text actually gets, so a
+		// borderline-wrapping line the real view wraps one line further
+		// than planned, which no alignment padding then accounted for.
+		// Confirmed via two real screenshots: the Notes column (and
+		// _ScrollToVerse(), both driven by _RowHeight() -- same fix
+		// there) drifted away from the actual Bible-column rows even
+		// with two perfectly ordinary, unlinked translations open
+		// (GerElb1871/GerBoLut), where no linked-commentary grouping
+		// was even in play.
+		widths.push_back(_ColumnWidth() - 2.0f * kBibleColumnInset);
 	}
 
 	if (columns.size() >= 2) {
@@ -1648,6 +2076,19 @@ ParallelBibleView::_ScrollToVerse(int verse)
 // paragraph's height without a live TextDocumentView. Falls back to
 // kHeaderHeight when there's no Bible column to measure against (a notes-
 // only view) or the verse was skipped from that column's document.
+//
+// ParagraphLayout::Height() only ever sums wrapped-line heights -- it has
+// no idea about ParagraphStyle::SpacingBottom() at all, which is exactly
+// the extra padding VerseAligner::SetVerseSpacing() adds to make a
+// shorter column's verse match a taller one. Reporting Height() alone
+// therefore under-counted every row VerseAligner had actually padded,
+// by exactly that padding -- confirmed via two real screenshots (drift
+// between the Notes column and two plain, unlinked Bible-text columns,
+// e.g. GerElb1871/GerBoLut, where nothing about linked commentary
+// entries is even in play): the Notes column's rows, and _ScrollToVerse()'s
+// target, both drifted earlier/shorter than the actual Bible-column rows,
+// accumulating verse after verse. Adding the paragraph's own
+// SpacingBottom back in gives the true on-screen row height.
 float
 ParallelBibleView::_RowHeight(int verse) const
 {
@@ -1655,10 +2096,15 @@ ParallelBibleView::_RowHeight(int verse) const
 		BibleTextDocument* document = fDocuments[0].Get();
 		int32 index = document->ParagraphIndexForVerse(verse);
 		if (index >= 0) {
+			const Paragraph& paragraph = document->ParagraphAtIndex(index);
 			ParagraphLayout layout;
-			layout.SetWidth(_ColumnWidth());
-			layout.SetParagraph(document->ParagraphAtIndex(index));
-			return layout.Height();
+			// Same effective width the live TextDocumentView actually
+			// wraps at (see _Realign()'s widths.push_back()) -- measuring
+			// at the full column width here would under-count wrapped
+			// lines the same way it did for VerseAligner's own planning.
+			layout.SetWidth(_ColumnWidth() - 2.0f * kBibleColumnInset);
+			layout.SetParagraph(paragraph);
+			return layout.Height() + paragraph.Style().SpacingBottom();
 		}
 	}
 	return kHeaderHeight;
@@ -1703,10 +2149,17 @@ ParallelBibleView::_ColumnWidth() const
 }
 
 
-// The notes column never claims more than kMaxNotesWidthFraction of the
-// total width -- the equal-share split let it eat half the window with
-// just one Bible column open. Still just a fixed cap for now; issue #19
-// tracks turning this into a real user-draggable divider.
+// Before the user has ever dragged the splitter (see #19),
+// fNotesWidthFraction is -1 and the notes column never claims more than
+// kMaxNotesWidthFraction of the total width -- the equal-share split let
+// it eat half the window with just one Bible column open. Once dragged,
+// fNotesWidthFraction takes over completely (still floor-clamped to
+// kMinColumnWidth, and implicitly ceiling-clamped by MouseMoved() never
+// letting the fraction get set high enough to starve the bible columns
+// below kMinColumnWidth each -- see MouseMoved()), and stays in effect
+// across resizes/column changes rather than resetting to the 1/3 cap on
+// every _PositionColumns() pass, since it's a fraction of totalWidth
+// applied fresh each call, not a one-time pixel snapshot.
 float
 ParallelBibleView::_NotesColumnWidth() const
 {
@@ -1719,14 +2172,35 @@ ParallelBibleView::_NotesColumnWidth() const
 	if (totalWidth <= 0.0f)
 		return kMinColumnWidth;
 
-	int32 columnCount = (int32)fModules.size() + 1;
-	float naturalShare = (totalWidth - kColumnSpacing * (columnCount - 1))
-		/ columnCount;
+	float width;
+	if (fNotesWidthFraction >= 0.0f) {
+		width = totalWidth * fNotesWidthFraction;
+	} else {
+		int32 columnCount = (int32)fModules.size() + 1;
+		float naturalShare
+			= (totalWidth - kColumnSpacing * (columnCount - 1)) / columnCount;
+		width = std::min(naturalShare, totalWidth * kMaxNotesWidthFraction);
+	}
 
-	float width = std::min(naturalShare, totalWidth * kMaxNotesWidthFraction);
 	if (width < kMinColumnWidth)
 		width = kMinColumnWidth;
 	return width;
+}
+
+
+// Content-space x of the divider immediately before the notes column --
+// the only one that's ever draggable (see #19) -- or a negative value if
+// there's no notes column, or nothing to its left to negotiate width
+// with (fColumnDividerX has no earlier entry to use).
+float
+ParallelBibleView::_NotesSplitDividerX() const
+{
+	int32 notesPosition = _NotesPosition();
+	if (notesPosition <= 0)
+		return -1.0f;
+	if ((size_t)(notesPosition - 1) >= fColumnDividerX.size())
+		return -1.0f;
+	return fColumnDividerX[notesPosition - 1];
 }
 
 
