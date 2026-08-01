@@ -57,9 +57,13 @@ struct NotesColumn {
 // kind of header cell: a BMenuField listing every installed "Biblical
 // Texts"/"Commentaries" module plus a "Notes" entry, so any column can be
 // switched to any of those at any time from its own dropdown, plus a
-// small "x" button to remove that column. A trailing "+" button appends
-// another column, offering the same choices (see issue #11). Any number
-// of columns can be a notes column at once -- there is no "only one"
+// small "x" button to remove that column and a small "+" button to
+// insert a brand-new one immediately after it, offering the same
+// choices (see issue #11) -- every column has its own "+", not one
+// shared trailing button, so there's always an unambiguous anchor for
+// "add something new right here" (see InsertColumn()/
+// InsertNotesColumn()). Any number of columns can be a notes column at
+// once -- there is no "only one"
 // restriction; they all share the one PersonalNotesModule backend, whose
 // GetNote()/SetNote() already take the verse key per call, so nothing
 // about the module itself is bound to a single column. A notes column
@@ -176,6 +180,21 @@ public:
 				// first column). See the class comment -- any number of
 				// notes columns can exist at once.
 				status_t			AddNotesColumn();
+				// Inserts a brand-new column immediately after
+				// afterPosition -- what each column's own "+" button
+				// (see _RebuildHeader()) actually calls. Unlike
+				// AddColumn()/AddNotesColumn() (always at the very end)
+				// or ReplaceColumn()/the header dropdown's own module
+				// pick (changes what an EXISTING slot shows, doesn't add
+				// one), this always adds a genuinely new slot right next
+				// to an explicit anchor. Defaults to joining the anchor's
+				// own chain (linked to it); the gap on the new column's
+				// OTHER side preserves whatever the anchor's own old
+				// right-hand gap was, so the rest of that chain's
+				// continuity (or lack of it) is undisturbed.
+				status_t			InsertColumn(int32 afterPosition,
+										const char* moduleName);
+				status_t			InsertNotesColumn(int32 afterPosition);
 				status_t			ReplaceColumn(int32 position,
 										const char* moduleName);
 				status_t			RemoveColumn(int32 position);
@@ -238,6 +257,14 @@ public:
 				// notes chain).
 				BString				ChainKey(int32 anchorPosition) const
 										{ return _ChainKey(anchorPosition); }
+				// The column most recently interacted with -- see the
+				// class comment -- or -1 if there are no columns at all.
+				// The owning window (see PARALLEL_ACTIVE_COLUMN_CHANGED)
+				// uses this together with ChainKey() to sync its own
+				// book/chapter/verse toolbar fields to whichever chain
+				// is now active.
+				int32				ActiveColumn() const
+										{ return fActivePosition; }
 
 				// Selects verses startVerse..endVerse (inclusive) in
 				// every Bible/Commentary column of the active chain that
@@ -433,13 +460,31 @@ private:
 				// chain's first Bible column's paragraph for that verse.
 				float				_RowHeight(int verse,
 										int32 chainAnchorPosition) const;
-				// position < 0: no chain-rightmost scrollbar-width
-				// adjustment (see the class comment on per-column
-				// BScrollViews) -- used for pool/total-width math that
-				// isn't about one specific column's own measurement.
-				float				_ColumnWidth(int32 position = -1) const;
-				float				_NotesColumnWidth(int32 position = -1)
-										const;
+				// The on-screen SLOT width shared by every Bible/
+				// Commentary column -- what each column's own BScrollView
+				// is actually resized to (see _PositionColumns()). Does
+				// NOT account for a chain-rightmost column's real,
+				// visible BScrollBar eating into its own usable content
+				// width -- see _MeasurementWidth() for that. Keeping
+				// these separate is what a chain-rightmost column's
+				// BScrollView already does for free (it auto-narrows
+				// its OWN target to fit a real scrollbar within
+				// whatever slot width it's given, see the class
+				// comment) -- folding the same reduction into the slot
+				// width here as well double-counted it, leaving an
+				// unclaimed gap the width of one scrollbar per chain
+				// (confirmed via a live test, not just derived).
+				float				_ColumnWidth() const;
+				float				_NotesColumnWidth() const;
+				// The real usable text width for the Bible/Commentary
+				// column at position, after both kBibleColumnInset (each
+				// side) and, if this column is its chain's rightmost
+				// (see _IsChainRightmost()), B_V_SCROLL_BAR_WIDTH -- must
+				// match what the live TextDocumentView actually wraps at
+				// (see _Realign()'s own comment), or VerseAligner/
+				// _RowHeight()'s measurements drift from the real
+				// rendered heights.
+				float				_MeasurementWidth(int32 position) const;
 				int32				_BibleIndexForPosition(int32 position) const;
 				// Same idea as _BibleIndexForPosition(), for the
 				// COLUMN_NOTES slots (fNotesColumns).
@@ -492,13 +537,21 @@ private:
 				status_t			_SetColumnToBible(int32 position,
 										const char* moduleName);
 				status_t			_SetColumnToNotes(int32 position);
+				// forInsert: items post PARALLEL_INSERT_MODULE/
+				// PARALLEL_INSERT_NOTES (see InsertColumn()/
+				// InsertNotesColumn()) instead of PARALLEL_SELECT_MODULE/
+				// PARALLEL_SELECT_NOTES -- used by a column's own "+"
+				// button, which always adds a new column rather than
+				// changing what columnIndex itself shows.
 				void				_PopulateModuleMenu(BMenu* menu,
 										int32 columnIndex,
 										const char* markedModuleName,
-										bool markNotes);
+										bool markNotes,
+										bool forInsert = false);
 				BPopUpMenu*			_BuildModuleMenu(int32 columnIndex,
 										const char* markedModuleName,
-										bool markNotes);
+										bool markNotes,
+										bool forInsert = false);
 				// Content-space x-range of the active column's chain's own
 				// header cells -- left == right == 0 if there's only one
 				// chain open (nothing to visually distinguish it from).
@@ -517,6 +570,13 @@ private:
 				std::vector<TextDocumentView*> fTextViews;
 				std::vector<BMenuField*> fHeaderFields;
 				std::vector<BButton*>	fRemoveButtons;
+				// One per fColumnOrder slot -- inserts a brand-new column
+				// right after this one (see InsertColumn()/
+				// InsertNotesColumn()), parallel to fHeaderFields/
+				// fRemoveButtons. Replaces the old single trailing "+"
+				// (fAddColumnButton) entirely -- no more reserved space
+				// for a global append button, see _ColumnWidth().
+				std::vector<BButton*>	fInsertButtons;
 				// One per GAP between adjacent columns (size ==
 				// fColumnOrder.size() - 1) -- the link/unlink toggle
 				// button centered on that gap's divider line.
@@ -555,7 +615,6 @@ private:
 				std::vector<NotesColumn>	fNotesColumns;
 
 				BView*				fHeaderView;
-				BButton*			fAddColumnButton;
 
 				// Non-owning; NULL when no cross-column selection gesture
 				// is currently active (see _ColumnSelectionStarted()).
@@ -610,6 +669,7 @@ private:
 	// alone, unchanged).
 	static	const float			kHeaderBottomGap;
 	static	const float			kRemoveButtonWidth;
+	static	const float			kInsertButtonWidth;
 	static	const float			kLinkButtonWidth;
 	static	const float			kMaxNotesWidthFraction;
 	static	const float			kNoteVerseLabelWidth;

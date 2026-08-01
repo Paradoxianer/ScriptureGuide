@@ -781,6 +781,11 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fParallelView->SetNotesEnabled(!fParallelView->NotesEnabled());
 			break;
 		}
+		case PARALLEL_ACTIVE_COLUMN_CHANGED:
+		{
+			SyncToolbarToActiveChain();
+			break;
+		}
 		case MENU_OPTIONS_VERSENUMBERS:
 		{
 			fShowVerseNumbers = !fShowVerseNumbers;
@@ -999,7 +1004,7 @@ void SGMainWindow::SetModule(const TextType &module, const int32 &index)
 	UpdateParallelKey();
 }
 
-void SGMainWindow::SetBook(const char* book)
+void SGMainWindow::SetBook(const char* book, bool updateParallelView)
 {
 	BMenuItem *bookItem=fBookMenu->FindItem(book);
 	if (bookItem != NULL)
@@ -1012,7 +1017,8 @@ void SGMainWindow::SetBook(const char* book)
 		}
 		bookItem->SetMarked(true);
 	}
-	UpdateParallelKey();
+	if (updateParallelView)
+		UpdateParallelKey();
 }
 
 
@@ -1129,6 +1135,37 @@ SGMainWindow::JumpToKey(const char* key)
 	fVerseBox->SetText(vText.String());
 
 	fParallelView->HighlightVerse(fCurrentVerse, fCurrentVerse);
+}
+
+
+void
+SGMainWindow::SyncToolbarToActiveChain(void)
+{
+	if (fParallelView == NULL)
+		return;
+
+	int32 active = fParallelView->ActiveColumn();
+	if (active < 0)
+		return;
+
+	BString key = fParallelView->ChainKey(active);
+	if (key.IsEmpty())
+		return;
+
+	// updateParallelView = false: this is purely a display sync, not a
+	// navigation -- the active chain is already showing `key`, only the
+	// toolbar's own fields were stale, so fParallelView must NOT be
+	// touched (contrast JumpToKey(), which calls SetBook(book, true)).
+	fCurrentChapter = ChapterFromKey(key.String());
+	fCurrentVerse = VerseFromKey(key.String());
+	SetBook(BookFromKey(key.String()), false);
+
+	BString cText;
+	cText << fCurrentChapter;
+	fChapterBox->SetText(cText.String());
+	BString vText;
+	vText << fCurrentVerse;
+	fVerseBox->SetText(vText.String());
 }
 
 

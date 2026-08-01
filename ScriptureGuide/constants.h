@@ -71,6 +71,14 @@ const uint32 PARALLEL_ADD_COLUMN_MENU	= 'PVam';
 const uint32 PARALLEL_REMOVE_COLUMN	= 'PVrc';
 const uint32 PARALLEL_REORDER_COLUMN	= 'PVro';
 const uint32 PARALLEL_TOGGLE_LINK		= 'PVtl';
+const uint32 PARALLEL_INSERT_COLUMN_MENU	= 'PVic';
+const uint32 PARALLEL_INSERT_MODULE	= 'PVim';
+const uint32 PARALLEL_INSERT_NOTES		= 'PVin';
+// Posted to Window() whenever the active column/chain changes (see
+// ParallelBibleView::_SetActiveColumn()) -- lets the owning window sync
+// its own book/chapter/verse toolbar fields to whichever chain is now
+// active, without re-navigating it (contrast SG_BIBLE, which does).
+const uint32 PARALLEL_ACTIVE_COLUMN_CHANGED = 'PVca';
 
 const uint32 MENU_HELP_LOGOS			= 'MHlo';
 const uint32 MENU_HELP_HOWTO			= 'MHho';

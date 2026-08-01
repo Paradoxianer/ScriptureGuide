@@ -24,6 +24,20 @@ using namespace sword;
 // verse's position within the chapter (see ParagraphIndexForVerse());
 // this is what allows a VerseAligner to match up verses across columns
 // that each hold their own BibleTextDocument.
+//
+// Two BibleTextDocument instances can wrap the SAME SWModule* at once --
+// e.g. the same translation open in two independently-scrolled column
+// chains (see issue #12) -- even though SWModule itself has exactly one,
+// mutable "current key" shared by however many documents happen to point
+// at it. This class never trusts that shared state to still reflect ITS
+// OWN position by the time it's read: fKeyText is this document's own,
+// independent record of "where I am," updated on every SetKey()/
+// SetChapter()/NextChapter()/PrevChapter() and consulted (never
+// fModule->getKeyText()) by _Rebuild()/Key()/BookName()/Chapter()/
+// Verse(). fModule's own key is treated as a write-only scratch value:
+// set immediately before every read that needs it, never assumed to
+// still hold whatever THIS document last set once another document
+// sharing the module may have run in between.
 class BibleTextDocument : public TextDocument {
 public:
 								// Does not take ownership of module; the
@@ -140,6 +154,25 @@ private:
 
 private:
 			SWModule*			fModule;
+
+			// This document's OWN current position, independent of
+			// fModule's own (shared, mutable) key state -- see the class
+			// comment on why this exists (issue #12: two columns can now
+			// show the same module in different, independently-scrolled
+			// chains at once). Updated by every SetKey()/SetChapter()/
+			// NextChapter()/PrevChapter() call (via _SetModuleKey()) and
+			// read back by Key()/_Rebuild() instead of fModule->
+			// getKeyText(), which reflects whichever BibleTextDocument
+			// sharing this module happened to touch it most recently --
+			// not necessarily this one.
+			BString				fKeyText;
+			// Scratch VerseKey for BookName()/Chapter()/Verse() to parse
+			// fKeyText into on demand -- a per-instance member (not a
+			// local variable) purely because VerseKey::getBookName()
+			// returns a pointer into the key object itself, which would
+			// dangle if that key were stack-allocated and destroyed when
+			// the accessor returns. mutable: those accessors are const.
+			mutable VerseKey	fDisplayKey;
 
 			CharacterStyle		fVerseNumberStyle;
 			CharacterStyle		fVerseTextStyle;

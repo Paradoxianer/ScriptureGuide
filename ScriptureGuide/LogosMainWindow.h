@@ -77,7 +77,11 @@ private:
 
 	void SetModule(const TextType &module, const int32 &index);
 	void SetModuleFromString(const char* name);
-	void SetBook(const char* name);
+	// updateParallelView: false marks the book without calling
+	// UpdateParallelKey() -- used by SyncToolbarToActiveChain() (#12),
+	// which is syncing the toolbar's OWN display to a chain that's
+	// already at this position, not asking to navigate it there.
+	void SetBook(const char* name, bool updateParallelView = true);
 	void SetChapter(const int16 &chapter);
 	void SetVerse(const int16 &verse);
 	void UpdateParallelKey(void);
@@ -86,6 +90,12 @@ private:
 	// from a search-result drag (SG_BIBLE) or the universal search box
 	// (UNIVERSAL_SEARCH, see #7)) and highlights the resulting verse.
 	void JumpToKey(const char* key);
+	// Mirrors the book/chapter/verse toolbar fields to whichever chain
+	// is currently active in fParallelView (see issue #12's
+	// PARALLEL_ACTIVE_COLUMN_CHANGED) -- unlike JumpToKey(), never
+	// touches fParallelView itself (that chain is already at this
+	// position; only the toolbar's own display was stale).
+	void SyncToolbarToActiveChain(void);
 	// Lazily creates fSearchWindow/fFindMessenger if needed and brings
 	// the search window to front -- shared by MENU_EDIT_FIND and
 	// UNIVERSAL_SEARCH's fall-back-to-search path.

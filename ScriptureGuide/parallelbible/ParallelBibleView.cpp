@@ -6,6 +6,7 @@
 #include "ParallelBibleView.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 #include <Bitmap.h>
@@ -60,6 +61,7 @@ const float ParallelBibleView::kColumnSpacing = 20.0f;
 const float ParallelBibleView::kHeaderHeight = 24.0f;
 const float ParallelBibleView::kHeaderBottomGap = 2.0f;
 const float ParallelBibleView::kRemoveButtonWidth = 20.0f;
+const float ParallelBibleView::kInsertButtonWidth = 20.0f;
 const float ParallelBibleView::kLinkButtonWidth = 16.0f;
 const float ParallelBibleView::kMaxNotesWidthFraction = 1.0f / 3.0f;
 const float ParallelBibleView::kNoteVerseLabelWidth = 20.0f;
@@ -889,7 +891,6 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fSuppressScrollPropagation(false),
 	fNotes(NULL),
 	fHeaderView(NULL),
-	fAddColumnButton(NULL),
 	fActiveSelectionColumn(NULL),
 	fSelectionLastEndVerse(-1),
 	fShowVerseNumbers(true),
@@ -913,22 +914,6 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 		BSize(B_SIZE_UNSET, kHeaderHeight + kHeaderBottomGap));
 	fHeaderView->SetExplicitMaxSize(
 		BSize(B_SIZE_UNLIMITED, kHeaderHeight + kHeaderBottomGap));
-
-	// SetTarget(this) is deliberately NOT called here: this constructor
-	// runs before this view (or fHeaderView) has been attached to any
-	// window, so this->Looper() is still NULL and the BMessenger
-	// SetTarget() builds from it would be permanently invalid --
-	// BMessenger doesn't re-resolve later, so the button's clicks would
-	// silently fall back to this view's Window() instead (which has no
-	// matching message case, so nothing visibly happens: exactly the
-	// "+ button does nothing" bug this fixed). Done in AttachedToWindow()
-	// instead, once this view actually has a Looper -- the same timing
-	// every other SetTarget(this) call in this class already relies on,
-	// since those all happen inside _RebuildHeader(), itself only ever
-	// reachable after attachment.
-	fAddColumnButton = new BButton("addColumn", "+",
-		new BMessage(PARALLEL_ADD_COLUMN_MENU));
-	fHeaderView->AddChild(fAddColumnButton);
 }
 
 
@@ -988,10 +973,6 @@ void
 ParallelBibleView::AttachedToWindow()
 {
 	BView::AttachedToWindow();
-	// See the constructor comment on fAddColumnButton: this is the first
-	// point at which this view actually has a Looper, so it's the first
-	// point SetTarget(this) can build a valid BMessenger.
-	fAddColumnButton->SetTarget(this);
 	_RebuildLayout();
 }
 
@@ -1170,6 +1151,8 @@ ParallelBibleView::MessageReceived(BMessage* message)
 		case PARALLEL_SELECT_MODULE:
 		case PARALLEL_SELECT_NOTES:
 		case PARALLEL_REMOVE_COLUMN:
+		case PARALLEL_INSERT_MODULE:
+		case PARALLEL_INSERT_NOTES:
 		{
 			// Selecting an item in a column's own dropdown, or clicking
 			// its remove button, ultimately calls _RebuildLayout(),
@@ -1209,9 +1192,21 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			} else if (message->what == PARALLEL_SELECT_NOTES) {
 				if (message->FindInt32("index", &index) == B_OK)
 					_SetColumnToNotes(index);
-			} else {
+			} else if (message->what == PARALLEL_REMOVE_COLUMN) {
 				if (message->FindInt32("index", &index) == B_OK)
 					RemoveColumn(index);
+			} else if (message->what == PARALLEL_INSERT_MODULE) {
+				BString module;
+				if (message->FindInt32("index", &index) == B_OK
+					&& message->FindString("module", &module) == B_OK) {
+					InsertColumn(index, module.String());
+					_SetActiveColumn(index + 1);
+				}
+			} else {
+				if (message->FindInt32("index", &index) == B_OK) {
+					InsertNotesColumn(index);
+					_SetActiveColumn(index + 1);
+				}
 			}
 			break;
 		}
@@ -1227,15 +1222,25 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			break;
 		}
 
-		case PARALLEL_ADD_COLUMN_MENU:
+		case PARALLEL_INSERT_COLUMN_MENU:
 		{
-			BPopUpMenu* menu = _BuildModuleMenu(-1, NULL, false);
+			// A plain BButton click (see _RebuildHeader()) -- same
+			// no-deadlock-risk reasoning as PARALLEL_TOGGLE_LINK above;
+			// the popup this opens posts PARALLEL_INSERT_MODULE/
+			// PARALLEL_INSERT_NOTES, handled synchronously (deferred)
+			// in the case block above once chosen.
+			int32 index;
+			if (message->FindInt32("index", &index) != B_OK
+				|| index < 0 || (size_t)index >= fInsertButtons.size()) {
+				break;
+			}
+			BPopUpMenu* menu = _BuildModuleMenu(index, NULL, false, true);
 			if (menu != NULL) {
 				// Not owned by any BMenuField (unlike the per-column
 				// menus built in _RebuildHeader()) -- this one is a
 				// fire-and-forget popup, so it must clean itself up.
 				menu->SetAsyncAutoDestruct(true);
-				BPoint where = fAddColumnButton->Frame().LeftBottom();
+				BPoint where = fInsertButtons[index]->Frame().LeftBottom();
 				fHeaderView->ConvertToScreen(&where);
 				menu->Go(where, true, true, true);
 			}
@@ -1260,6 +1265,107 @@ status_t
 ParallelBibleView::AddNotesColumn()
 {
 	return _SetColumnToNotes(-1);
+}
+
+
+// Splices fLinkedToNext for a brand-new gap opening up right after
+// afterPosition (used by both InsertColumn() and InsertNotesColumn()) --
+// the new column joins afterPosition's own chain (gap set to true), and
+// whatever gap used to sit right after afterPosition (if any) moves one
+// slot over unchanged, preserving the rest of that chain's continuity
+// exactly as it was.
+static void
+SpliceLinkedToNextForInsert(std::vector<bool>& linkedToNext,
+	int32 afterPosition)
+{
+	if (afterPosition < (int32)linkedToNext.size()) {
+		bool oldGap = linkedToNext[afterPosition];
+		linkedToNext[afterPosition] = true;
+		linkedToNext.insert(linkedToNext.begin() + afterPosition + 1,
+			oldGap);
+	} else {
+		linkedToNext.push_back(true);
+	}
+}
+
+
+status_t
+ParallelBibleView::InsertColumn(int32 afterPosition, const char* moduleName)
+{
+	if (afterPosition < 0 || (size_t)afterPosition >= fColumnOrder.size())
+		return B_BAD_INDEX;
+	if (fManager == NULL)
+		return B_NO_INIT;
+
+	SWModule* module = fManager->getModule(moduleName);
+	if (module == NULL)
+		return B_NAME_NOT_FOUND;
+
+	// Seed with whatever the anchor's own chain is currently showing --
+	// same reasoning as _SetColumnToBible()'s own seeding.
+	BString seedKey = _ChainKey(afterPosition);
+	if (!seedKey.IsEmpty()) {
+		VerseKey verseKey;
+		SetVerseKeyLocale(verseKey);
+		verseKey.setText(seedKey.String());
+		module->setKey(verseKey);
+	}
+
+	BReference<BibleTextDocument> document(new BibleTextDocument(module),
+		true);
+	document->SetShowVerseNumbers(fShowVerseNumbers);
+	document->SetShowStrongsNumbers(fShowStrongsNumbers);
+	document->SetShowCrossReferences(fShowCrossReferences);
+	document->SetBaseFont(fBaseFont);
+
+	int32 bibleIndex = _BibleIndexForPosition(afterPosition + 1);
+	fModules.insert(fModules.begin() + bibleIndex, module);
+	fDocuments.insert(fDocuments.begin() + bibleIndex, document);
+
+	SpliceLinkedToNextForInsert(fLinkedToNext, afterPosition);
+	fColumnOrder.insert(fColumnOrder.begin() + afterPosition + 1,
+		COLUMN_BIBLE);
+
+	if (fActivePosition < 0)
+		fActivePosition = 0;
+
+	_RebuildLayout();
+	return B_OK;
+}
+
+
+status_t
+ParallelBibleView::InsertNotesColumn(int32 afterPosition)
+{
+	fprintf(stderr, "[SG] InsertNotesColumn(afterPosition=%d)\n",
+		(int)afterPosition);
+	if (afterPosition < 0 || (size_t)afterPosition >= fColumnOrder.size())
+		return B_BAD_INDEX;
+
+	if (fNotes == NULL) {
+		fNotes = new PersonalNotesModule();
+		status_t status = fNotes->Open();
+		if (status != B_OK) {
+			delete fNotes;
+			fNotes = NULL;
+			return status;
+		}
+	}
+
+	NotesColumn notes;
+	notes.container = NULL;
+	int32 notesIndex = _NotesIndexForPosition(afterPosition + 1);
+	fNotesColumns.insert(fNotesColumns.begin() + notesIndex, notes);
+
+	SpliceLinkedToNextForInsert(fLinkedToNext, afterPosition);
+	fColumnOrder.insert(fColumnOrder.begin() + afterPosition + 1,
+		COLUMN_NOTES);
+
+	if (fActivePosition < 0)
+		fActivePosition = 0;
+
+	_RebuildLayout();
+	return B_OK;
 }
 
 
@@ -1581,6 +1687,8 @@ ParallelBibleView::_ToggleLink(int32 gapIndex)
 void
 ParallelBibleView::SetColumnLinked(int32 gapIndex, bool linked)
 {
+	fprintf(stderr, "[SG] SetColumnLinked(gapIndex=%d, linked=%d)\n",
+		(int)gapIndex, linked);
 	if (gapIndex < 0 || (size_t)gapIndex >= fLinkedToNext.size())
 		return;
 	if (fLinkedToNext[gapIndex] == linked)
@@ -1602,6 +1710,15 @@ ParallelBibleView::_SetActiveColumn(int32 position)
 	fActivePosition = position;
 	if (fHeaderView != NULL)
 		fHeaderView->Invalidate();
+
+	// Lets the owning window sync its own book/chapter/verse toolbar
+	// fields to this chain's own current key (see ActiveColumn()/
+	// ChainKey()) -- posted rather than called directly so this class
+	// stays unaware of what kind of window embeds it, same reasoning as
+	// SG_BIBLE elsewhere in this file.
+	BWindow* window = Window();
+	if (window != NULL)
+		window->PostMessage(PARALLEL_ACTIVE_COLUMN_CHANGED);
 }
 
 
@@ -1732,6 +1849,9 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 	SWModule* module = fManager->getModule(moduleName);
 	if (module == NULL)
 		return B_NAME_NOT_FOUND;
+
+	fprintf(stderr, "[SG] _SetColumnToBible(position=%d, module=%s) "
+		"module ptr=%p\n", (int)position, moduleName, (void*)module);
 
 	// Seed the new/replaced module with whatever its own chain (the
 	// active one, for an append; its own for an in-place conversion) is
@@ -2267,9 +2387,21 @@ ParallelBibleView::_RebuildLayout()
 		fTextViews.push_back(view);
 	}
 
+	{
+		BString gaps;
+		for (size_t g = 0; g < fLinkedToNext.size(); g++)
+			gaps << (fLinkedToNext[g] ? "1" : "0");
+		fprintf(stderr, "[SG] _RebuildLayout: %zu columns, gaps=[%s]\n",
+			fColumnOrder.size(), gaps.String());
+	}
+
 	int32 bibleIndex = 0;
 	for (size_t i = 0; i < fColumnOrder.size(); i++) {
 		bool vertical = _IsChainRightmost((int32)i);
+		fprintf(stderr, "[SG]   pos %zu: %s vertical=%d "
+			"(chainStart=%d chainEnd=%d)\n", i,
+			fColumnOrder[i] == COLUMN_BIBLE ? "BIBLE" : "NOTES",
+			vertical, (int)_ChainStart((int32)i), (int)_ChainEnd((int32)i));
 		if (fColumnOrder[i] == COLUMN_BIBLE) {
 			TextDocumentView* view = fTextViews[bibleIndex];
 			static_cast<BibleColumnView*>(view)->SetPosition((int32)i);
@@ -2285,6 +2417,8 @@ ParallelBibleView::_RebuildLayout()
 			BScrollView* scroller = new BScrollView("columnScroll",
 				notes.container, 0, false, vertical, B_NO_BORDER);
 			AddChild(scroller);
+			fprintf(stderr, "[SG]     notes scroller=%p bar=%p\n",
+				(void*)scroller, (void*)scroller->ScrollBar(B_VERTICAL));
 		}
 	}
 
@@ -2353,6 +2487,11 @@ ParallelBibleView::_RebuildHeader()
 		delete fRemoveButtons[i];
 	}
 	fRemoveButtons.clear();
+	for (size_t i = 0; i < fInsertButtons.size(); i++) {
+		fInsertButtons[i]->RemoveSelf();
+		delete fInsertButtons[i];
+	}
+	fInsertButtons.clear();
 	for (size_t i = 0; i < fLinkButtons.size(); i++) {
 		fLinkButtons[i]->RemoveSelf();
 		delete fLinkButtons[i];
@@ -2380,6 +2519,20 @@ ParallelBibleView::_RebuildHeader()
 		fHeaderView->AddChild(field);
 		fHeaderFields.push_back(field);
 
+		// Inserts a brand-new column right after this one (see
+		// InsertColumn()/InsertNotesColumn()) -- replaces the old single
+		// trailing "+" (always appended at the very end); every column
+		// gets its own now, so there's always an unambiguous anchor for
+		// "add something new right here" instead of one global button
+		// whose neighbor was whatever happened to be last.
+		BMessage* insertMessage = new BMessage(PARALLEL_INSERT_COLUMN_MENU);
+		insertMessage->AddInt32("index", (int32)i);
+		BButton* insertButton = new BButton("insertColumn", "+",
+			insertMessage);
+		insertButton->SetTarget(this);
+		fHeaderView->AddChild(insertButton);
+		fInsertButtons.push_back(insertButton);
+
 		BMessage* removeMessage = new BMessage(PARALLEL_REMOVE_COLUMN);
 		removeMessage->AddInt32("index", (int32)i);
 		BButton* removeButton = new BButton("removeColumn", "x",
@@ -2403,12 +2556,6 @@ ParallelBibleView::_RebuildHeader()
 			fLinkButtons.push_back(linkButton);
 		}
 	}
-
-	// The add-column button is a permanent child of fHeaderView, added in
-	// the constructor; just make sure it stays the last child so
-	// _PositionColumns() can place it after everything else.
-	fAddColumnButton->RemoveSelf();
-	fHeaderView->AddChild(fAddColumnButton);
 }
 
 
@@ -2507,20 +2654,37 @@ ParallelBibleView::_Realign()
 			if (fColumnOrder[i] != COLUMN_BIBLE)
 				continue;
 			columns.push_back(fDocuments[_BibleIndexForPosition(i)].Get());
-			// The live TextDocumentView wraps at _ColumnWidth() minus its
-			// own kBibleColumnInset on each side (see TextDocumentView::
-			// _TextLayoutWidth()) -- measuring at the full column width
-			// here would let VerseAligner's standalone ParagraphLayout
-			// plan for more horizontal room than a verse's text actually
-			// gets, so a borderline-wrapping line the real view wraps one
-			// line further than planned, which no alignment padding then
-			// accounted for (confirmed via two real screenshots in an
-			// earlier fix -- see _RowHeight()).
-			widths.push_back(_ColumnWidth(i) - 2.0f * kBibleColumnInset);
+			// The live TextDocumentView wraps at _MeasurementWidth(), not
+			// the raw slot width (see there for why) -- measuring at the
+			// full column width here would let VerseAligner's standalone
+			// ParagraphLayout plan for more horizontal room than a
+			// verse's text actually gets, so a borderline-wrapping line
+			// the real view wraps one line further than planned, which
+			// no alignment padding then accounted for (confirmed via two
+			// real screenshots in an earlier fix -- see _RowHeight()).
+			widths.push_back(_MeasurementWidth(i));
 		}
 
 		if (columns.size() >= 2)
 			VerseAligner::Align(columns, widths);
+
+		if (columns.size() >= 2) {
+			fprintf(stderr, "[SG] _Realign chain [%d,%d] after Align:\n",
+				(int)start, (int)end);
+			for (int32 i = start; i <= end; i++) {
+				if (fColumnOrder[i] != COLUMN_BIBLE)
+					continue;
+				int32 bibleIndex = _BibleIndexForPosition(i);
+				BibleTextDocument* doc = fDocuments[bibleIndex].Get();
+				TextDocumentView* view = fTextViews[bibleIndex];
+				float minH, maxH, preferredH;
+				view->GetHeightForWidth(_MeasurementWidth(i), &minH, &maxH,
+					&preferredH);
+				fprintf(stderr, "[SG]   pos %d: paragraphs=%d "
+					"preferredHeight=%.1f\n", (int)i,
+					(int)doc->CountParagraphs(), preferredH);
+			}
+		}
 
 		start = end + 1;
 	}
@@ -2555,15 +2719,25 @@ void
 ParallelBibleView::_PositionColumns()
 {
 	float x = 0.0f;
-	float viewportHeight = Bounds().Height();
+	// Bounds() is degenerate (a canonical invalid BRect, Height() == -1)
+	// until this view has actually been placed inside its (shown)
+	// window's BScrollView -- same caveat _ColumnWidth() already
+	// documents for its own totalWidth. Confirmed via debug logging: a
+	// negative viewportHeight reaching _UpdateColumnScrollBar() computed
+	// a garbage (negative) proportion, permanently wedging a notes
+	// column's scrollbar even after a real height became available
+	// later, since nothing ever re-clamped the bad value in between.
+	// Clamping to 0 here is harmless (an empty/invisible range) and
+	// self-corrects the next time this runs with a real size -- e.g.
+	// from FrameResized(), once the window is actually shown.
+	float viewportHeight = std::max(0.0f, Bounds().Height());
 	fColumnDividerX.clear();
 
 	size_t bibleIndex = 0;
 	size_t notesIndex = 0;
 	for (size_t i = 0; i < fColumnOrder.size(); i++) {
 		bool isNotes = (fColumnOrder[i] == COLUMN_NOTES);
-		float width = isNotes ? _NotesColumnWidth((int32)i)
-			: _ColumnWidth((int32)i);
+		float width = isNotes ? _NotesColumnWidth() : _ColumnWidth();
 
 		if (i < fHeaderFields.size()) {
 			// Sized to its own natural (preferred) width -- like the
@@ -2571,25 +2745,43 @@ ParallelBibleView::_PositionColumns()
 			// to fill the column. A stretched fixed-size BMenuField
 			// still draws its native pop-up marker at its own right
 			// edge (see BMenuField/_BMCMenuBar_ in the Interface Kit;
-			// nothing here draws it), which the remove button, sitting
-			// right there, would otherwise cover; bounding the field to
-			// its content and placing the button right after it instead
-			// keeps that marker visible.
+			// nothing here draws it), which the insert/remove buttons,
+			// sitting right there, would otherwise cover; bounding the
+			// field to its content and placing the buttons right after
+			// it instead keeps that marker visible.
 			float preferredWidth, preferredHeight;
 			fHeaderFields[i]->GetPreferredSize(&preferredWidth,
 				&preferredHeight);
+			float reserved = kInsertButtonWidth + kRemoveButtonWidth;
 			float fieldWidth = std::min(preferredWidth,
-				std::max(0.0f, width - kRemoveButtonWidth));
+				std::max(0.0f, width - reserved));
 
-			fHeaderFields[i]->MoveTo(x, 0.0f);
+			float cellX = x;
+			fHeaderFields[i]->MoveTo(cellX, 0.0f);
 			fHeaderFields[i]->ResizeTo(fieldWidth, kHeaderHeight);
-			fRemoveButtons[i]->MoveTo(x + fieldWidth, 0.0f);
+			cellX += fieldWidth;
+
+			fInsertButtons[i]->MoveTo(cellX, 0.0f);
+			fInsertButtons[i]->ResizeTo(kInsertButtonWidth, kHeaderHeight);
+			cellX += kInsertButtonWidth;
+
+			fRemoveButtons[i]->MoveTo(cellX, 0.0f);
 			fRemoveButtons[i]->ResizeTo(kRemoveButtonWidth, kHeaderHeight);
 		}
 
 		if (isNotes) {
 			NotesColumn& notes = fNotesColumns[notesIndex];
-			float fieldWidth = std::max(0.0f, width - kNoteVerseLabelWidth);
+			// If this notes column is its chain's rightmost, its own
+			// BScrollView auto-narrows the container to fit a real
+			// BScrollBar within `width` (same mechanism as a Bible
+			// column, see _ColumnWidth()'s own comment) -- the fields
+			// need to fit inside THAT narrower area, or their right edge
+			// ends up hidden behind the scrollbar.
+			float contentWidth = width;
+			if (_IsChainRightmost((int32)i))
+				contentWidth -= B_V_SCROLL_BAR_WIDTH;
+			float fieldWidth = std::max(0.0f,
+				contentWidth - kNoteVerseLabelWidth);
 			float y = 0.0f;
 			for (size_t v = 0; v < notes.fields.size(); v++) {
 				float rowHeight = _RowHeight((int)(v + 1), (int32)i);
@@ -2634,9 +2826,32 @@ ParallelBibleView::_PositionColumns()
 			}
 
 			if (notes.container != NULL) {
-				notes.container->ResizeTo(width, std::max(y, 1.0f));
+				// Deliberately NOT resizing the container itself to its
+				// own content height (y) -- same principle as
+				// TextDocumentView, which also stays sized to the
+				// viewport and tracks a taller virtual content region
+				// only through its scrollbar's range, not through its own
+				// Frame(). Explicitly resizing the container to y here
+				// fought whatever BScrollView::ResizeTo() below does to
+				// keep its target filling the viewport, leaving the
+				// notes BScrollBar's range/proportion (see
+				// _UpdateColumnScrollBar()) out of sync with the
+				// container's real on-screen size -- confirmed via a
+				// live test: a linked, non-rightmost notes column's own
+				// scrollbar (visible once split into its own chain)
+				// didn't actually move anything until this was removed.
 				BScrollView* scroller
 					= dynamic_cast<BScrollView*>(notes.container->Parent());
+				fprintf(stderr, "[SG] _PositionColumns notes pos %zu: "
+					"y=%.1f viewportHeight=%.1f scroller=%p bar=%p "
+					"containerFrame=(%.1f,%.1f,%.1f,%.1f)\n", i, y,
+					viewportHeight, (void*)scroller,
+					scroller != NULL
+						? (void*)scroller->ScrollBar(B_VERTICAL) : NULL,
+					notes.container->Frame().left,
+					notes.container->Frame().top,
+					notes.container->Frame().right,
+					notes.container->Frame().bottom);
 				if (scroller != NULL) {
 					scroller->MoveTo(x, 0.0f);
 					scroller->ResizeTo(width, viewportHeight);
@@ -2654,6 +2869,19 @@ ParallelBibleView::_PositionColumns()
 				scroller->MoveTo(x, 0.0f);
 				scroller->ResizeTo(width, viewportHeight);
 			}
+			if (_IsChainRightmost((int32)i)) {
+				BScrollBar* bar = scroller != NULL
+					? scroller->ScrollBar(B_VERTICAL) : NULL;
+				float rangeMin = 0.0f, rangeMax = 0.0f;
+				if (bar != NULL)
+					bar->GetRange(&rangeMin, &rangeMax);
+				fprintf(stderr, "[SG] _PositionColumns BIBLE pos %zu "
+					"(chain-rightmost): width=%.1f viewportHeight=%.1f "
+					"viewBounds=(%.1f,%.1f) bar=%p range=[%.1f,%.1f]\n",
+					i, width, viewportHeight, view->Bounds().Width(),
+					view->Bounds().Height(), (void*)bar, rangeMin,
+					rangeMax);
+			}
 			bibleIndex++;
 		}
 
@@ -2669,10 +2897,9 @@ ParallelBibleView::_PositionColumns()
 		}
 	}
 
-	fAddColumnButton->MoveTo(x, 0.0f);
-	fAddColumnButton->ResizeTo(kHeaderHeight, kHeaderHeight);
-	x += kHeaderHeight + kColumnSpacing;
-
+	// No trailing "+" reservation any more -- every column has its own
+	// insert button in its own header cell now (see _RebuildHeader()),
+	// so there's nothing left to reserve space for at the end.
 	fContentWidth = fColumnOrder.empty() ? 0.0f : (x - kColumnSpacing);
 
 	// fHeaderView's own Frame() is left to the window's layout (matching
@@ -2705,17 +2932,30 @@ void
 ParallelBibleView::_UpdateScrollBars()
 {
 	BScrollBar* horizontalScrollBar = ScrollBar(B_HORIZONTAL);
-	if (horizontalScrollBar != NULL) {
-		float viewWidth = Bounds().Width();
-		float maxRange = fContentWidth - viewWidth;
-		if (maxRange < 0.0f)
-			maxRange = 0.0f;
-
-		horizontalScrollBar->SetRange(0.0f, maxRange);
-		horizontalScrollBar->SetProportion(
-			fContentWidth > 0.0f ? viewWidth / fContentWidth : 1.0f);
-		horizontalScrollBar->SetSteps(20.0f, viewWidth);
+	if (horizontalScrollBar == NULL) {
+		fprintf(stderr, "[SG] _UpdateScrollBars: NO horizontal bar "
+			"attached at all (fContentWidth=%.1f Bounds().Width()=%.1f)\n",
+			fContentWidth, Bounds().Width());
+		return;
 	}
+
+	float viewWidth = Bounds().Width();
+	float maxRange = fContentWidth - viewWidth;
+	if (maxRange < 0.0f)
+		maxRange = 0.0f;
+
+	horizontalScrollBar->SetRange(0.0f, maxRange);
+	horizontalScrollBar->SetProportion(
+		fContentWidth > 0.0f ? viewWidth / fContentWidth : 1.0f);
+	horizontalScrollBar->SetSteps(20.0f, viewWidth);
+
+	float curMin, curMax;
+	horizontalScrollBar->GetRange(&curMin, &curMax);
+	fprintf(stderr, "[SG] _UpdateScrollBars (outer horizontal): "
+		"fContentWidth=%.1f viewWidth=%.1f maxRange=%.1f "
+		"barRangeAfterSet=[%.1f,%.1f] barValue=%.1f\n",
+		fContentWidth, viewWidth, maxRange, curMin, curMax,
+		horizontalScrollBar->Value());
 }
 
 
@@ -2724,12 +2964,21 @@ ParallelBibleView::_UpdateColumnScrollBar(BScrollView* scroller,
 	float contentHeight, float viewportHeight)
 {
 	BScrollBar* bar = scroller->ScrollBar(B_VERTICAL);
-	if (bar == NULL)
+	if (bar == NULL) {
+		fprintf(stderr, "[SG] _UpdateColumnScrollBar: NO BAR on scroller "
+			"%p (contentHeight=%.1f viewportHeight=%.1f)\n",
+			(void*)scroller, contentHeight, viewportHeight);
 		return;
+	}
 
 	float maxRange = contentHeight - viewportHeight;
 	if (maxRange < 0.0f)
 		maxRange = 0.0f;
+
+	fprintf(stderr, "[SG] _UpdateColumnScrollBar: scroller=%p bar=%p "
+		"contentHeight=%.1f viewportHeight=%.1f maxRange=%.1f\n",
+		(void*)scroller, (void*)bar, contentHeight, viewportHeight,
+		maxRange);
 
 	bar->SetRange(0.0f, maxRange);
 	bar->SetProportion(
@@ -2782,7 +3031,7 @@ ParallelBibleView::_RowHeight(int verse, int32 chainAnchorPosition) const
 		// at (see _Realign()'s widths.push_back()) -- measuring at the
 		// full column width here would under-count wrapped lines the
 		// same way it did for VerseAligner's own planning.
-		layout.SetWidth(_ColumnWidth(i) - 2.0f * kBibleColumnInset);
+		layout.SetWidth(_MeasurementWidth(i));
 		layout.SetParagraph(paragraph);
 		return layout.Height() + paragraph.Style().SpacingBottom();
 	}
@@ -2790,18 +3039,21 @@ ParallelBibleView::_RowHeight(int verse, int32 chainAnchorPosition) const
 }
 
 
-// Shared by every Bible/Commentary column. position < 0 (the default):
-// no chain-rightmost scrollbar-width adjustment, for pool/total-width
-// math that isn't about any one specific column. position >= 0: if that
-// column happens to be the rightmost of its own chain (see
-// _IsChainRightmost()), its own per-column BScrollView reserves
-// B_V_SCROLL_BAR_WIDTH of real screen space for an actual vertical
-// BScrollBar -- a measurement that doesn't account for this under-
-// estimates how much that one column will actually wrap at (see
-// _Realign()'s own comment on the same class of bug, already fixed once
-// for the notes/Bible width mismatch).
+// Shared by every Bible/Commentary column -- the actual on-screen SLOT
+// width (what _PositionColumns() resizes each column's own BScrollView
+// to), same for every one of them regardless of which chain it's in or
+// whether it's that chain's rightmost. Deliberately does NOT reserve
+// any extra room for a chain-rightmost column's real BScrollBar -- a
+// BScrollView already auto-narrows its OWN target to fit its scrollbar
+// within whatever slot width it's given (same mechanism that makes
+// TextDocumentView work at all as a direct BScrollView target, see the
+// class comment), so reserving that space a second time here left an
+// unclaimed gap the width of one scrollbar per chain (confirmed via a
+// live test: a visible gray strip next to the real scrollbar that
+// nothing actually used). See _MeasurementWidth() for the narrower
+// value VerseAligner/_RowHeight() need instead.
 float
-ParallelBibleView::_ColumnWidth(int32 position) const
+ParallelBibleView::_ColumnWidth() const
 {
 	// Bounds() is degenerate until this view has actually been placed
 	// inside its (shown) window's BScrollView; fall back to the width the
@@ -2822,29 +3074,29 @@ ParallelBibleView::_ColumnWidth(int32 position) const
 		? notesCount * _NotesColumnWidth() : 0.0f;
 
 	// Equal share of what's left after every notes column (each
-	// separately capped, see _NotesColumnWidth()), the trailing "+"
-	// button, and one B_V_SCROLL_BAR_WIDTH per currently open CHAIN (not
-	// one globally any more -- this view's own outer BScrollView is
-	// horizontal-only, see the class comment; every chain's own rightmost
-	// column needs its own visible-scrollbar's worth of room reserved
-	// from the shared pool instead, so Bible columns still end up with an
-	// even, equal-share slot width). Without reserving the button's own
-	// width here, a single column would claim the entire viewport and
-	// push "+" off-screen, reachable only by a horizontal scroll nothing
-	// hints exists. If that means the columns no longer all fit,
-	// _PositionColumns()'s resulting fContentWidth ends up wider than
-	// this view's own Bounds(), and the horizontal scrollbar (see
-	// _UpdateScrollBars()) is how the overflow columns (and the button)
-	// stay reachable instead of just running off-screen.
-	int32 chainCount = _ChainCount();
+	// separately capped, see _NotesColumnWidth()). No separate
+	// reservation for the "+" button any more -- every column has its
+	// own insert button inside its own header cell now (see
+	// _RebuildHeader()/_PositionColumns()), not a floating extra slot at
+	// the end. If columns still don't all fit, _PositionColumns()'s
+	// resulting fContentWidth ends up wider than this view's own
+	// Bounds(), and the horizontal scrollbar (see _UpdateScrollBars())
+	// is how the overflow columns stay reachable instead of just
+	// running off-screen.
 	float available = totalWidth - kColumnSpacing * (columnCount - 1)
-		- notesWidth - kHeaderHeight - kColumnSpacing
-		- B_V_SCROLL_BAR_WIDTH * chainCount;
+		- notesWidth;
 	float width = available / bibleCount;
 	if (width < kMinColumnWidth)
 		width = kMinColumnWidth;
+	return width;
+}
 
-	if (position >= 0 && _IsChainRightmost(position))
+
+float
+ParallelBibleView::_MeasurementWidth(int32 position) const
+{
+	float width = _ColumnWidth() - 2.0f * kBibleColumnInset;
+	if (_IsChainRightmost(position))
 		width -= B_V_SCROLL_BAR_WIDTH;
 	if (width < 0.0f)
 		width = 0.0f;
@@ -2861,10 +3113,12 @@ ParallelBibleView::_ColumnWidth(int32 position) const
 // class comment) -- and stays in effect across resizes/column changes
 // rather than resetting to the 1/3 cap on every _PositionColumns() pass,
 // since it's a fraction of totalWidth applied fresh each call, not a
-// one-time pixel snapshot. position: see _ColumnWidth()'s own comment on
-// the same chain-rightmost scrollbar adjustment.
+// one-time pixel snapshot. Same SLOT-width-only rationale as
+// _ColumnWidth() -- see there for why no chain-rightmost scrollbar
+// adjustment happens here either; _PositionColumns() applies it locally
+// to the note fields' own content width instead.
 float
-ParallelBibleView::_NotesColumnWidth(int32 position) const
+ParallelBibleView::_NotesColumnWidth() const
 {
 	if (fNotesColumns.empty())
 		return 0.0f;
@@ -2888,10 +3142,6 @@ ParallelBibleView::_NotesColumnWidth(int32 position) const
 
 	if (width < kMinColumnWidth)
 		width = kMinColumnWidth;
-	if (position >= 0 && _IsChainRightmost(position))
-		width -= B_V_SCROLL_BAR_WIDTH;
-	if (width < 0.0f)
-		width = 0.0f;
 	return width;
 }
 
@@ -2922,12 +3172,16 @@ ParallelBibleView::_NotesSplitDividerX() const
 // from its own dropdown -- any number of columns can be one at once (see
 // the class comment), so unlike the module list, "Notes" is always
 // offered here, not gated on any existing notes column. columnIndex is
-// embedded in each item's message so MessageReceived() knows whether to
-// append a new column (columnIndex < 0, used by the trailing "+" button)
-// or replace an existing one (columnIndex >= 0, used by a column's own
-// header field). markedModuleName, if given, is checked off to show the
-// column's current selection; markNotes does the same for the "Notes"
-// entry.
+// embedded in each item's message so MessageReceived() knows which slot
+// is affected -- forInsert false: replace what that slot shows (a
+// column's own header dropdown), and markedModuleName/markNotes are
+// checked off to show that slot's current selection; forInsert true:
+// insert a brand-new column right after columnIndex instead (that
+// column's own "+" button, see InsertColumn()/InsertNotesColumn()),
+// posting PARALLEL_INSERT_MODULE/PARALLEL_INSERT_NOTES rather than
+// PARALLEL_SELECT_MODULE/PARALLEL_SELECT_NOTES -- there's never a
+// "current selection" to mark in that case, so callers pass NULL/false
+// for markedModuleName/markNotes together with forInsert.
 //
 // Split out from _BuildModuleMenu() (below) so _RebuildHeader() can
 // repopulate an *existing* column's menu in place instead of building a
@@ -2935,10 +3189,15 @@ ParallelBibleView::_NotesSplitDividerX() const
 // is the risky part, not deleting/rebuilding what's inside it.
 void
 ParallelBibleView::_PopulateModuleMenu(BMenu* menu, int32 columnIndex,
-	const char* markedModuleName, bool markNotes)
+	const char* markedModuleName, bool markNotes, bool forInsert)
 {
 	BMenu* bibleMenu = new BMenu(B_TRANSLATE("Biblical Texts"));
 	BMenu* commentaryMenu = new BMenu(B_TRANSLATE("Commentaries"));
+
+	uint32 moduleMessageWhat
+		= forInsert ? PARALLEL_INSERT_MODULE : PARALLEL_SELECT_MODULE;
+	uint32 notesMessageWhat
+		= forInsert ? PARALLEL_INSERT_NOTES : PARALLEL_SELECT_NOTES;
 
 	const ModMap& modules = fManager->getModules();
 	for (ModMap::const_iterator it = modules.begin(); it != modules.end();
@@ -2955,7 +3214,7 @@ ParallelBibleView::_PopulateModuleMenu(BMenu* menu, int32 columnIndex,
 		else
 			continue;
 
-		BMessage* message = new BMessage(PARALLEL_SELECT_MODULE);
+		BMessage* message = new BMessage(moduleMessageWhat);
 		message->AddInt32("index", columnIndex);
 		message->AddString("module", module->getName());
 
@@ -2981,7 +3240,7 @@ ParallelBibleView::_PopulateModuleMenu(BMenu* menu, int32 columnIndex,
 	else
 		delete commentaryMenu;
 
-	BMessage* notesMessage = new BMessage(PARALLEL_SELECT_NOTES);
+	BMessage* notesMessage = new BMessage(notesMessageWhat);
 	notesMessage->AddInt32("index", columnIndex);
 	BMenuItem* notesItem = new BMenuItem(B_TRANSLATE("Notes"),
 		notesMessage);
@@ -2993,7 +3252,7 @@ ParallelBibleView::_PopulateModuleMenu(BMenu* menu, int32 columnIndex,
 
 BPopUpMenu*
 ParallelBibleView::_BuildModuleMenu(int32 columnIndex,
-	const char* markedModuleName, bool markNotes)
+	const char* markedModuleName, bool markNotes, bool forInsert)
 {
 	if (fManager == NULL)
 		return NULL;
@@ -3002,6 +3261,7 @@ ParallelBibleView::_BuildModuleMenu(int32 columnIndex,
 	// picks different translations; labelFromMarked so the field displays
 	// that marked item's label instead of this constructor's own `name`.
 	BPopUpMenu* menu = new BPopUpMenu("translation", true, true);
-	_PopulateModuleMenu(menu, columnIndex, markedModuleName, markNotes);
+	_PopulateModuleMenu(menu, columnIndex, markedModuleName, markNotes,
+		forInsert);
 	return menu;
 }
