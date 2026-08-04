@@ -2,3 +2,8 @@ objects*/
 App/ScriptureGuideManager
 App/ScriptureGuide
 ScriptureGuide/tests/Tests
+
+# Local dev-loop helper (SSH/rsync workflow against a specific VM) --
+# not something a contributor building the app from a fresh checkout
+# needs.
+/dev.sh
