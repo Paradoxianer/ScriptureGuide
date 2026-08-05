@@ -198,6 +198,12 @@ public:
 				status_t			ReplaceColumn(int32 position,
 										const char* moduleName);
 				status_t			RemoveColumn(int32 position);
+				// Public wrapper around _MoveColumn() (normally reached
+				// only via ParallelHeaderView's drag-reorder gesture) --
+				// exists so headless regression tests can drive a reorder
+				// without a shown window/app_server drag-and-drop loop.
+				void				MoveColumn(int32 from, int32 to)
+										{ _MoveColumn(from, to); }
 				int32				CountColumns() const;
 				int32				FirstBibleColumnPosition() const;
 
@@ -265,6 +271,12 @@ public:
 				// is now active.
 				int32				ActiveColumn() const
 										{ return fActivePosition; }
+				// Public wrapper around _SetActiveColumn() (normally
+				// reached only via a mouse click/focus change) -- exists
+				// so headless regression tests can make a specific chain
+				// active without a shown window.
+				void				SetActiveColumn(int32 position)
+										{ _SetActiveColumn(position); }
 
 				// Selects verses startVerse..endVerse (inclusive) in
 				// every Bible/Commentary column of the active chain that
@@ -292,11 +304,18 @@ public:
 				// module picker. Used to save/restore a window's whole
 				// layout (see #9); moduleName is empty when isNotes is
 				// true. linkedToNext mirrors fLinkedToNext (meaningless
-				// for the last entry).
+				// for the last entry). key is that column's own current
+				// BibleTextDocument::Key() (empty when isNotes is true) --
+				// _MoveColumn() relies on this to restore each column's
+				// own chapter after its teardown/rebuild, instead of
+				// every rebuilt column silently re-seeding from whatever
+				// chain happens to be active at that moment (see the
+				// comment on _MoveColumn() for the bug this fixes).
 				struct ColumnDescription {
 					bool	isNotes;
 					BString	moduleName;
 					bool	linkedToNext;
+					BString	key;
 				};
 				std::vector<ColumnDescription> ColumnLayout() const;
 

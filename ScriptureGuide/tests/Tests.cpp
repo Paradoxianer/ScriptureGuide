@@ -321,6 +321,56 @@ TestSplitChainKeepsOtherChainUnaffected(SWMgr* manager, SWModule* moduleA,
 }
 
 
+// Regression test for a bug found in live testing after #12: dragging a
+// column to a new position rebuilds the whole view from ColumnLayout()
+// (see ParallelBibleView::_MoveColumn()), which -- before this fix --
+// had no way to carry each column's own current key through that
+// teardown/rebuild, so every rebuilt column silently re-seeded from
+// whatever _ChainKey(fActivePosition) happened to resolve to at that
+// moment instead of its own prior position. Two independent (unlinked)
+// chains navigated to two different chapters must each keep their own
+// chapter after one of them is dragged to a new position.
+static void
+TestMoveColumnPreservesEachColumnsOwnKey(SWMgr* manager, SWModule* moduleA,
+	SWModule* moduleB)
+{
+	const char* name = "ParallelBibleView::MoveColumn: each column keeps "
+		"its own key across a reorder";
+	if (manager == NULL || moduleA == NULL || moduleB == NULL) {
+		Skip(name, "need two distinct Bible modules installed");
+		return;
+	}
+
+	ParallelBibleView view("testParallelView", manager, 900.0f);
+	view.AddColumn(moduleA->getName());
+	view.AddColumn(moduleB->getName());
+
+	// Split into two independent single-column chains and give each its
+	// own, distinct chapter.
+	view.SetColumnLinked(0, false);
+	view.SetActiveColumn(0);
+	view.SetKey("Gen 1:1");
+	view.SetActiveColumn(1);
+	view.SetKey("Gen 5:1");
+
+	BString frontKeyBefore = view.ChainKey(0);
+	BString backKeyBefore = view.ChainKey(1);
+
+	// Drag the back column (position 1) to the front (position 0).
+	view.MoveColumn(1, 0);
+
+	BString newFrontKey = view.ChainKey(0);
+	BString newBackKey = view.ChainKey(1);
+
+	// The moved column (now at position 0) should carry its own former
+	// key (backKeyBefore) with it; the column it displaced (now at
+	// position 1) should keep its own former key (frontKeyBefore) too --
+	// neither should have collapsed onto the other's chapter.
+	Check(newFrontKey == backKeyBefore && newBackKey == frontKeyBefore,
+		name);
+}
+
+
 int
 main()
 {
@@ -346,6 +396,7 @@ main()
 	TestPersonalNotesRoundTrip();
 	TestRemoveMiddleColumnRelinksNeighbors(&manager, moduleA, moduleB);
 	TestSplitChainKeepsOtherChainUnaffected(&manager, moduleA, moduleB);
+	TestMoveColumnPreservesEachColumnsOwnKey(&manager, moduleA, moduleB);
 
 	PersonalNotesModule notes;
 	SWModule* notesModule = notes.Open() == B_OK ? notes.Module() : NULL;

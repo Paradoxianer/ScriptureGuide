@@ -973,6 +973,8 @@ void
 ParallelBibleView::AttachedToWindow()
 {
 	BView::AttachedToWindow();
+	fprintf(stderr, "[SG] AttachedToWindow: Bounds()=(%.1f,%.1f,%.1f,%.1f)\n",
+		Bounds().left, Bounds().top, Bounds().right, Bounds().bottom);
 	_RebuildLayout();
 }
 
@@ -980,6 +982,8 @@ ParallelBibleView::AttachedToWindow()
 void
 ParallelBibleView::FrameResized(float width, float height)
 {
+	fprintf(stderr, "[SG] FrameResized(width=%.1f, height=%.1f)\n",
+		width, height);
 	BView::FrameResized(width, height);
 	_Realign();
 
@@ -1833,6 +1837,25 @@ ParallelBibleView::_MoveColumn(int32 from, int32 to)
 	}
 	for (size_t i = 0; i + 1 < columns.size(); i++)
 		SetColumnLinked((int32)i, columns[i].linkedToNext);
+
+	// AddColumn() above (via _SetColumnToBible()) seeds each rebuilt
+	// column from _ChainKey(fActivePosition) -- correct for a genuinely
+	// new column, but during this teardown/rebuild fActivePosition is
+	// pinned wherever the *first* AddColumn call left it, so every
+	// column after that silently inherited THAT one's chapter instead
+	// of its own. Restore each bible column's own captured key directly
+	// (bypassing the chain-scoped SetKey(), since two still-linked
+	// columns already share the same key here anyway) and refresh the
+	// layout once more now that the real keys are back.
+	for (size_t i = 0; i < columns.size(); i++) {
+		if (columns[i].isNotes || columns[i].key.IsEmpty())
+			continue;
+		int32 bibleIndex = _BibleIndexForPosition((int32)i);
+		if (bibleIndex >= 0 && (size_t)bibleIndex < fDocuments.size())
+			fDocuments[bibleIndex]->SetKey(columns[i].key.String());
+	}
+	_RebuildNoteFields();
+	_Realign();
 }
 
 
@@ -2068,8 +2091,12 @@ ParallelBibleView::ColumnLayout() const
 		} else {
 			desc.isNotes = false;
 			int32 bibleIndex = _BibleIndexForPosition((int32)i);
-			if (bibleIndex >= 0 && (size_t)bibleIndex < fModules.size())
+			if (bibleIndex >= 0 && (size_t)bibleIndex < fModules.size()) {
 				desc.moduleName = fModules[bibleIndex]->getName();
+				const char* key = fDocuments[bibleIndex]->Key();
+				if (key != NULL)
+					desc.key = key;
+			}
 		}
 		desc.linkedToNext = i < fLinkedToNext.size() ? fLinkedToNext[i]
 			: false;
@@ -2731,6 +2758,11 @@ ParallelBibleView::_PositionColumns()
 	// self-corrects the next time this runs with a real size -- e.g.
 	// from FrameResized(), once the window is actually shown.
 	float viewportHeight = std::max(0.0f, Bounds().Height());
+	fprintf(stderr, "[SG] _PositionColumns: Bounds()=(%.1f,%.1f,%.1f,%.1f) "
+		"Window()=%p Frame()=(%.1f,%.1f,%.1f,%.1f)\n",
+		Bounds().left, Bounds().top, Bounds().right, Bounds().bottom,
+		(void*)Window(), Frame().left, Frame().top, Frame().right,
+		Frame().bottom);
 	fColumnDividerX.clear();
 
 	size_t bibleIndex = 0;

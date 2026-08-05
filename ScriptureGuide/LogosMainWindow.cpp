@@ -62,7 +62,31 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 
 	fModManager = new SwordBackend();
 	BuildGUI();
-	
+
+	// BLayout invalidation is asynchronous (see BWindow::
+	// UpdateSizeLimits()'s own doc comment: layout normally only
+	// resolves once the deferred B_LAYOUT_WINDOW message reaches this
+	// window's own message loop) -- but RestoreColumnLayout() below adds
+	// every saved column (each triggering ParallelBibleView::
+	// _RebuildLayout()/_PositionColumns()) while this window hasn't even
+	// been Show()n yet, let alone pumped that deferred message. Without
+	// forcing it now, fParallelView's Bounds() stays the canonical
+	// degenerate placeholder (Height() == -1) through the entire restore
+	// -- and, confirmed via live debug logging, can keep reading that
+	// way through any number of further structural changes after Show()
+	// too, since each one can itself re-invalidate the layout before the
+	// original deferred message ever gets its turn. A notes column's
+	// scrollbar range in particular has no other self-healing path for
+	// this (unlike a Bible column's own TextDocumentView, which reacts
+	// to its own later, real FrameResized()) -- it silently looked
+	// present but had ~zero usable range until some unrelated later
+	// interaction (any navigation, e.g. a search) finally forced a fresh
+	// layout pass. Forcing it here, before RestoreColumnLayout() runs,
+	// gives fParallelView a real Bounds() from the very first column it
+	// restores.
+	Layout(true);
+
+
 	// More voodoo hackerdom to work around a bug. :)
 	AddCommonFilter(new EndKeyFilter);
 	AddCommonFilter(new UniversalSearchEnterFilter(fUniversalSearchBox));
