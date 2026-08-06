@@ -34,6 +34,20 @@ enum {
 };
 
 
+// Both characters end the current line here. The difference between them
+// is made one level up, in TextDocument: NormalizeText() splits text into
+// paragraphs at '\n' and only at '\n', so '\v' is the line break that
+// stays INSIDE a paragraph -- which is what lets a document keep a
+// meaningful one-paragraph-per-record structure (see
+// BibleTextDocument::SetParagraphsEndWithNewline() and the notes column
+// that needs it) while still letting the user press Return.
+inline bool
+is_line_break(uint32 charCode)
+{
+	return charCode == '\n' || charCode == '\v';
+}
+
+
 inline uint32
 get_char_classification(uint32 charCode)
 {
@@ -47,6 +61,7 @@ get_char_classification(uint32 charCode)
 		case ' ':
 		case '\t':
 		case '\n':
+		case '\v':
 			return CHAR_CLASS_WHITESPACE;
 
 		case '=':
@@ -110,7 +125,7 @@ can_end_line(const std::vector<GlyphInfo>& glyphInfos, int offset)
 	uint32 classification = get_char_classification(charCode);
 
 	// wrapping is always allowed at end of text and at newlines
-	if (classification == CHAR_CLASS_END_OF_TEXT || charCode == '\n')
+	if (classification == CHAR_CLASS_END_OF_TEXT || is_line_break(charCode))
 		return true;
 
 	uint32 nextCharCode = glyphInfos[offset + 1].charCode;
@@ -133,7 +148,7 @@ can_end_line(const std::vector<GlyphInfo>& glyphInfos, int offset)
 	// newline) follows
 	if (classification == CHAR_CLASS_WHITESPACE
 		&& (nextClassification != CHAR_CLASS_WHITESPACE
-			|| nextCharCode == '\n')) {
+			|| is_line_break(nextCharCode))) {
 		return true;
 	}
 
@@ -475,7 +490,7 @@ ParagraphLayout::TextOffsetAt(float x, float y, bool& rightOfCenter)
 
 	// Account for trailing line break at end of line, the
 	// returned offset should be before that.
-	rightOfCenter = fGlyphInfos[end].charCode != '\n';
+	rightOfCenter = !is_line_break(fGlyphInfos[end].charCode);
 
 	return end;
 }
@@ -563,7 +578,7 @@ ParagraphLayout::_Layout()
 //				advanceX = tabOffset - x;
 //		}
 
-		if (glyph.charCode == '\n') {
+		if (is_line_break(glyph.charCode)) {
 			nextLine = true;
 			lineBreak = true;
 			glyph.x = x;
@@ -668,7 +683,8 @@ ParagraphLayout::_ApplyAlignment()
 		GlyphInfo glyph = fGlyphInfos[i];
 
 		if (glyph.lineIndex != lineIndex) {
-			bool lineBreak = glyph.charCode == '\n' || i == glyphCount - 1;
+			bool lineBreak = is_line_break(glyph.charCode)
+				|| i == glyphCount - 1;
 			lineIndex = glyph.lineIndex;
 
 			// The position of the last character determines the available
@@ -968,7 +984,20 @@ ParagraphLayout::_DrawSpan(BView* view, BPoint offset,
 	delta.nonspace = line.extraGlyphSpacing;
 	delta.space = line.extraWhiteSpacing;
 
-	view->DrawString(span.Text(), offset, &delta);
+	// A line-break character always ends the line it is on, so it can
+	// only ever be the LAST character of a laid-out span -- which makes
+	// dropping it here safe: no following glyph's measured x position
+	// depends on it. Worth dropping because whether a font has a glyph
+	// for a C0 control character is up to the font, and a stray box in
+	// the middle of the text is not something the layout planned for.
+	BString drawText(span.Text());
+	int32 lastByte = drawText.Length() - 1;
+	if (lastByte >= 0 && is_line_break((uint8)drawText.ByteAt(lastByte)))
+		drawText.Truncate(lastByte);
+	if (drawText.Length() == 0)
+		return;
+
+	view->DrawString(drawText, offset, &delta);
 }
 
 

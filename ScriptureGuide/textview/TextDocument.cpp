@@ -542,6 +542,14 @@ TextDocument::_Insert(int32 textOffset, TextDocumentRef document,
 	if (index < 0)
 		return B_BAD_VALUE;
 
+	// `index` doubles as this function's "first changed paragraph"
+	// output, but the multi-paragraph branch below walks it forward as it
+	// inserts, so it would otherwise report the LAST paragraph touched.
+	// Callers (see Replace(), which forwards it to TextChangedEvent, and
+	// TextDocumentLayout's listener, which re-lays out exactly that
+	// range) need the first.
+	const int32 firstChangedIndex = index;
+
 	if (document->Length() == 0)
 		return B_OK;
 
@@ -683,6 +691,7 @@ TextDocument::_Insert(int32 textOffset, TextDocumentRef document,
 		paragraphCount++;
 	}
 
+	index = firstChangedIndex;
 	return B_OK;
 }
 

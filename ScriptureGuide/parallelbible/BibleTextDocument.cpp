@@ -616,6 +616,17 @@ BibleTextDocument::_Rebuild()
 		if (text.CountChars() < 1 && fSkipEmptyVerses && !linkedToPrevious)
 			continue;
 
+		// An editable document's own line breaks come back in as soft
+		// ones, BEFORE the GBF cleanup below -- both so a user-typed
+		// blank line isn't mistaken for a GBF paragraph marker and
+		// swallowed by the RemoveAll("\x0a\x0a") on the next line, and so
+		// the newline never reaches the paragraph builder, where it would
+		// split this one verse's note across several paragraphs. See
+		// SetParagraphsEndWithNewline() and NotesDisplayView::
+		// _InsertSoftLineBreak() for the two halves of this translation.
+		if (fParagraphsEndWithNewline)
+			text.ReplaceAll('\n', '\v');
+
 		// GBFPlain leaves paragraph markers behind; strip them so verses
 		// don't carry stray blank lines or pilcrows into the layout.
 		text.RemoveAll("\x0a\x0a");

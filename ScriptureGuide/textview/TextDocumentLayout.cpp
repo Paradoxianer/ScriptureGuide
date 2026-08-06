@@ -26,19 +26,26 @@ public:
 
 	virtual	void TextChanged(const TextChangedEvent& event)
 	{
-//		printf("TextChanged(%" B_PRIi32 ", %" B_PRIi32 ")\n",
-//			event.FirstChangedParagraph(),
-//			event.ChangedParagraphCount());
-		// TODO: The event does not contain useful data. Make the event
-		// system work so only the affected paragraphs are updated.
-		// I think we need "first affected", "last affected" (both relative
-		// to the original paragraph count), and than how many new paragraphs
-		// are between these. From the difference in old number of paragraphs
-		// inbetween and the new count, we know how many new paragraphs are
-		// missing, and the rest in the range needs to be updated.
-//		fLayout->InvalidateParagraphs(event.FirstChangedParagraph(),
-//			event.ChangedParagraphCount());
-		fLayout->Invalidate();
+		// Only the paragraphs the edit actually touched are re-laid out.
+		// This used to Invalidate() the whole document, which calls
+		// ParagraphLayout::SetParagraph() -- and with it a full glyph
+		// re-shaping pass -- on EVERY paragraph, so a single keystroke
+		// cost a re-shape of the entire document. Measured live in a
+		// notes column on Psalm 119 (176 paragraphs), that was the
+		// dominant per-keystroke cost.
+		//
+		// The old comment here claimed the event carried no useful data.
+		// It does: TextDocument::Replace() fills the range in from
+		// _Remove()/_Insert(), which between them cover paragraphs
+		// merged, split and inserted. (_Insert() reported the LAST
+		// touched paragraph rather than the first until this was relied
+		// on -- fixed there, not worked around here.)
+		//
+		// Paragraphs AFTER the changed range still get their y offsets
+		// recomputed, by _Layout(); what they keep is their cached glyph
+		// layout, which is what makes this cheap.
+		fLayout->InvalidateParagraphs(event.FirstChangedParagraph(),
+			event.ChangedParagraphCount());
 	}
 
 private:

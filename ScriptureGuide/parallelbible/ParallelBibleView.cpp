@@ -72,11 +72,13 @@ const float ParallelBibleView::kBibleColumnInset = 4.0f;
 const float ParallelBibleView::kNoteGutterWidth = 20.0f;
 
 // How long typing has to pause before an edited note's row is realigned
-// with the Bible columns beside it (see NoteTextEdited()). Long enough
-// that continuous typing never pays for a realign, short enough that the
-// realign reads as part of finishing the thought rather than as a
-// separate, later event.
-static const bigtime_t kNotesRealignDelay = 400000; // 0.4s
+// with the Bible columns beside it (see NoteTextEdited()). Short enough
+// that the realign reads as part of the same gesture rather than as a
+// separate, later event -- 0.4s was reported as a visible, distracting
+// jump. It can be this short because a realign no longer re-shapes every
+// paragraph in the document (see TextDocumentLayout's LayoutTextListener);
+// only a pause shorter than one keystroke interval still coalesces.
+static const bigtime_t kNotesRealignDelay = 120000; // 0.12s
 
 // Simple, font-safe glyphs for the link/unlink header button -- purely
 // cosmetic, easy to swap for a real icon later.
@@ -143,6 +145,12 @@ public:
 			// before it reaches the stored note.
 			BString text = fDocument->ParagraphAtIndex(i).Text();
 			text.Trim();
+			// Soft line breaks (see NotesDisplayView::
+			// _InsertSoftLineBreak()) exist only inside the live
+			// document, to keep a multi-line note one paragraph. What
+			// gets stored is an ordinary newline, so a note file stays
+			// readable by anything else that opens it.
+			text.ReplaceAll('\v', '\n');
 
 			key.setVerse(verse);
 			fNotes->SetNote(key.getText(), text.String());
@@ -811,6 +819,10 @@ public:
 	// from, and therefore the one place it is enforced.
 	virtual void KeyDown(const char* bytes, int32 numBytes)
 	{
+		if (_RawChar(bytes, numBytes) == B_ENTER) {
+			_InsertSoftLineBreak();
+			return;
+		}
 		if (_WouldBreakVerseParagraphs(bytes, numBytes))
 			return;
 		TextDocumentView::KeyDown(bytes, numBytes);
@@ -833,21 +845,63 @@ public:
 	}
 
 private:
+	// Same raw_char lookup TextDocumentView::KeyDown() itself does before
+	// handing the event to the editor, so everything here keys off
+	// exactly the value the editor would have switched on.
+	int32 _RawChar(const char* bytes, int32 numBytes)
+	{
+		int32 rawChar = 0;
+		if (Window() != NULL && Window()->CurrentMessage() != NULL)
+			Window()->CurrentMessage()->FindInt32("raw_char", &rawChar);
+		if (rawChar == 0 && numBytes > 0)
+			rawChar = (unsigned char)bytes[0];
+		return rawChar;
+	}
+
+	// Return breaks the LINE without breaking the PARAGRAPH: "\v" is
+	// rendered as a line break by ParagraphLayout but is not what
+	// TextDocument::NormalizeText() splits paragraphs at ("\n" is, and
+	// only "\n"), so a note can be as many lines as the user wants while
+	// still being exactly one paragraph belonging to exactly one verse.
+	// Stored notes keep ordinary "\n" -- the two are translated at the
+	// document boundary (see BibleTextDocument::_Rebuild() reading and
+	// NotesSaveListener::TextChanged() writing).
+	void _InsertSoftLineBreak()
+	{
+		if (!Editor().IsSet() || !Editor()->IsEditingEnabled())
+			return;
+
+		int32 start, end;
+		GetSelection(start, end);
+		if (start != end) {
+			if (_ParagraphIndexAt(start) != _ParagraphIndexAt(end))
+				return;
+			Editor()->Replace(start, end - start, BString("\v"));
+		} else {
+			Editor()->Insert(Editor()->CaretOffset(), BString("\v"));
+		}
+
+		Invalidate();
+		Relayout();
+		if (fOwner != NULL)
+			fOwner->NoteTextEdited();
+	}
+
 	// True if letting this keystroke through would change how many
 	// paragraphs the document has, or which verse a given paragraph
 	// belongs to -- in which case KeyDown() drops it.
 	//
-	// Only three things can do that, and all of them come down to the
-	// "\n" that terminates every notes paragraph (see BibleTextDocument::
-	// SetParagraphsEndWithNewline()):
+	// Both cases come down to the "\n" that terminates every notes
+	// paragraph (see BibleTextDocument::SetParagraphsEndWithNewline()):
 	//
-	//  - Return INSERTS one, splitting a verse's note in two.
 	//  - Backspace with the caret at a paragraph's start REMOVES the
 	//    PREVIOUS paragraph's one, merging that verse's note with this
 	//    one. (Backspace anywhere else, including just after a note's
 	//    last visible character, is an ordinary delete and is allowed.)
 	//  - Delete with the caret sitting just before this paragraph's own
 	//    "\n" removes it, merging with the FOLLOWING verse.
+	//
+	// Return is NOT one of them any more -- see _InsertSoftLineBreak().
 	//
 	// A selection spanning more than one paragraph makes every
 	// destructive key a merge, so those are refused wholesale rather
@@ -859,18 +913,7 @@ private:
 		if (!Editor().IsSet() || !Editor()->IsEditingEnabled())
 			return false;
 
-		// Same raw_char lookup TextDocumentView::KeyDown() itself does
-		// before handing the event to the editor, so this guard keys off
-		// exactly the value the editor will switch on.
-		int32 rawChar = 0;
-		if (Window() != NULL && Window()->CurrentMessage() != NULL)
-			Window()->CurrentMessage()->FindInt32("raw_char", &rawChar);
-		if (rawChar == 0 && numBytes > 0)
-			rawChar = (unsigned char)bytes[0];
-
-		if (rawChar == B_ENTER)
-			return true;
-
+		int32 rawChar = _RawChar(bytes, numBytes);
 		bool destructive = rawChar == B_BACKSPACE || rawChar == B_DELETE;
 
 		int32 start, end;
@@ -906,8 +949,9 @@ private:
 	}
 
 	// Pastes the clipboard's plain text into the current verse's note
-	// with every line break flattened to a space, so a multi-line
-	// clipboard can never turn one verse's paragraph into several (see
+	// with every line break turned into a SOFT one (see
+	// _InsertSoftLineBreak()), so pasted text keeps its line structure
+	// without turning one verse's paragraph into several (see
 	// MessageReceived()). Refuses outright if the selection it would
 	// replace spans verses, for the same reason KeyDown() does.
 	void _PasteSingleParagraph()
@@ -931,8 +975,9 @@ private:
 
 		if (text.IsEmpty())
 			return;
-		text.ReplaceAll('\n', ' ');
-		text.ReplaceAll('\r', ' ');
+		text.ReplaceAll("\r\n", "\v");
+		text.ReplaceAll('\n', '\v');
+		text.ReplaceAll('\r', '\v');
 		text.ReplaceAll('\t', ' ');
 
 		int32 start, end;
@@ -947,6 +992,8 @@ private:
 
 		Invalidate();
 		Relayout();
+		if (fOwner != NULL)
+			fOwner->NoteTextEdited();
 	}
 
 	void _DrawGutter(BRect updateRect)

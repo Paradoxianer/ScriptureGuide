@@ -365,6 +365,59 @@ TestNotesParagraphTerminatorProtectsVerseBoundary(SWModule* notesModule)
 }
 
 
+// A soft line break ("\\v", inserted by NotesDisplayView::
+// _InsertSoftLineBreak() when the user presses Return) must break the
+// LINE without breaking the PARAGRAPH -- that is the whole point of
+// using it instead of "\\n", which TextDocument::NormalizeText() splits
+// paragraphs at. If this ever regressed, pressing Return in a note would
+// silently push every following verse's note onto the wrong verse.
+static void
+TestSoftLineBreakKeepsOneParagraphPerVerse(SWModule* notesModule)
+{
+	const char* name = "BibleTextDocument: a soft line break inside a note "
+		"doesn't split its verse's paragraph";
+	if (notesModule == NULL) {
+		Skip(name, "personal notes module unavailable");
+		return;
+	}
+
+	BibleTextDocument document(notesModule);
+	document.SetShowVerseNumbers(false);
+	document.SetSkipEmptyVerses(false);
+	document.SetParagraphsEndWithNewline(true);
+	document.SetKey("Gen 1:1");
+
+	int32 paragraphsBefore = document.CountParagraphs();
+	if (paragraphsBefore < 2) {
+		Skip(name, "chapter has too few verses to test a boundary");
+		return;
+	}
+	int32 verse2Before = document.ParagraphIndexForVerse(2);
+
+	document.Replace(0, 0, "erste\vzweite");
+
+	bool stillOneParagraph
+		= document.CountParagraphs() == paragraphsBefore
+			&& document.ParagraphIndexForVerse(2) == verse2Before;
+	bool bothLinesInVerse1
+		= document.ParagraphAtIndex(0).Text().FindFirst("erste") >= 0
+			&& document.ParagraphAtIndex(0).Text().FindFirst("zweite") >= 0;
+
+	// The contrast that makes the point: a real "\\n" in the same place
+	// DOES split the paragraph, which is exactly why Return must not
+	// insert one.
+	BibleTextDocument control(notesModule);
+	control.SetShowVerseNumbers(false);
+	control.SetSkipEmptyVerses(false);
+	control.SetParagraphsEndWithNewline(true);
+	control.SetKey("Gen 1:1");
+	control.Replace(0, 0, "erste\nzweite");
+	bool hardBreakSplits = control.CountParagraphs() > paragraphsBefore;
+
+	Check(stillOneParagraph && bothLinesInVerse1 && hardBreakSplits, name);
+}
+
+
 // Regression test for the notes column's per-verse editor redesign (see
 // NoteVerseView/NotesColumn in ParallelBibleView.cpp): a document with
 // SetSingleVerse(N) set must render ONLY that one verse -- exactly one
@@ -697,6 +750,7 @@ main()
 	TestListenerSurvivesRepeatedRebuilds(notesModule);
 	TestNotesDocumentOneParagraphPerVerse(notesModule);
 	TestNotesParagraphTerminatorProtectsVerseBoundary(notesModule);
+	TestSoftLineBreakKeepsOneParagraphPerVerse(notesModule);
 	TestSingleVerseRendersExactlyOneVerse(&notes);
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
