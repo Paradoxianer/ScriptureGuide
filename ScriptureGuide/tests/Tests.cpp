@@ -248,6 +248,232 @@ TestListenerSurvivesRepeatedRebuilds(SWModule* notesModule)
 }
 
 
+// Regression test for the notes-column rewrite (see the class comment on
+// ParallelBibleView -- a notes column is now a real BibleTextDocument
+// wrapping the personal notes module, not a separate BTextView per
+// verse): SetSkipEmptyVerses(false) must produce exactly one paragraph
+// per verse (an empty note still gets a paragraph to click into), and an
+// ordinary insert within one verse's own paragraph -- what normal typing
+// at a caret actually does -- must not shift any other verse's paragraph
+// index. NotesSaveListener (ParallelBibleView.cpp) depends on that
+// mapping staying stable across an edit to know which verse it just
+// saved (a boundary-consuming edit instead -- Backspace at a paragraph's
+// very start, Delete at its very end -- is a different, separately
+// handled case; see NotesSaveListener::TextChanged()'s own paragraph-
+// count sanity check, not exercised by this test).
+static void
+TestNotesDocumentOneParagraphPerVerse(SWModule* notesModule)
+{
+	const char* name = "BibleTextDocument: notes document keeps one "
+		"paragraph per verse across an ordinary insert";
+	if (notesModule == NULL) {
+		Skip(name, "personal notes module unavailable");
+		return;
+	}
+
+	BibleTextDocument document(notesModule);
+	document.SetShowVerseNumbers(false);
+	document.SetSkipEmptyVerses(false);
+	document.SetKey("Gen 1:1");
+
+	int32 verseCountBefore = document.CountParagraphs();
+
+	int32 s1, e1;
+	bool foundVerse1 = document.TextRangeForVerseRange(1, 1, s1, e1);
+	int32 verse2ParagraphBefore = document.ParagraphIndexForVerse(2);
+
+	// A zero-length Replace() -- a pure insert -- at the very start of
+	// verse 1's own range pushes its existing text forward within the
+	// SAME paragraph; unlike replacing the whole [s1, e1) range (which
+	// includes the trailing paragraph separator TextRangeForVerseRange()
+	// deliberately counts as part of that range for selection-highlight
+	// purposes -- see BuildExportRows()'s and NotesSaveListener's own,
+	// read-only use of the same range), this never touches the boundary
+	// with verse 2's own paragraph.
+	if (foundVerse1)
+		document.Replace(s1, 0, "X");
+
+	int32 verse2ParagraphAfter = document.ParagraphIndexForVerse(2);
+
+	Check(verseCountBefore > 1 && foundVerse1 && verse2ParagraphBefore >= 0
+		&& document.CountParagraphs() == verseCountBefore
+		&& verse2ParagraphAfter == verse2ParagraphBefore, name);
+}
+
+
+// Regression test for the notes column's per-verse editor redesign (see
+// NoteVerseView/NotesColumn in ParallelBibleView.cpp): a document with
+// SetSingleVerse(N) set must render ONLY that one verse -- exactly one
+// paragraph, holding that verse's own text and no other verse's -- with
+// no dependency on which verse the document's own SetKey() text happened
+// to name. This is what lets each verse of a notes column have its own,
+// independent document with no shared paragraph boundary between
+// verses to be ambiguous about (the root cause chased through caret
+// placement, the gutter, and typed-text insertion before this existed).
+static void
+TestSingleVerseRendersExactlyOneVerse(PersonalNotesModule* notes)
+{
+	const char* name = "BibleTextDocument::SetSingleVerse: renders "
+		"exactly one verse regardless of the key's own verse component";
+	if (notes == NULL || notes->Module() == NULL) {
+		Skip(name, "personal notes module unavailable");
+		return;
+	}
+
+	// Seed verse 2 with distinguishable text directly through the
+	// module (not through a whole-chapter document), so this test
+	// doesn't depend on whatever verse 1's own default/empty text
+	// happens to render as -- this module is the SAME on-disk personal
+	// notes store the live app uses (confirmed live: an earlier version
+	// of this test that skipped the restore below silently overwrote a
+	// real verse 2 note with this test's own placeholder text), so the
+	// original has to be saved and put back afterward, not just
+	// overwritten.
+	BString originalNote = notes->GetNote("Gen 1:2");
+	notes->SetNote("Gen 1:2", "verse two's own note");
+
+	BibleTextDocument document(notes->Module());
+	document.SetShowVerseNumbers(false);
+	document.SetSkipEmptyVerses(false);
+	// The key names verse 1 -- SetSingleVerse() below should override
+	// that down to verse 2 regardless.
+	document.SetKey("Gen 1:1");
+	document.SetSingleVerse(2);
+
+	bool singleVerseReadsBack = document.SingleVerse() == 2;
+	bool exactlyOneParagraph = document.CountParagraphs() == 1;
+	bool paragraphIsVerse2 = document.VerseForParagraphIndex(0) == 2;
+	bool textIsVerse2sOwn
+		= document.Text().FindFirst("verse two's own note") >= 0;
+
+	notes->SetNote("Gen 1:2", originalNote.String());
+
+	Check(singleVerseReadsBack && exactlyOneParagraph && paragraphIsVerse2
+		&& textIsVerse2sOwn, name);
+}
+
+
+// Regression test for the notes-driven row-growth feature: a note longer
+// than its own verse's Bible-column text must grow that verse's whole
+// row (both columns, so they stay lined up -- not just the notes
+// column's own view, which would leave the Bible column behind). A
+// notes column's own document shares the same VerseAligner group as its
+// chain's Bible/Commentary ones (see _Realign()), so this is really just
+// VerseAligner::Align() itself, exercised with a notes document as one
+// of its members -- including the same idempotency guarantee
+// TestVerseAlignerIsIdempotent() already covers for a Bible-only case: a
+// second _Realign() pass (triggered here by a second SetKey() with the
+// SAME key) must not keep compounding that growth on top of itself.
+static void
+TestTallNotesGrowRowWithoutCompounding(SWMgr* manager, SWModule* moduleA)
+{
+	const char* name = "ParallelBibleView::_Realign: a longer note grows "
+		"its verse's row once, without compounding on repeated calls";
+	if (manager == NULL || moduleA == NULL) {
+		Skip(name, "need a Bible module installed");
+		return;
+	}
+
+	// Written through an independent PersonalNotesModule instance, not
+	// the one the view below opens for itself (ParallelBibleView has no
+	// public way to reach its own internal fNotes) -- relies on the
+	// underlying SWORD raw module reading/writing straight through to
+	// shared storage rather than caching privately per instance, the
+	// same assumption the app itself doesn't need to make (it only ever
+	// has one fNotes instance alive at a time) but which held up fine
+	// here in practice.
+	PersonalNotesModule seedNotes;
+	if (seedNotes.Open() != B_OK) {
+		Skip(name, "could not open personal notes module");
+		return;
+	}
+	BString longNote;
+	for (int i = 0; i < 60; i++)
+		longNote << "a long note line that keeps going on and on. ";
+	BString originalNote = seedNotes.GetNote("Gen 1:2");
+	seedNotes.SetNote("Gen 1:2", longNote.String());
+
+	ParallelBibleView view("testParallelView", manager, 900.0f);
+	view.AddColumn(moduleA->getName());
+	status_t addedNotes = view.AddNotesColumn();
+	view.SetKey("Gen 1:1");
+
+	float heightAfterFirstRealign = view.RowHeight(2, 0);
+	view.SetKey("Gen 1:1"); // same key -- forces another _Realign()
+	float heightAfterSecondRealign = view.RowHeight(2, 0);
+
+	// A verse with no note at all still gets some natural row height
+	// from its own Bible text (see _RowHeight()'s own fallback) -- 400px
+	// is comfortably taller than any single short Hebrew/English verse
+	// could need on its own, so this is really checking "did the long
+	// note's own height make it into this verse's row at all."
+	bool grewForTheLongNote = heightAfterFirstRealign > 400.0f;
+	bool noCompoundingOnRepeat
+		= fabs(heightAfterSecondRealign - heightAfterFirstRealign) < 0.5f;
+
+	seedNotes.SetNote("Gen 1:2", originalNote.String());
+
+	Check(addedNotes == B_OK && grewForTheLongNote && noCompoundingOnRepeat,
+		name);
+}
+
+
+// Regression test for a bug originally reported against an interim
+// design where a notes column's own row-growth padding was computed and
+// applied separately from VerseAligner::Align() (since removed -- a
+// notes column's own document now just joins the SAME VerseAligner
+// group as its chain's Bible/Commentary ones, see _Realign()): with that
+// design, a chain shrinking from 2+ Bible columns down to just 1 left
+// stale padding behind, because Align() -- the only thing that cleared
+// it -- never ran for a single lone Bible column. Kept as a regression
+// test against the CURRENT design too: a verse's row must end up the
+// same height whether its chain always had just one Bible column, or
+// arrived there by losing a second one.
+static void
+TestRemovingSecondBibleColumnClearsStaleSpacing(SWMgr* manager,
+	SWModule* moduleA, SWModule* moduleB)
+{
+	const char* name = "ParallelBibleView::_Realign: shrinking to one "
+		"Bible column clears spacing left over from when there were two";
+	if (manager == NULL || moduleA == NULL || moduleB == NULL) {
+		Skip(name, "need two distinct Bible modules installed");
+		return;
+	}
+
+	PersonalNotesModule seedNotes;
+	if (seedNotes.Open() != B_OK) {
+		Skip(name, "could not open personal notes module");
+		return;
+	}
+	BString longNote;
+	for (int i = 0; i < 60; i++)
+		longNote << "a long note line that keeps going on and on. ";
+	BString originalNote = seedNotes.GetNote("Gen 1:2");
+	seedNotes.SetNote("Gen 1:2", longNote.String());
+
+	// Baseline: a chain that only ever had ONE Bible column.
+	ParallelBibleView freshView("testFreshView", manager, 900.0f);
+	freshView.AddColumn(moduleA->getName());
+	freshView.AddNotesColumn();
+	freshView.SetKey("Gen 1:1");
+	float freshHeight = freshView.RowHeight(2, 0);
+
+	// Same module, same note, but arriving at one Bible column by
+	// starting with two and removing the second.
+	ParallelBibleView shrunkView("testShrunkView", manager, 900.0f);
+	shrunkView.AddColumn(moduleA->getName());
+	shrunkView.AddColumn(moduleB->getName());
+	shrunkView.AddNotesColumn();
+	shrunkView.SetKey("Gen 1:1");
+	shrunkView.RemoveColumn(1); // drops moduleB
+	float shrunkHeight = shrunkView.RowHeight(2, 0);
+
+	seedNotes.SetNote("Gen 1:2", originalNote.String());
+
+	Check(fabs(shrunkHeight - freshHeight) < 1.0f, name);
+}
+
+
 // Regression test for issue #12's neighbor-relink rule (see
 // ParallelBibleView::RemoveColumn()): removing a linked middle column
 // from a 3-column chain must leave its two former neighbors linked to
@@ -394,6 +620,9 @@ main()
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestVerseAlignerIsIdempotent(moduleA, moduleB);
 	TestPersonalNotesRoundTrip();
+	TestTallNotesGrowRowWithoutCompounding(&manager, moduleA);
+	TestRemovingSecondBibleColumnClearsStaleSpacing(&manager, moduleA,
+		moduleB);
 	TestRemoveMiddleColumnRelinksNeighbors(&manager, moduleA, moduleB);
 	TestSplitChainKeepsOtherChainUnaffected(&manager, moduleA, moduleB);
 	TestMoveColumnPreservesEachColumnsOwnKey(&manager, moduleA, moduleB);
@@ -402,6 +631,8 @@ main()
 	SWModule* notesModule = notes.Open() == B_OK ? notes.Module() : NULL;
 	TestEmptyNotesDocumentRebuildIsIdempotent(notesModule);
 	TestListenerSurvivesRepeatedRebuilds(notesModule);
+	TestNotesDocumentOneParagraphPerVerse(notesModule);
+	TestSingleVerseRendersExactlyOneVerse(&notes);
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;
