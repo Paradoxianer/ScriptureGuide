@@ -100,6 +100,19 @@ public:
 									float& x1, float& y1,
 									float& x2, float& y2);
 
+			// Same idea as GetTextBounds(), but by PARAGRAPH index
+			// instead of a flat character offset -- an offset exactly at
+			// a paragraph boundary is inherently ambiguous (the same
+			// numeric position is simultaneously "end of paragraph N"
+			// and "start of paragraph N+1"; see
+			// _ParagraphLayoutIndexForOffset()'s own comment on which
+			// one it resolves to and why). A caller that already knows
+			// which paragraph it wants (e.g. NotesColumnView's gutter,
+			// via BibleTextDocument::ParagraphIndexForVerse()) has no
+			// reason to go through that ambiguity at all.
+			void				GetParagraphBounds(int32 paragraphIndex,
+									float& y1, float& y2);
+
 			int32				TextOffsetAt(float x, float y,
 									bool& rightOfCenter);
 

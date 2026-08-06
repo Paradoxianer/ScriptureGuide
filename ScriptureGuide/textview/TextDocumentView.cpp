@@ -449,6 +449,34 @@ TextDocumentView::TextOffsetAt(BPoint where)
 
 
 void
+TextDocumentView::GetTextBounds(int32 offset, float& x1, float& y1,
+	float& x2, float& y2)
+{
+	// fTextDocumentLayout's own coordinates are relative to the text
+	// area's own top-left, not this view's -- Draw() adds this same
+	// (fInsetLeft, fInsetTop) offset when it hands that same layout to
+	// TextDocumentLayout::Draw() to actually paint (see there); mirrored
+	// here so a caller drawing its own overlay (e.g. a verse-number
+	// gutter) lines up with where the text actually rendered on screen.
+	fTextDocumentLayout.GetTextBounds(offset, x1, y1, x2, y2);
+	x1 += fInsetLeft;
+	x2 += fInsetLeft;
+	y1 += fInsetTop;
+	y2 += fInsetTop;
+}
+
+
+void
+TextDocumentView::GetParagraphBounds(int32 paragraphIndex, float& y1,
+	float& y2)
+{
+	fTextDocumentLayout.GetParagraphBounds(paragraphIndex, y1, y2);
+	y1 += fInsetTop;
+	y2 += fInsetTop;
+}
+
+
+void
 TextDocumentView::SetSelection(int32 start, int32 end)
 {
 	if (!fSelectionEnabled || !fTextEditor.IsSet())
@@ -651,8 +679,18 @@ TextDocumentView::_DrawCaret(int32 textOffset)
 	fCaretBounds = BRect(x1, y1, x2, y2);
 	fCaretBounds.OffsetBy(fInsetLeft, fInsetTop);
 
+	// B_OP_INVERT was never restored to the default B_OP_COPY afterward
+	// -- harmless as long as nothing else ever drew after the caret in
+	// the same Draw() pass, which held until a subclass (NotesColumnView,
+	// drawing its own verse-number gutter after calling this class's own
+	// Draw()) actually did: every draw call after the first blinked-on
+	// caret inherited B_OP_INVERT too, silently corrupting colors/text
+	// with no error -- confirmed live (a gutter number rendering as a
+	// near-invisible sliver instead of a digit, right after the first
+	// click into that column).
 	SetDrawingMode(B_OP_INVERT);
 	FillRect(fCaretBounds);
+	SetDrawingMode(B_OP_COPY);
 }
 
 

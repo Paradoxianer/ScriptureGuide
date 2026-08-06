@@ -311,6 +311,25 @@ TextDocumentLayout::GetTextBounds(int32 textOffset, float& x1, float& y1,
 }
 
 
+void
+TextDocumentLayout::GetParagraphBounds(int32 paragraphIndex, float& y1,
+	float& y2)
+{
+	_ValidateLayout();
+
+	if (paragraphIndex < 0
+			|| (size_t)paragraphIndex >= fParagraphLayouts.size()) {
+		y1 = 0.0f;
+		y2 = 0.0f;
+		return;
+	}
+
+	const ParagraphLayoutInfo& info = fParagraphLayouts[paragraphIndex];
+	y1 = info.y;
+	y2 = info.y + info.layout->Height();
+}
+
+
 int32
 TextDocumentLayout::TextOffsetAt(float x, float y, bool& rightOfCenter)
 {
@@ -322,12 +341,29 @@ TextDocumentLayout::TextOffsetAt(float x, float y, bool& rightOfCenter)
 	int32 paragraphs = fParagraphLayouts.size();
 	for (int32 i = 0; i < paragraphs; i++) {
 		const ParagraphLayoutInfo& info = fParagraphLayouts[i];
-		if (y > info.y + info.layout->Height()) {
+		// A click anywhere in this paragraph's own row -- including its
+		// SpacingBottom() padding below the actual text, e.g. from
+		// VerseAligner padding a short verse/note to match a taller
+		// sibling column -- must resolve within THIS paragraph, not spill
+		// into the next one's own text. Comparing only against
+		// info.layout->Height() (the unpadded content height) missed
+		// that gap entirely, so a click in the padding fell through to
+		// "y > this paragraph's bottom", got skipped, and landed at the
+		// very start of the next paragraph instead -- confirmed live, in
+		// an editable notes column padded to align with a taller Bible
+		// column: clicking anywhere in a short verse's own padded row
+		// put the caret before the *next* verse's number instead of at
+		// the end of the one actually clicked.
+		if (y > info.y + info.layout->Height()
+				+ info.layout->Style().SpacingBottom()) {
 			textOffset += info.layout->CountGlyphs();
 			continue;
 		}
 
-		textOffset += info.layout->TextOffsetAt(x, y - info.y, rightOfCenter);
+		float localY = y - info.y;
+		if (localY > info.layout->Height())
+			localY = info.layout->Height();
+		textOffset += info.layout->TextOffsetAt(x, localY, rightOfCenter);
 		break;
 	}
 
@@ -407,7 +443,21 @@ TextDocumentLayout::_ParagraphLayoutIndexForOffset(int32& textOffset)
 		const ParagraphLayoutInfo& info = fParagraphLayouts[i];
 
 		int32 length = info.layout->CountGlyphs();
-		if (textOffset >= length) {
+		// An offset exactly at a paragraph boundary (== this paragraph's
+		// own glyph count) is numerically the same position as offset 0
+		// of the next paragraph -- ambiguous by construction, since a
+		// flat document offset alone can't distinguish "end of this
+		// paragraph" from "start of the next" the way a click's original
+		// screen point could (see TextOffsetAt()'s own rightOfCenter).
+		// Resolving it to the paragraph it TERMINATES (>, not >=) rather
+		// than the one it starts matches what every caller of this
+		// actually wants it for -- GetTextBounds() (caret rendering) and
+		// LineIndexForOffset() (arrow-key navigation) -- confirmed live:
+		// with >=, clicking at the end of one verse's own note text drew
+		// the blinking caret at the very start of the *next* verse's own
+		// paragraph instead, well before its own text even though the
+		// click was nowhere near that verse's own row.
+		if (textOffset > length) {
 			textOffset -= length;
 			continue;
 		}

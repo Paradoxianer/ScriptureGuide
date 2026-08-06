@@ -84,6 +84,24 @@ public:
 				// between starting a drag and placing the caret there).
 				int32				TextOffsetAt(BPoint where);
 
+				// View-coordinate bounds of the character at `offset` --
+				// the inverse of TextOffsetAt(), for a subclass that
+				// needs to draw its own per-line/per-paragraph overlay
+				// (e.g. a verse-number gutter) aligned with where the
+				// document actually rendered that offset.
+				void				GetTextBounds(int32 offset,
+										float& x1, float& y1, float& x2,
+										float& y2);
+
+				// Same idea, but by paragraph index -- see
+				// TextDocumentLayout::GetParagraphBounds()'s own comment
+				// on why a caller that already knows which paragraph it
+				// wants should use this instead of GetTextBounds() at
+				// that paragraph's own first offset (which is
+				// ambiguous with the previous paragraph's own last one).
+				void				GetParagraphBounds(int32 paragraphIndex,
+										float& y1, float& y2);
+
 			void				Copy(BClipboard* clipboard);
 			void				Paste(BClipboard* clipboard);
 
