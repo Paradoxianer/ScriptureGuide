@@ -20,8 +20,10 @@
 #include <Language.h>
 #include <Locale.h>
 #include <MenuField.h>
+#include <Clipboard.h>
 #include <MenuItem.h>
 #include <Message.h>
+#include <MessageRunner.h>
 #include <OS.h>
 #include <PopUpMenu.h>
 #include <Screen.h>
@@ -69,6 +71,13 @@ const float ParallelBibleView::kMaxNotesWidthFraction = 1.0f / 3.0f;
 const float ParallelBibleView::kBibleColumnInset = 4.0f;
 const float ParallelBibleView::kNoteGutterWidth = 20.0f;
 
+// How long typing has to pause before an edited note's row is realigned
+// with the Bible columns beside it (see NoteTextEdited()). Long enough
+// that continuous typing never pays for a realign, short enough that the
+// realign reads as part of finishing the thought rather than as a
+// separate, later event.
+static const bigtime_t kNotesRealignDelay = 400000; // 0.4s
+
 // Simple, font-safe glyphs for the link/unlink header button -- purely
 // cosmetic, easy to swap for a real icon later.
 static const char* kLinkedGlyph = "=";
@@ -84,40 +93,69 @@ static const char* kBrokenLinkGlyph = "/";
 // existing TestListenerSurvivesRepeatedRebuilds test -- so this listener
 // stays attached across every chapter navigation, not just the first).
 //
-// fDocument is scoped to exactly one verse (see BibleTextDocument::
-// SetSingleVerse()), so unlike the earlier whole-chapter-per-column
-// design, there is no verse index to look up and no cross-verse
-// paragraph-count bookkeeping to keep in sync -- any edit just means
-// "re-save this one verse's own text," full stop.
+// fDocument spans the whole chapter, one paragraph per verse (see the
+// NotesColumn comment in the header), so an edit has to be attributed
+// back to the verse it landed in. TextChangedEvent already carries
+// exactly the paragraph range that changed, and fParagraphVerse (via
+// VerseForParagraphIndex()) already maps a paragraph index to its verse
+// -- so only the paragraphs the user actually touched get written back,
+// not the whole chapter. That matters: SetNote() writes through to the
+// SWORD module on disk, and re-saving all 176 verses of Psalm 119 on
+// every keystroke would be pointless I/O.
+//
+// BibleTextDocument::_Rebuild() resets the document via
+// TextDocument::operator=() and Append(), neither of which notifies
+// listeners, so a chapter change never masquerades as a user edit here.
 class NotesSaveListener : public TextListener {
 public:
-	NotesSaveListener(BibleTextDocument* document, PersonalNotesModule* notes)
+	NotesSaveListener(BibleTextDocument* document, PersonalNotesModule* notes,
+		ParallelBibleView* owner)
 		:
 		fDocument(document),
-		fNotes(notes)
+		fNotes(notes),
+		fOwner(owner)
 	{
 	}
 
 	virtual void TextChanged(const TextChangedEvent& event)
 	{
-		int verse = fDocument->SingleVerse();
 		BString chapterKey = fDocument->Key();
-		if (verse <= 0 || chapterKey.IsEmpty())
+		if (chapterKey.IsEmpty())
 			return;
 
-		BString text = fDocument->Text();
-		text.Trim();
+		int32 first = event.FirstChangedParagraph();
+		int32 last = first + event.ChangedParagraphCount();
+		if (last > fDocument->CountParagraphs())
+			last = fDocument->CountParagraphs();
 
 		VerseKey key;
 		SetVerseKeyLocale(key);
 		key.setText(chapterKey.String());
-		key.setVerse(verse);
-		fNotes->SetNote(key.getText(), text.String());
+
+		for (int32 i = std::max((int32)0, first); i < last; i++) {
+			int verse = fDocument->VerseForParagraphIndex(i);
+			if (verse <= 0)
+				continue;
+
+			// Paragraph-local text, not the document's -- and Trim()
+			// takes the trailing "\n" every notes paragraph carries (see
+			// BibleTextDocument::SetParagraphsEndWithNewline()) back off
+			// before it reaches the stored note.
+			BString text = fDocument->ParagraphAtIndex(i).Text();
+			text.Trim();
+
+			key.setVerse(verse);
+			fNotes->SetNote(key.getText(), text.String());
+		}
+
+		if (fOwner != NULL)
+			fOwner->NoteTextEdited();
 	}
 
 private:
 	BibleTextDocument*		fDocument;
 	PersonalNotesModule*	fNotes;
+	ParallelBibleView*		fOwner;
 };
 
 
@@ -695,83 +733,25 @@ private:
 };
 
 
-// A single verse's own, short-lived editor -- built on demand when the
-// user clicks a verse in a notes column's read-only NotesDisplayView
-// (see ParallelBibleView::_StartEditingNoteVerse()), added as a CHILD of
-// that same NotesDisplayView, positioned directly over the verse's own
-// row -- being a child of the scrolled display means it automatically
-// scrolls along with it, no special handling needed for "the user
-// scrolled while editing". Backed by a BibleTextDocument scoped to
-// exactly this one verse (see BibleTextDocument::SetSingleVerse()) --
-// there is no verse boundary inside this document at all, so none of
-// the caret/gutter/typed-text-insertion ambiguity a shared whole-
-// chapter document has between adjacent verses (see the class comment
-// on NotesColumn) can arise here either.
-class NoteVerseView : public TextDocumentView {
-public:
-	NoteVerseView(const char* name, int verse, ParallelBibleView* owner,
-		int32 columnPosition)
-		:
-		TextDocumentView(name),
-		fVerse(verse),
-		fOwner(owner),
-		fColumnPosition(columnPosition)
-	{
-	}
-
-	int Verse() const { return fVerse; }
-
-	virtual void MouseDown(BPoint where)
-	{
-		if (fOwner != NULL)
-			fOwner->_SetActiveColumn(fColumnPosition);
-		TextDocumentView::MouseDown(where);
-	}
-
-	// Focus lost is the normal "done editing this verse" signal --
-	// clicking anywhere else (including back into the read-only display
-	// right underneath this overlay, or a different verse/column
-	// entirely) moves focus away. NotesSaveListener has already saved
-	// every keystroke as it happened, so there's nothing left to flush
-	// here -- this is purely about the overlay's own teardown, which is
-	// deferred via a posted message rather than called directly (see
-	// PARALLEL_STOP_EDITING_NOTE_VERSE's own comment in constants.h --
-	// calling it synchronously here would delete this view while this
-	// very MakeFocus() override is still on the call stack).
-	virtual void MakeFocus(bool focus = true)
-	{
-		TextDocumentView::MakeFocus(focus);
-		if (fOwner == NULL)
-			return;
-		if (focus) {
-			fOwner->_SetActiveColumn(fColumnPosition);
-			return;
-		}
-		BMessage message(PARALLEL_STOP_EDITING_NOTE_VERSE);
-		message.AddInt32("position", fColumnPosition);
-		message.AddInt32("verse", fVerse);
-		BMessenger(fOwner).SendMessage(&message);
-	}
-
-private:
-	int					fVerse;
-	ParallelBibleView*	fOwner;
-	int32				fColumnPosition;
-};
-
-
-// A notes column's own READ-ONLY display -- a single BibleTextDocument
-// spanning the whole chapter (one paragraph per verse), shown exactly
-// the way a Bible/Commentary column's own document is shown in a
-// BibleColumnView -- same self-healing scrollbar, same VerseAligner
-// group, no per-verse view of its own (see the class comment on
-// NotesColumn for why going back to this after a whole-chapter-per-
-// column design was tried and discarded once already doesn't
-// reintroduce the bug that discarded it). Editing is disabled
-// (SetEditingEnabled(false), see _RebuildLayout()) -- there is no
-// caret/typing concern here at all; clicking a verse instead hands off
-// to a short-lived NoteVerseView overlay (see
-// ParallelBibleView::_StartEditingNoteVerse()).
+// A notes column's own view -- a single BibleTextDocument spanning the
+// whole chapter (one paragraph per verse), shown and edited exactly the
+// way a Bible/Commentary column's own document is shown in a
+// BibleColumnView: same self-healing scrollbar, same VerseAligner group,
+// one view and one TextEditor for the whole column no matter how long
+// the chapter is (see the class comment on NotesColumn).
+//
+// Editing is ON and stays on. Everything that makes typing here feel
+// like typing anywhere else -- the caret landing exactly where it was
+// clicked, drag-selection, arrow keys walking from one verse's note into
+// the next, a note's row growing as it is typed -- comes straight from
+// TextDocumentView, because there is no mode to switch and no separate
+// editor view to build, position or tear down.
+//
+// What this class adds on top is exactly one thing: it refuses the
+// keystrokes that would break the ONE PARAGRAPH PER VERSE invariant the
+// gutter, VerseAligner and note saving all read the document through
+// (see _WouldBreakVerseParagraphs()). Everything else is passed straight
+// to the base class.
 class NotesDisplayView : public TextDocumentView {
 public:
 	NotesDisplayView(const char* name, BibleTextDocument* document,
@@ -797,7 +777,12 @@ public:
 			fOwner->_ColumnScrolled(fPosition, where.y);
 	}
 
-	// See the identical override/rationale on BibleColumnView.
+	// See the identical override/rationale on BibleColumnView for the
+	// wheel case. B_PASTE is intercepted because the base class's own
+	// Paste() explicitly treats "\n" as a permitted character (see
+	// TextDocumentView::_IsAllowedChar()) -- pasting multi-line text
+	// would split one verse's note across several paragraphs and shift
+	// every following verse's note onto the wrong verse.
 	virtual void MessageReceived(BMessage* message)
 	{
 		if (message->what == B_MOUSE_WHEEL_CHANGED
@@ -805,20 +790,30 @@ public:
 			fOwner->_ForwardWheelToChain(fPosition, message);
 			return;
 		}
+		if (message->what == B_PASTE) {
+			_PasteSingleParagraph();
+			return;
+		}
 		TextDocumentView::MessageReceived(message);
 	}
 
-	// Every click starts editing whichever verse it landed in -- a
-	// read-only view has no caret/selection to place instead (see the
-	// class comment).
+	// Places the caret / starts a selection exactly where the click
+	// landed, like any other text view -- the base class already does
+	// all of it.
 	virtual void MouseDown(BPoint where)
 	{
 		if (fOwner != NULL)
 			fOwner->_SetActiveColumn(fPosition);
+		TextDocumentView::MouseDown(where);
+	}
 
-		int verse = _VerseAt(where);
-		if (verse > 0 && fOwner != NULL)
-			fOwner->_StartEditingNoteVerse(fPosition, verse);
+	// The one place the one-paragraph-per-verse invariant can be broken
+	// from, and therefore the one place it is enforced.
+	virtual void KeyDown(const char* bytes, int32 numBytes)
+	{
+		if (_WouldBreakVerseParagraphs(bytes, numBytes))
+			return;
+		TextDocumentView::KeyDown(bytes, numBytes);
 	}
 
 	// Verse numbers, painted in a left inset gutter (kNoteGutterWidth
@@ -838,30 +833,120 @@ public:
 	}
 
 private:
-	// Y-based hit test using the same GetParagraphBounds() (index-based,
-	// unambiguous by construction) the gutter itself already uses below
-	// -- a linear scan over every verse of the chapter, cheap even for
-	// Psalm 119's 176 on a single mouse click.
-	int _VerseAt(BPoint where)
+	// True if letting this keystroke through would change how many
+	// paragraphs the document has, or which verse a given paragraph
+	// belongs to -- in which case KeyDown() drops it.
+	//
+	// Only three things can do that, and all of them come down to the
+	// "\n" that terminates every notes paragraph (see BibleTextDocument::
+	// SetParagraphsEndWithNewline()):
+	//
+	//  - Return INSERTS one, splitting a verse's note in two.
+	//  - Backspace with the caret at a paragraph's start REMOVES the
+	//    PREVIOUS paragraph's one, merging that verse's note with this
+	//    one. (Backspace anywhere else, including just after a note's
+	//    last visible character, is an ordinary delete and is allowed.)
+	//  - Delete with the caret sitting just before this paragraph's own
+	//    "\n" removes it, merging with the FOLLOWING verse.
+	//
+	// A selection spanning more than one paragraph makes every
+	// destructive key a merge, so those are refused wholesale rather
+	// than silently rewritten -- selecting across verses and then typing
+	// is rare, and quietly deleting only part of what is visibly
+	// selected would be worse than doing nothing.
+	bool _WouldBreakVerseParagraphs(const char* bytes, int32 numBytes)
 	{
-		BString chapterKey = fDocument->Key();
-		if (chapterKey.IsEmpty())
-			return -1;
-		VerseKey chapterVerseKey;
-		SetVerseKeyLocale(chapterVerseKey);
-		chapterVerseKey.setText(chapterKey.String());
-		int verseCount = chapterVerseKey.getVerseMax();
+		if (!Editor().IsSet() || !Editor()->IsEditingEnabled())
+			return false;
 
-		for (int verse = 1; verse <= verseCount; verse++) {
-			int32 paragraphIndex = fDocument->ParagraphIndexForVerse(verse);
-			if (paragraphIndex < 0)
-				continue;
-			float y1, y2;
-			GetParagraphBounds(paragraphIndex, y1, y2);
-			if (where.y >= y1 && where.y < y2)
-				return verse;
+		// Same raw_char lookup TextDocumentView::KeyDown() itself does
+		// before handing the event to the editor, so this guard keys off
+		// exactly the value the editor will switch on.
+		int32 rawChar = 0;
+		if (Window() != NULL && Window()->CurrentMessage() != NULL)
+			Window()->CurrentMessage()->FindInt32("raw_char", &rawChar);
+		if (rawChar == 0 && numBytes > 0)
+			rawChar = (unsigned char)bytes[0];
+
+		if (rawChar == B_ENTER)
+			return true;
+
+		bool destructive = rawChar == B_BACKSPACE || rawChar == B_DELETE;
+
+		int32 start, end;
+		GetSelection(start, end);
+		if (start != end) {
+			// Typed text replaces the selection, so a multi-paragraph
+			// selection is dangerous for ANY text-producing key, not
+			// just the two explicitly destructive ones.
+			return _ParagraphIndexAt(start) != _ParagraphIndexAt(end);
 		}
-		return -1;
+
+		if (!destructive)
+			return false;
+
+		int32 caret = Editor()->CaretOffset();
+		int32 paragraphOffset = 0;
+		int32 index = fDocument->ParagraphIndexFor(caret, paragraphOffset);
+		if (index < 0)
+			return false;
+
+		if (rawChar == B_BACKSPACE)
+			return caret == paragraphOffset;
+
+		// B_DELETE: the last character of the paragraph is its "\n".
+		int32 length = fDocument->ParagraphAtIndex(index).Length();
+		return caret >= paragraphOffset + length - 1;
+	}
+
+	int32 _ParagraphIndexAt(int32 offset) const
+	{
+		int32 paragraphOffset = 0;
+		return fDocument->ParagraphIndexFor(offset, paragraphOffset);
+	}
+
+	// Pastes the clipboard's plain text into the current verse's note
+	// with every line break flattened to a space, so a multi-line
+	// clipboard can never turn one verse's paragraph into several (see
+	// MessageReceived()). Refuses outright if the selection it would
+	// replace spans verses, for the same reason KeyDown() does.
+	void _PasteSingleParagraph()
+	{
+		if (!Editor().IsSet() || !Editor()->IsEditingEnabled())
+			return;
+		if (be_clipboard == NULL || !be_clipboard->Lock())
+			return;
+
+		BString text;
+		BMessage* clip = be_clipboard->Data();
+		if (clip != NULL) {
+			const void* data;
+			ssize_t length;
+			if (clip->FindData("text/plain", B_MIME_TYPE, &data, &length)
+					== B_OK && length > 0) {
+				text.SetTo((const char*)data, length);
+			}
+		}
+		be_clipboard->Unlock();
+
+		if (text.IsEmpty())
+			return;
+		text.ReplaceAll('\n', ' ');
+		text.ReplaceAll('\r', ' ');
+		text.ReplaceAll('\t', ' ');
+
+		int32 start, end;
+		GetSelection(start, end);
+		if (start != end) {
+			if (_ParagraphIndexAt(start) != _ParagraphIndexAt(end))
+				return;
+			Editor()->Replace(start, end - start, text);
+		} else {
+			Editor()->Insert(Editor()->CaretOffset(), text);
+		}
+
+		Invalidate();
+		Relayout();
 	}
 
 	void _DrawGutter(BRect updateRect)
@@ -1085,6 +1170,7 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fActivePosition(-1),
 	fSuppressScrollPropagation(false),
 	fNotes(NULL),
+	fNotesRealignRunner(NULL),
 	fHeaderView(NULL),
 	fActiveSelectionColumn(NULL),
 	fSelectionLastEndVerse(-1),
@@ -1117,9 +1203,7 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 // wraps -- so the content view (a Bible column's TextDocumentView, or a
 // notes column's NotesDisplayView) is explicitly detached+deleted FIRST,
 // then its now-empty BScrollView, rather than letting ~BView() cascade-
-// delete a scroller's remaining children. Deleting a notes column's
-// display also cascades to its active NoteVerseView overlay child, if
-// any (see ~BView()) -- no separate teardown needed for that either.
+// delete a scroller's remaining children.
 ParallelBibleView::~ParallelBibleView()
 {
 	for (size_t i = 0; i < fTextViews.size(); i++) {
@@ -1148,6 +1232,9 @@ ParallelBibleView::~ParallelBibleView()
 	}
 
 	delete fNotes;
+	// Stops any still-pending debounced realign (see NoteTextEdited())
+	// from being delivered to a half-destroyed view.
+	delete fNotesRealignRunner;
 
 	// A no-op if fHeaderView was already destroyed by its adoptive
 	// parent's own teardown (see ParallelHeaderView above) -- in that
@@ -1420,26 +1507,17 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			break;
 		}
 
-		case PARALLEL_STOP_EDITING_NOTE_VERSE:
+		case PARALLEL_NOTES_TEXT_CHANGED:
 		{
-			// Posted by NoteVerseView::MakeFocus(false) -- see its own
-			// comment and PARALLEL_STOP_EDITING_NOTE_VERSE's in
-			// constants.h for why this is deferred instead of called
-			// directly. The verse check guards against a stale message
-			// arriving after a NEWER edit session already started for a
-			// DIFFERENT verse in the same column (e.g. two clicks in
-			// quick succession) -- only tear down if this is still the
-			// verse actually being edited.
-			int32 position, verse;
-			if (message->FindInt32("position", &position) == B_OK
-				&& message->FindInt32("verse", &verse) == B_OK) {
-				int32 notesIndex = _NotesIndexForPosition(position);
-				if (notesIndex >= 0
-					&& (size_t)notesIndex < fNotesColumns.size()
-					&& fNotesColumns[notesIndex].editingVerse == verse) {
-					_StopEditingNoteVerse(position);
-				}
-			}
+			// The debounce timer armed by NoteTextEdited() has expired --
+			// typing has paused, so it's worth paying for a realign to
+			// bring the edited note's row back into line with the Bible
+			// columns beside it. Disarm first: the runner is one-shot,
+			// but leaving it around would make the next NoteTextEdited()
+			// delete a spent object for no reason.
+			delete fNotesRealignRunner;
+			fNotesRealignRunner = NULL;
+			_Realign();
 			break;
 		}
 
@@ -1579,8 +1657,6 @@ ParallelBibleView::InsertNotesColumn(int32 afterPosition)
 	NotesColumn notes;
 	notes.document = _BuildNotesDocument(afterPosition);
 	notes.view = NULL;
-	notes.editor = NULL;
-	notes.editingVerse = -1;
 	int32 notesIndex = _NotesIndexForPosition(afterPosition + 1);
 	fNotesColumns.insert(fNotesColumns.begin() + notesIndex, notes);
 
@@ -1745,11 +1821,8 @@ ParallelBibleView::SetShowCrossReferences(bool show)
 	fShowCrossReferences = show;
 	for (size_t i = 0; i < fDocuments.size(); i++)
 		fDocuments[i]->SetShowCrossReferences(show);
-	for (size_t i = 0; i < fNotesColumns.size(); i++) {
+	for (size_t i = 0; i < fNotesColumns.size(); i++)
 		fNotesColumns[i].document->SetShowCrossReferences(show);
-		if (fNotesColumns[i].editorDocument.IsSet())
-			fNotesColumns[i].editorDocument->SetShowCrossReferences(show);
-	}
 	_Realign();
 	return B_OK;
 }
@@ -1758,19 +1831,16 @@ ParallelBibleView::SetShowCrossReferences(bool show)
 // Applies to every current Bible/Commentary column, and is remembered
 // (fBaseFont) so columns added afterward (see _SetColumnToBible()) start
 // out matching it too -- same rationale as SetShowVerseNumbers() above.
-// Applies to notes columns' own document (and active overlay editor, if
-// any) too, same reasoning as SetShowCrossReferences() above.
+// Applies to notes columns' own document too, same reasoning as
+// SetShowCrossReferences() above.
 status_t
 ParallelBibleView::SetBaseFont(const BFont& font)
 {
 	fBaseFont = font;
 	for (size_t i = 0; i < fDocuments.size(); i++)
 		fDocuments[i]->SetBaseFont(font);
-	for (size_t i = 0; i < fNotesColumns.size(); i++) {
+	for (size_t i = 0; i < fNotesColumns.size(); i++)
 		fNotesColumns[i].document->SetBaseFont(font);
-		if (fNotesColumns[i].editorDocument.IsSet())
-			fNotesColumns[i].editorDocument->SetBaseFont(font);
-	}
 	_Realign();
 	return B_OK;
 }
@@ -2257,127 +2327,38 @@ ParallelBibleView::_BuildNotesDocument(int32 seedAnchorPosition)
 	// default, right for Bible/Commentary columns), so every verse still
 	// has a row to click into -- see the class comment.
 	document->SetSkipEmptyVerses(false);
-	// No TextListener here -- this document is never edited directly
-	// (NotesDisplayView has SetEditingEnabled(false), see
-	// _RebuildLayout()), only ever rebuilt wholesale via SetKey() to
-	// reflect what the short-lived per-verse overlay editor already
-	// saved on its own (see _StopEditingNoteVerse()/NotesSaveListener).
+	// This document IS edited directly (see NotesDisplayView), so its
+	// paragraphs need the explicit terminator the editing engine assumes
+	// -- see BibleTextDocument::SetParagraphsEndWithNewline() for what
+	// silently breaks without it.
+	document->SetParagraphsEndWithNewline(true);
+	// Attached once and left for the document's whole lifetime -- see the
+	// class comment on NotesSaveListener for why a rebuild never detaches
+	// it and never looks like a user edit.
+	document->AddListener(TextListenerRef(
+		new NotesSaveListener(document.Get(), fNotes, this), true));
 	return document;
 }
 
 
-// See the class comment on NotesColumn: starts editing `verse` of the
-// notes column at `position` by building a single-verse BibleTextDocument
-// (see BibleTextDocument::SetSingleVerse()) and a NoteVerseView overlay
-// positioned exactly over that verse's own row in the read-only
-// NotesDisplayView underneath, then focuses it.
+// Reports that the user has just typed in a notes column (called by
+// NotesSaveListener, which has already written the edit through to the
+// SWORD module). Arms -- or re-arms, by replacing the pending one, which
+// restarts its interval -- a one-shot timer instead of realigning now:
+// _Realign() re-measures every verse of every column in the chain, which
+// is fine once typing pauses and hopeless per keystroke.
 void
-ParallelBibleView::_StartEditingNoteVerse(int32 position, int verse)
+ParallelBibleView::NoteTextEdited()
 {
-	int32 notesIndex = _NotesIndexForPosition(position);
-	if (notesIndex < 0 || (size_t)notesIndex >= fNotesColumns.size())
-		return;
-	NotesColumn& notes = fNotesColumns[notesIndex];
-	if (notes.view == NULL || fNotes == NULL)
+	// BMessageRunner needs a valid BMessenger, which needs this view to
+	// be attached to a window. Nothing to realign before then anyway.
+	if (Window() == NULL)
 		return;
 
-	if (notes.editingVerse == verse)
-		return; // already editing this exact verse -- nothing to do
-	if (notes.editingVerse >= 0)
-		_StopEditingNoteVerse(position); // editing a DIFFERENT verse
-
-	const char* key = notes.document->Key();
-	if (key == NULL || key[0] == '\0')
-		return;
-
-	BReference<BibleTextDocument> document(
-		new BibleTextDocument(fNotes->Module(), verse), true);
-	document->SetKey(key);
-	document->SetShowVerseNumbers(false);
-	document->SetShowStrongsNumbers(false);
-	document->SetShowCrossReferences(fShowCrossReferences);
-	document->SetBaseFont(fBaseFont);
-	document->SetSkipEmptyVerses(false);
-	document->AddListener(TextListenerRef(
-		new NotesSaveListener(document.Get(), fNotes), true));
-
-	NoteVerseView* editor = new NoteVerseView("noteVerseEditor", verse,
-		this, position);
-	editor->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
-	editor->SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
-	editor->SetEditingEnabled(true);
-	editor->SetTextDocument(document);
-
-	float y1, y2;
-	int32 paragraphIndex = notes.document->ParagraphIndexForVerse(verse);
-	notes.view->GetParagraphBounds(paragraphIndex, y1, y2);
-	float width = std::max(0.0f, notes.view->Bounds().Width()
-		- kNoteGutterWidth);
-	editor->MoveTo(kNoteGutterWidth, y1);
-	editor->ResizeTo(width, y2 - y1);
-
-	notes.view->AddChild(editor);
-	notes.editorDocument = document;
-	notes.editor = editor;
-	notes.editingVerse = verse;
-	editor->MakeFocus(true);
-}
-
-
-// See _StartEditingNoteVerse()'s own comment.
-void
-ParallelBibleView::_StopEditingNoteVerse(int32 position)
-{
-	int32 notesIndex = _NotesIndexForPosition(position);
-	if (notesIndex < 0 || (size_t)notesIndex >= fNotesColumns.size())
-		return;
-	NotesColumn& notes = fNotesColumns[notesIndex];
-	if (notes.editor == NULL)
-		return;
-
-	notes.editor->RemoveSelf();
-	delete notes.editor;
-	notes.editor = NULL;
-	notes.editorDocument = BReference<BibleTextDocument>();
-	notes.editingVerse = -1;
-
-	// Refresh the read-only display so it shows whatever the just-
-	// removed overlay editor saved (via NotesSaveListener) while it was
-	// alive -- same SetKey() call SetKey()/NextChapter()/PrevChapter()
-	// already use to (re)load this column's document.
-	if (notes.document.IsSet()) {
-		const char* key = notes.document->Key();
-		if (key != NULL && key[0] != '\0')
-			notes.document->SetKey(key);
-	}
-	if (notes.view != NULL) {
-		notes.view->Relayout();
-		notes.view->Invalidate();
-	}
-}
-
-
-void
-ParallelBibleView::_RepositionNoteEditor(int32 position)
-{
-	int32 notesIndex = _NotesIndexForPosition(position);
-	if (notesIndex < 0 || (size_t)notesIndex >= fNotesColumns.size())
-		return;
-	NotesColumn& notes = fNotesColumns[notesIndex];
-	if (notes.editor == NULL || notes.view == NULL)
-		return;
-
-	float y1, y2;
-	int32 paragraphIndex
-		= notes.document->ParagraphIndexForVerse(notes.editingVerse);
-	if (paragraphIndex < 0)
-		return;
-	notes.view->GetParagraphBounds(paragraphIndex, y1, y2);
-	float width = std::max(0.0f, notes.view->Bounds().Width()
-		- kNoteGutterWidth);
-	notes.editor->MoveTo(kNoteGutterWidth, y1);
-	notes.editor->ResizeTo(width, y2 - y1);
-	notes.editor->Relayout();
+	delete fNotesRealignRunner;
+	BMessage message(PARALLEL_NOTES_TEXT_CHANGED);
+	fNotesRealignRunner = new BMessageRunner(BMessenger(this), &message,
+		kNotesRealignDelay, 1);
 }
 
 
@@ -2389,11 +2370,8 @@ ParallelBibleView::_TearDownNotesColumnView(NotesColumn& notes)
 
 	BScrollView* scroller = dynamic_cast<BScrollView*>(notes.view->Parent());
 	notes.view->RemoveSelf();
-	delete notes.view; // cascades: deletes the active overlay editor, if any
+	delete notes.view;
 	notes.view = NULL;
-	notes.editor = NULL;
-	notes.editorDocument = BReference<BibleTextDocument>();
-	notes.editingVerse = -1;
 
 	if (scroller != NULL) {
 		scroller->RemoveSelf();
@@ -2423,8 +2401,6 @@ ParallelBibleView::_SetColumnToNotes(int32 position)
 	NotesColumn notes;
 	notes.document = _BuildNotesDocument(position);
 	notes.view = NULL;
-	notes.editor = NULL;
-	notes.editingVerse = -1;
 
 	if (position < 0) {
 		fColumnOrder.push_back(COLUMN_NOTES);
@@ -2493,11 +2469,6 @@ ParallelBibleView::SetKey(const char* key)
 		if (fColumnOrder[i] != COLUMN_NOTES)
 			continue;
 		NotesColumn& notes = fNotesColumns[_NotesIndexForPosition(i)];
-		// A verse mid-edit in the OLD chapter has nothing to do with the
-		// new one -- stop it first rather than leaving an overlay
-		// pointed at a now-meaningless verse number.
-		if (notes.editingVerse >= 0)
-			_StopEditingNoteVerse(i);
 		notes.document->SetKey(key);
 	}
 	bigtime_t perfAfterNotes = system_time();
@@ -2805,8 +2776,6 @@ ParallelBibleView::NextChapter()
 			if (fColumnOrder[i] != COLUMN_NOTES)
 				continue;
 			NotesColumn& notes = fNotesColumns[_NotesIndexForPosition(i)];
-			if (notes.editingVerse >= 0)
-				_StopEditingNoteVerse(i);
 			notes.document->SetKey(chainKey.String());
 		}
 	}
@@ -2843,8 +2812,6 @@ ParallelBibleView::PrevChapter()
 			if (fColumnOrder[i] != COLUMN_NOTES)
 				continue;
 			NotesColumn& notes = fNotesColumns[_NotesIndexForPosition(i)];
-			if (notes.editingVerse >= 0)
-				_StopEditingNoteVerse(i);
 			notes.document->SetKey(chainKey.String());
 		}
 	}
@@ -2939,11 +2906,13 @@ ParallelBibleView::_RebuildLayout()
 			// document text itself starts to the right of it.
 			view->SetInsets(kBibleColumnInset + kNoteGutterWidth,
 				kBibleColumnInset, kBibleColumnInset, kBibleColumnInset);
-			// Read-only -- clicking a verse hands off to a short-lived
-			// per-verse overlay editor instead (see NotesDisplayView::
-			// MouseDown()/ParallelBibleView::_StartEditingNoteVerse()).
-			view->SetEditingEnabled(false);
+			// Directly editable, always -- there is no read-only mode and
+			// no separate editor view (see NotesDisplayView). The document
+			// has to be in place first: SetEditingEnabled() reaches the
+			// view's editor, but the editor only has something to edit
+			// once SetTextDocument() has handed it the document.
 			view->SetTextDocument(notes.document);
+			view->SetEditingEnabled(true);
 			view->SetPosition((int32)i);
 			notes.view = view;
 			BScrollView* scroller = new BScrollView("columnScroll",
@@ -3177,14 +3146,6 @@ ParallelBibleView::_Realign()
 			fNotesColumns[i].view->Invalidate();
 		}
 	}
-	// _RepositionNoteEditor() takes a COLUMN position (an index into
-	// fColumnOrder), not a fNotesColumns index -- iterate fColumnOrder
-	// itself to find the right one for each notes column's active
-	// overlay editor, if any.
-	for (int32 i = 0; (size_t)i < fColumnOrder.size(); i++) {
-		if (fColumnOrder[i] == COLUMN_NOTES)
-			_RepositionNoteEditor(i);
-	}
 }
 
 
@@ -3389,7 +3350,7 @@ ParallelBibleView::_UpdateScrollBars()
 // The height of the given verse's row, used by scroll-target calculation
 // (_ChainVerseY(), for scrolling a chain to a specific verse) and the
 // notes click-to-edit overlay's own positioning
-// (_StartEditingNoteVerse()/_RepositionNoteEditor()). Reads it back from
+// Reads it back from
 // the FIRST column (Bible/Commentary or notes -- see _Realign(), they
 // all share the same VerseAligner group) of the chain containing
 // chainAnchorPosition that has this verse's own paragraph -- which,

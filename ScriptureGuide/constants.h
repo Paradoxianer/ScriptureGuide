@@ -79,17 +79,14 @@ const uint32 PARALLEL_INSERT_NOTES		= 'PVin';
 // its own book/chapter/verse toolbar fields to whichever chain is now
 // active, without re-navigating it (contrast SG_BIBLE, which does).
 const uint32 PARALLEL_ACTIVE_COLUMN_CHANGED = 'PVca';
-// Posted by NoteVerseView::MakeFocus(false) (focus lost -- the normal
-// "done editing this verse" signal) instead of calling
-// ParallelBibleView::_StopEditingNoteVerse() directly, which would tear
-// down (RemoveSelf()+delete) the very NoteVerseView whose own MakeFocus()
-// override is still on the call stack at that point -- same deferred-
-// dispatch reasoning already used for PARALLEL_SELECT_MODULE etc. (see
-// ParallelBibleView::MessageReceived()'s own comment on the BMenuField
-// thread-deadlock hazard that pattern avoids; this one avoids a
-// self-delete-mid-virtual-call hazard instead, not a deadlock, but the
-// fix is the same shape: let the current dispatch finish first).
-const uint32 PARALLEL_STOP_EDITING_NOTE_VERSE = 'PVse';
+// Posted (debounced) by NotesSaveListener when the user has typed in a
+// notes column, so ParallelBibleView can re-run _Realign() and let the
+// edited note's new height push its verse's row back into line with the
+// Bible columns beside it. Debounced rather than immediate because
+// _Realign() re-measures every verse of every column in the chain --
+// cheap enough to run when typing pauses, far too expensive per
+// keystroke (see ParallelBibleView::NoteTextEdited()).
+const uint32 PARALLEL_NOTES_TEXT_CHANGED = 'PVnt';
 
 const uint32 MENU_HELP_LOGOS			= 'MHlo';
 const uint32 MENU_HELP_HOWTO			= 'MHho';

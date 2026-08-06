@@ -24,44 +24,41 @@ class BButton;
 class BFont;
 class BMenu;
 class BMenuField;
+class BMessageRunner;
 class BPopUpMenu;
 class BScrollView;
 class BibleColumnView;
 class NotesDisplayView;
-class NoteVerseView;
 class ParallelHeaderView;
 
 
-// A notes column's own display -- a single BibleTextDocument spanning
-// the whole chapter (one paragraph per verse, SetSkipEmptyVerses(false)
-// -- see _BuildNotesDocument()), shown READ-ONLY in a NotesDisplayView
-// exactly the way a Bible/Commentary column's own document is shown in
-// a BibleColumnView (same self-healing scrollbar, same VerseAligner
-// group, same everything -- see the class comment on why going back to
-// this after a whole-chapter-per-column design was tried and discarded
-// once already this project doesn't reintroduce the bug that discarding
-// it fixed). view is only NULL momentarily during a rebuild.
+// A notes column: one BibleTextDocument spanning the whole chapter (one
+// paragraph per verse, SetSkipEmptyVerses(false) -- see
+// _BuildNotesDocument()), shown DIRECTLY EDITABLE in a NotesDisplayView,
+// exactly the way a Bible/Commentary column's own document is shown in a
+// BibleColumnView: same self-healing scrollbar, same VerseAligner group,
+// one view and one TextEditor per column no matter how many verses the
+// chapter has. view is only NULL momentarily during a rebuild.
 //
-// Clicking a verse in that read-only display doesn't edit it directly
-// -- it hands off to a single, short-lived, per-verse editor (see
-// _StartEditingNoteVerse()/_StopEditingNoteVerse()): editorDocument is a
-// SEPARATE BibleTextDocument scoped to exactly that one verse (see
-// BibleTextDocument::SetSingleVerse()), shown in editor, an overlay
-// NoteVerseView positioned exactly over that verse's row in the
-// read-only display underneath. editingVerse is which verse that is,
-// -1 when nothing in this column is currently being edited (the common
-// case -- at most one verse of one notes column is ever being typed
-// into at a time). This is what keeps a long chapter (Psalm 119, 176
-// verses) cheap: only ONE real TextEditor ever exists for a notes
-// column at once, no matter how many verses it has, instead of one per
-// verse permanently alive whether or not it's ever touched.
+// Editing happens in place -- there is no separate editor view, no
+// read-only/edit mode split, and nothing is built or torn down when the
+// user starts or stops typing. That is what makes clicking place the
+// caret exactly where it was clicked, selection span verses, the arrow
+// keys walk from one verse's note into the next, and a growing note grow
+// its row as it is typed, all of it inherited from TextDocumentView
+// rather than reimplemented.
+//
+// The invariant everything else here depends on -- ONE PARAGRAPH PER
+// VERSE, in verse order -- is what makes that safe: it is the only thing
+// tying a flat character offset back to a verse number, and it is
+// enforced at the single point where it can be broken, namely
+// NotesDisplayView::KeyDown()/MessageReceived() refusing the specific
+// keystrokes that would split or merge a paragraph. See
+// BibleTextDocument::SetParagraphsEndWithNewline() for the document-side
+// half of the same guarantee.
 struct NotesColumn {
 	BReference<BibleTextDocument>	document;
 	NotesDisplayView*				view;
-
-	BReference<BibleTextDocument>	editorDocument;
-	NoteVerseView*					editor;
-	int								editingVerse;
 };
 
 
@@ -442,43 +439,18 @@ public:
 				// back out via _ColumnScrolled() above.
 				void				_ForwardWheelToChain(int32 position,
 										BMessage* message);
-				// Called by NotesDisplayView/NoteVerseView (unrelated
-				// classes, not friends -- same reasoning as
-				// _ColumnScrolled() etc. above) -- not meant for other
-				// callers. See the class comment on NotesColumn for the
-				// click-to-edit design these implement.
+				// Called by NotesSaveListener (an unrelated class, not a
+				// friend -- same reasoning as _ColumnScrolled() etc.
+				// above) -- not meant for other callers.
 				//
-				// Starts (or, if some OTHER verse in this column is
-				// already being edited, first stops that one -- see
-				// _StopEditingNoteVerse()) editing `verse` of the notes
-				// column at `position`: builds a single-verse
-				// BibleTextDocument (see BibleTextDocument::
-				// SetSingleVerse()) and a NoteVerseView overlay
-				// positioned exactly over that verse's own row in the
-				// read-only display underneath (see _RowHeight()/
-				// _ChainVerseY()), and focuses it. Called by
-				// NotesDisplayView::MouseDown().
-				void				_StartEditingNoteVerse(int32 position,
-										int verse);
-				// Undoes _StartEditingNoteVerse(): tears down the overlay
-				// editor and its document (NotesSaveListener has already
-				// saved every edit as it happened -- nothing left to
-				// flush here) and refreshes the read-only display's own
-				// document so it reflects whatever was just typed.
-				// Called by NoteVerseView::MakeFocus(false) (focus
-				// lost -- the normal "done editing this verse" signal)
-				// and defensively before anything else tears down or
-				// rebuilds this column (_RebuildLayout(), RemoveColumn(),
-				// _SetColumnToBible()) so an overlay never outlives the
-				// column underneath it.
-				void				_StopEditingNoteVerse(int32 position);
-				// Repositions/resizes the active overlay editor (if any)
-				// for the notes column at `position` to match its
-				// verse's current row in the read-only display -- called
-				// from _Realign() alongside everything else, same reason
-				// a font/width change needs this: the row it sits over
-				// may have just moved.
-				void				_RepositionNoteEditor(int32 position);
+				// Reports that the user has just typed in a notes column,
+				// so the edited note's new height can be pushed back into
+				// alignment with the Bible columns beside it. Only ARMS a
+				// debounce timer (see PARALLEL_NOTES_TEXT_CHANGED); the
+				// actual _Realign() runs once typing pauses, because it
+				// re-measures every verse of every column in the chain
+				// and is far too expensive to run per keystroke.
+				void				NoteTextEdited();
 
 private:
 				friend class ParallelHeaderView;
@@ -560,9 +532,8 @@ private:
 				void				_PositionColumns();
 				void				_UpdateScrollBars();
 				// The height of the given verse's row within the chain
-				// containing chainAnchorPosition, shared by scroll-target
-				// calculation (_ChainVerseY()) and the notes click-to-edit
-				// overlay's own positioning (_StartEditingNoteVerse()).
+				// containing chainAnchorPosition, used by scroll-target
+				// calculation (_ChainVerseY()).
 				// Reads it back from the chain's first Bible OR notes
 				// column that has this verse (post-Align(), so already
 				// the tallest column's own height for that verse).
@@ -743,6 +714,15 @@ private:
 				// One entry per COLUMN_NOTES slot in fColumnOrder, same
 				// left-to-right order.
 				std::vector<NotesColumn>	fNotesColumns;
+
+				// Debounce timer armed by NoteTextEdited() on every
+				// keystroke in a notes column and re-armed (by being
+				// deleted and recreated, which restarts its interval)
+				// on the next one, so the _Realign() it eventually
+				// triggers runs once after typing stops rather than
+				// once per character. NULL whenever no realign is
+				// pending.
+				BMessageRunner*		fNotesRealignRunner;
 
 				BView*				fHeaderView;
 

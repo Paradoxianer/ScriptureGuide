@@ -105,6 +105,18 @@ public:
 			void				Copy(BClipboard* clipboard);
 			void				Paste(BClipboard* clipboard);
 
+protected:
+				// This view's own editor (always set -- the constructor
+				// installs a default one). Exposed so a subclass can
+				// inspect the caret/selection and run its own edits
+				// through it, which a subclass that has to enforce a
+				// document-structure invariant needs before deciding
+				// whether to let the base class's KeyDown()/Paste() run
+				// at all (see NotesDisplayView, which keeps exactly one
+				// paragraph per verse).
+			const TextEditorRef& Editor() const
+									{ return fTextEditor; }
+
 private:
 			float				_TextLayoutWidth(float viewWidth) const;
 

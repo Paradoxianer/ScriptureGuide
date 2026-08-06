@@ -65,7 +65,8 @@ BibleTextDocument::BibleTextDocument(SWModule* module, int singleVerse)
 	fSkipEmptyVerses(true),
 	fShowStrongsNumbers(true),
 	fShowCrossReferences(true),
-	fSingleVerse(singleVerse)
+	fSingleVerse(singleVerse),
+	fParagraphsEndWithNewline(false)
 {
 	fVerseNumberStyle.SetBold(true);
 	fParagraphStyle.SetJustify(true);
@@ -362,6 +363,17 @@ BibleTextDocument::SetSingleVerse(int verse)
 		return;
 
 	fSingleVerse = verse;
+	_Rebuild();
+}
+
+
+void
+BibleTextDocument::SetParagraphsEndWithNewline(bool enabled)
+{
+	if (fParagraphsEndWithNewline == enabled)
+		return;
+
+	fParagraphsEndWithNewline = enabled;
 	_Rebuild();
 }
 
@@ -738,6 +750,15 @@ BibleTextDocument::_Rebuild()
 				paragraph.Append(TextSpan(after, fVerseTextStyle));
 			}
 		}
+
+		// Appended last, after every styled/linked span above, so none of
+		// the offsets those recorded need to account for it -- see the
+		// header comment on SetParagraphsEndWithNewline() for why an
+		// editable document needs the paragraph terminator to physically
+		// exist. paragraph.Length() below picks it up, so documentOffset
+		// stays consistent with the document's own flat offsets.
+		if (fParagraphsEndWithNewline)
+			paragraph.Append(TextSpan("\n", fVerseTextStyle));
 
 		Append(paragraph);
 		fParagraphVerse.push_back(verse);

@@ -117,24 +117,38 @@ public:
 			// the only paragraph the document ever has. 0 (the default)
 			// means the normal whole-chapter behavior every other caller
 			// relies on is unchanged.
-			//
-			// Added for the notes column (see NotesColumn/NoteVerseView in
-			// ParallelBibleView.cpp): a single BibleTextDocument shared
-			// across a whole chapter's worth of verses -- one paragraph
-			// each -- puts a paragraph boundary between every adjacent
-			// pair of verses, and a flat character offset exactly AT that
-			// boundary is inherently ambiguous (simultaneously "end of
-			// verse N" and "start of verse N+1"). That ambiguity
-			// independently broke caret placement, the verse-number
-			// gutter, and typed-text insertion at different times
-			// (confirmed live, not just theoretical) -- three different
-			// consumers each needing their own resolution of the same
-			// inherently ambiguous position. One BibleTextDocument per
-			// verse, via this, has no paragraph boundary inside it at all
-			// to be ambiguous about.
 			void				SetSingleVerse(int verse);
 			int					SingleVerse() const
 									{ return fSingleVerse; }
+
+			// When true, every verse's paragraph ends with an explicit
+			// "\n" span. Off by default: a Bible/Commentary column's
+			// document is never edited, and its flat character offsets
+			// feed verse-range lookups and Strong's/cross-reference
+			// links, so it stays free of characters that aren't in the
+			// module's own text.
+			//
+			// The notes column needs it on, because the vendored
+			// TextDocument editing engine assumes it. TextDocument::
+			// _Remove() decides "the line break between two paragraphs
+			// was just removed, merge them" from the removal ending
+			// exactly at a paragraph's end (see its own comment there).
+			// In a document whose paragraphs carry no trailing "\n", that
+			// condition is true whenever the user deletes a paragraph's
+			// LAST CHARACTER -- so backspacing away the final letter of a
+			// note silently merged that verse's paragraph with the next
+			// verse's, destroying the one-paragraph-per-verse invariant
+			// the gutter, VerseAligner and note saving all depend on.
+			// With the "\n" present, that same condition means what the
+			// engine intended, and the only offsets that can merge two
+			// paragraphs are the "\n" itself -- which NotesDisplayView's
+			// KeyDown() guard blocks outright.
+			//
+			// ParagraphLayout treats a trailing "\n" as ending the line
+			// it is already on and adds no extra empty line after it
+			// (verified in its _Init() line loop), so this costs no
+			// visible height.
+			void				SetParagraphsEndWithNewline(bool enabled);
 
 			// -1 if the verse is not part of the currently loaded chapter
 			int32				ParagraphIndexForVerse(int verse) const;
@@ -235,6 +249,7 @@ private:
 			bool				fShowStrongsNumbers;
 			bool				fShowCrossReferences;
 			int					fSingleVerse;
+			bool				fParagraphsEndWithNewline;
 
 			// paragraph index -> verse number, rebuilt in _Rebuild()
 			std::vector<int>	fParagraphVerse;

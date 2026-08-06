@@ -301,6 +301,70 @@ TestNotesDocumentOneParagraphPerVerse(SWModule* notesModule)
 }
 
 
+// Regression test for the bug that made a directly-editable notes column
+// impossible before BibleTextDocument::SetParagraphsEndWithNewline()
+// existed (see its own header comment): TextDocument::_Remove() merges
+// two paragraphs when a removal ends exactly at a paragraph's end,
+// reading that as "the line break between them was deleted". In a
+// document whose paragraphs carried no trailing "\n", that condition was
+// true whenever the user backspaced away a note's LAST CHARACTER -- so
+// clearing a note silently swallowed the next verse's note into it,
+// destroying the one-paragraph-per-verse invariant the gutter,
+// VerseAligner and note saving all depend on.
+//
+// Both halves are asserted, because they are what places
+// NotesDisplayView's KeyDown() guard where it is: deleting an ordinary
+// character must NOT merge (that keystroke has to stay allowed), and
+// deleting the terminator itself must (that is the one offset the guard
+// actually has to refuse).
+static void
+TestNotesParagraphTerminatorProtectsVerseBoundary(SWModule* notesModule)
+{
+	const char* name = "BibleTextDocument: deleting a note's last character "
+		"doesn't merge it with the next verse";
+	if (notesModule == NULL) {
+		Skip(name, "personal notes module unavailable");
+		return;
+	}
+
+	BibleTextDocument document(notesModule);
+	document.SetShowVerseNumbers(false);
+	document.SetSkipEmptyVerses(false);
+	document.SetParagraphsEndWithNewline(true);
+	document.SetKey("Gen 1:1");
+
+	int32 paragraphsBefore = document.CountParagraphs();
+	if (paragraphsBefore < 2) {
+		Skip(name, "chapter has too few verses to test a boundary");
+		return;
+	}
+
+	// Verse 1 is paragraph 0 (SetSkipEmptyVerses(false), so every verse
+	// has one). Give it known content so the offsets below don't depend
+	// on whatever note text happens to be stored.
+	document.Replace(0, 0, "Hallo");
+	int32 length = document.ParagraphAtIndex(0).Length();
+	int32 verse2Before = document.ParagraphIndexForVerse(2);
+
+	// length - 1 is the "\n"; length - 2 is the last VISIBLE character,
+	// which is where the caret sits after typing and what Backspace
+	// there removes.
+	document.Remove(length - 2, 1);
+	bool ordinaryDeleteKeptParagraphs
+		= document.CountParagraphs() == paragraphsBefore
+			&& document.ParagraphIndexForVerse(2) == verse2Before;
+
+	// Now the terminator itself -- the offset NotesDisplayView::KeyDown()
+	// refuses Backspace/Delete at.
+	document.Remove(document.ParagraphAtIndex(0).Length() - 1, 1);
+	bool terminatorDeleteMergedParagraphs
+		= document.CountParagraphs() == paragraphsBefore - 1;
+
+	Check(ordinaryDeleteKeptParagraphs && terminatorDeleteMergedParagraphs,
+		name);
+}
+
+
 // Regression test for the notes column's per-verse editor redesign (see
 // NoteVerseView/NotesColumn in ParallelBibleView.cpp): a document with
 // SetSingleVerse(N) set must render ONLY that one verse -- exactly one
@@ -632,6 +696,7 @@ main()
 	TestEmptyNotesDocumentRebuildIsIdempotent(notesModule);
 	TestListenerSurvivesRepeatedRebuilds(notesModule);
 	TestNotesDocumentOneParagraphPerVerse(notesModule);
+	TestNotesParagraphTerminatorProtectsVerseBoundary(notesModule);
 	TestSingleVerseRendersExactlyOneVerse(&notes);
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
