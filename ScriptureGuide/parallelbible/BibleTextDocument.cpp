@@ -10,6 +10,7 @@
 
 #include <Language.h>
 #include <Locale.h>
+#include <OS.h>
 #include <String.h>
 
 #include <Catalog.h>
@@ -56,14 +57,15 @@ SetVerseKeyLocale(VerseKey& key)
 }
 
 
-BibleTextDocument::BibleTextDocument(SWModule* module)
+BibleTextDocument::BibleTextDocument(SWModule* module, int singleVerse)
 	:
 	TextDocument(),
 	fModule(module),
 	fShowVerseNumbers(true),
 	fSkipEmptyVerses(true),
 	fShowStrongsNumbers(true),
-	fShowCrossReferences(true)
+	fShowCrossReferences(true),
+	fSingleVerse(singleVerse)
 {
 	fVerseNumberStyle.SetBold(true);
 	fParagraphStyle.SetJustify(true);
@@ -353,6 +355,17 @@ BibleTextDocument::SetSkipEmptyVerses(bool skip)
 }
 
 
+void
+BibleTextDocument::SetSingleVerse(int verse)
+{
+	if (fSingleVerse == verse)
+		return;
+
+	fSingleVerse = verse;
+	_Rebuild();
+}
+
+
 int32
 BibleTextDocument::ParagraphIndexForVerse(int verse) const
 {
@@ -448,6 +461,8 @@ BibleTextDocument::SetVerseSpacing(const std::map<int, float>& spacing)
 void
 BibleTextDocument::_Rebuild()
 {
+	bigtime_t rebuildStart = system_time();
+
 	// Remove(0, Length()) -- clearing by replacing the entire document
 	// with empty text -- reliably leaves exactly one empty placeholder
 	// paragraph behind at index 0 instead of reaching zero paragraphs
@@ -520,6 +535,15 @@ BibleTextDocument::_Rebuild()
 	iterKey.setText(savedKeyText.String());
 	int verseCount = iterKey.getVerseMax();
 
+	// fSingleVerse's own book/chapter still comes from fKeyText above --
+	// only which verse(s) of THAT chapter get rendered narrows down, to
+	// exactly one -- see the header comment on why.
+	int firstVerse = 1;
+	if (fSingleVerse > 0) {
+		firstVerse = fSingleVerse;
+		verseCount = fSingleVerse;
+	}
+
 	// Commentary modules commonly link one entry across a whole verse
 	// range (e.g. a single comment discussing verses 13-20) rather than
 	// storing separate text per verse; renderText() then returns the
@@ -540,7 +564,7 @@ BibleTextDocument::_Rebuild()
 	// document-wide one.
 	int32 documentOffset = 0;
 
-	for (int verse = 1; verse <= verseCount; verse++) {
+	for (int verse = firstVerse; verse <= verseCount; verse++) {
 		iterKey.setVerse(verse);
 		fModule->setKey(iterKey);
 
@@ -701,4 +725,8 @@ BibleTextDocument::_Rebuild()
 	}
 
 	_SetModuleKey(savedKey);
+
+	fprintf(stderr, "[SG-PERF] BibleTextDocument::_Rebuild this=%p "
+		"verses=%d elapsed=%.2fms\n", (void*)this, verseCount,
+		(system_time() - rebuildStart) / 1000.0);
 }

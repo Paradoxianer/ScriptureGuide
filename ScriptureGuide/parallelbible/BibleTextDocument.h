@@ -43,8 +43,22 @@ public:
 								// Does not take ownership of module; the
 								// module must already have its render
 								// filters attached and must outlive this
-								// object.
-								BibleTextDocument(SWModule* module);
+								// object. singleVerse, if > 0, seeds
+								// fSingleVerse (see SetSingleVerse())
+								// before the constructor's own initial
+								// _Rebuild() runs -- constructing straight
+								// into single-verse mode this way, instead
+								// of via a separate SetSingleVerse() call
+								// right after, skips that first _Rebuild()
+								// ever rendering the WHOLE chapter only to
+								// immediately re-render just one verse.
+								// Confirmed live as more than cosmetic: a
+								// notes column builds one of these PER
+								// VERSE, so for a long chapter (Psalm 119,
+								// 176 verses) that wasted whole-chapter
+								// render happened 176 times over.
+								BibleTextDocument(SWModule* module,
+									int singleVerse = 0);
 	virtual						~BibleTextDocument();
 
 			const char*			Key() const;
@@ -95,6 +109,32 @@ public:
 			void				SetSkipEmptyVerses(bool skip);
 			bool				SkipEmptyVerses() const
 									{ return fSkipEmptyVerses; }
+
+			// When > 0, _Rebuild() renders ONLY this one verse of the
+			// current chapter (still located via fKeyText's book/chapter --
+			// the verse component of fKeyText itself is irrelevant once
+			// this is set) instead of the whole chapter, and this becomes
+			// the only paragraph the document ever has. 0 (the default)
+			// means the normal whole-chapter behavior every other caller
+			// relies on is unchanged.
+			//
+			// Added for the notes column (see NotesColumn/NoteVerseView in
+			// ParallelBibleView.cpp): a single BibleTextDocument shared
+			// across a whole chapter's worth of verses -- one paragraph
+			// each -- puts a paragraph boundary between every adjacent
+			// pair of verses, and a flat character offset exactly AT that
+			// boundary is inherently ambiguous (simultaneously "end of
+			// verse N" and "start of verse N+1"). That ambiguity
+			// independently broke caret placement, the verse-number
+			// gutter, and typed-text insertion at different times
+			// (confirmed live, not just theoretical) -- three different
+			// consumers each needing their own resolution of the same
+			// inherently ambiguous position. One BibleTextDocument per
+			// verse, via this, has no paragraph boundary inside it at all
+			// to be ambiguous about.
+			void				SetSingleVerse(int verse);
+			int					SingleVerse() const
+									{ return fSingleVerse; }
 
 			// -1 if the verse is not part of the currently loaded chapter
 			int32				ParagraphIndexForVerse(int verse) const;
@@ -184,6 +224,7 @@ private:
 			bool				fSkipEmptyVerses;
 			bool				fShowStrongsNumbers;
 			bool				fShowCrossReferences;
+			int					fSingleVerse;
 
 			// paragraph index -> verse number, rebuilt in _Rebuild()
 			std::vector<int>	fParagraphVerse;
