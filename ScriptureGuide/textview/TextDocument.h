@@ -61,6 +61,17 @@ public:
 
 			int32				CountParagraphs() const;
 			const Paragraph&	ParagraphAtIndex(int32 index) const;
+			// Mutates a paragraph's style in place -- no text/offset/
+			// listener notifications, since nothing about the document's
+			// text, length, or click targets changes. Callers that only
+			// need to retune paragraph spacing (see
+			// BibleTextDocument::SetVerseSpacing()) use this instead of
+			// rebuilding the whole document, which would otherwise redo
+			// every bit of text-fetching/formatting work just to change a
+			// float. Caller is responsible for any re-layout the view
+			// needs afterward (see TextDocumentView::Relayout()).
+			void				SetParagraphStyle(int32 index,
+										const ParagraphStyle& style);
 
 			int32				ParagraphIndexFor(int32 textOffset,
 									int32& paragraphOffset) const;

@@ -454,7 +454,33 @@ void
 BibleTextDocument::SetVerseSpacing(const std::map<int, float>& spacing)
 {
 	fVerseSpacingBottom = spacing;
-	_Rebuild();
+	_ApplyVerseSpacing();
+}
+
+
+// Restyles every existing paragraph's spacing in place instead of calling
+// _Rebuild() (see the header comment on SetVerseSpacing() for why this
+// matters). fParagraphVerse[i] already maps paragraph index -> verse from
+// the last real _Rebuild(); this only ever runs after at least one such
+// rebuild has populated it, so no bounds/staleness check beyond
+// CountParagraphs() itself is needed.
+void
+BibleTextDocument::_ApplyVerseSpacing()
+{
+	int32 count = CountParagraphs();
+	for (int32 i = 0; i < count; i++) {
+		float spacingBottom = 0.0f;
+		if ((size_t)i < fParagraphVerse.size()) {
+			std::map<int, float>::const_iterator found
+				= fVerseSpacingBottom.find(fParagraphVerse[i]);
+			if (found != fVerseSpacingBottom.end())
+				spacingBottom = found->second;
+		}
+
+		ParagraphStyle style(ParagraphAtIndex(i).Style());
+		style.SetSpacingBottom(spacingBottom);
+		SetParagraphStyle(i, style);
+	}
 }
 
 

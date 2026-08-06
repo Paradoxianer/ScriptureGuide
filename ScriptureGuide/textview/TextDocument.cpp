@@ -253,6 +253,15 @@ TextDocument::ParagraphAtIndex(int32 index) const
 }
 
 
+void
+TextDocument::SetParagraphStyle(int32 index, const ParagraphStyle& style)
+{
+	if (index < 0 || (size_t)index >= fParagraphs.size())
+		return;
+	fParagraphs[index].SetStyle(style);
+}
+
+
 int32
 TextDocument::ParagraphIndexFor(int32 textOffset, int32& paragraphOffset) const
 {

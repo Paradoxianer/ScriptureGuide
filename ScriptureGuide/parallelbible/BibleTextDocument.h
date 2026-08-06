@@ -183,13 +183,23 @@ public:
 
 			// Extra bottom spacing per verse, used by VerseAligner to keep
 			// the same verse lined up across parallel columns. Replaces
-			// any previous overrides and rebuilds the document once.
+			// any previous overrides and restyles the existing paragraphs
+			// in place (see _ApplyVerseSpacing()) -- deliberately NOT a
+			// full _Rebuild(): VerseAligner::Align() calls this twice per
+			// document (once to clear, once to apply) on every _Realign(),
+			// and a full rebuild would redo the SWORD renderText() fetch
+			// plus Strong's-number/cross-reference detection for every
+			// verse just to change a float, confirmed live as the
+			// dominant cost in a chapter switch (profiling: ~90% of a
+			// switch's time was inside VerseAligner::Align(), almost all
+			// of it redundant _Rebuild() calls).
 			void				SetVerseSpacing(
 									const std::map<int, float>& spacing);
 
 private:
 			BFont				_EffectiveFont(const BFont& baseFont) const;
 			void				_Rebuild();
+			void				_ApplyVerseSpacing();
 			void				_SetModuleKey(VerseKey& verseKey);
 
 private:
