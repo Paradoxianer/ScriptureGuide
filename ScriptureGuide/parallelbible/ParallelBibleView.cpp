@@ -80,6 +80,10 @@ const float ParallelBibleView::kNoteGutterWidth = 20.0f;
 // only a pause shorter than one keystroke interval still coalesces.
 static const bigtime_t kNotesRealignDelay = 120000; // 0.12s
 
+// Line-step for a chain's shared vertical scrollbar, matching the value
+// TextDocumentView uses for its own (kVerticalScrollBarStep there).
+static const float kVerticalScrollStep = 12.0f;
+
 // Simple, font-safe glyphs for the link/unlink header button -- purely
 // cosmetic, easy to swap for a real icon later.
 static const char* kLinkedGlyph = "=";
@@ -231,6 +235,14 @@ public:
 		TextDocumentView::ScrollTo(where);
 		if (fOwner != NULL)
 			fOwner->_ColumnScrolled(fPosition, where.y);
+	}
+
+	// See the identical override/rationale on NotesDisplayView.
+	virtual void FrameResized(float width, float height)
+	{
+		TextDocumentView::FrameResized(width, height);
+		if (fOwner != NULL)
+			fOwner->_ColumnResized(fPosition);
 	}
 
 	// A dropped Bible reference, or a follower column's unhandled mouse
@@ -783,6 +795,19 @@ public:
 		TextDocumentView::ScrollTo(where);
 		if (fOwner != NULL)
 			fOwner->_ColumnScrolled(fPosition, where.y);
+	}
+
+	// The moment this column's real width is known: BView::ResizeTo() only
+	// QUEUES the resize, so everything measured before this ran still
+	// reflected the previous width. The chain's shared scrollbar is sized
+	// from measured content, so it has to be (re)applied here rather than
+	// wherever the resize was requested -- see
+	// ParallelBibleView::_UpdateChainScrollBar().
+	virtual void FrameResized(float width, float height)
+	{
+		TextDocumentView::FrameResized(width, height);
+		if (fOwner != NULL)
+			fOwner->_ColumnResized(fPosition);
 	}
 
 	// See the identical override/rationale on BibleColumnView for the
@@ -2021,6 +2046,86 @@ ParallelBibleView::_ChainKey(int32 anchorPosition) const
 }
 
 
+// The tallest laid-out content among a chain's columns -- what the chain
+// as a whole can scroll through, as opposed to what any one column can.
+// Every column in a chain gets its own copy of this, because they scroll
+// together: a chain is only as scrollable as its tallest member, and only
+// scrollable at all if that member overflows the viewport.
+float
+ParallelBibleView::_ChainContentHeight(int32 anchorPosition)
+{
+	float height = 0.0f;
+	int32 end = _ChainEnd(anchorPosition);
+	for (int32 i = _ChainStart(anchorPosition); i <= end; i++) {
+		TextDocumentView* view
+			= dynamic_cast<TextDocumentView*>(_ColumnScrollTarget(i));
+		if (view != NULL)
+			height = std::max(height, view->ContentHeight());
+	}
+	return height;
+}
+
+
+// The furthest a chain can scroll down: zero when its content fits the
+// viewport, which is the case this exists for. Jumping to a verse asks
+// to scroll to that verse's own y offset (see _ChainVerseY()), and in a
+// chapter short enough to fit entirely on screen that offset is a
+// position the chain cannot actually reach.
+float
+ParallelBibleView::_MaxChainScroll(int32 anchorPosition)
+{
+	return std::max(0.0f,
+		_ChainContentHeight(anchorPosition) - std::max(0.0f,
+			Bounds().Height()));
+}
+
+
+// Sizes the ONE visible vertical BScrollBar a chain has (it hangs off the
+// chain's rightmost column -- see _RebuildLayout()) to span the chain's
+// TALLEST column rather than just the column it is attached to.
+// TextDocumentView::_UpdateScrollBars() has always sized it from that one
+// column's own content, which is right for a standalone view but too
+// short whenever a linked neighbour is taller -- leaving the bottom of
+// that neighbour unreachable, since the neighbours have no bar of their
+// own and only follow this one.
+//
+// Called from _ColumnResized() (i.e. once a queued resize has actually
+// landed and the layout has re-measured at the real width) and at the end
+// of _Realign(), where widths are unchanged so the layout is already
+// valid.
+void
+ParallelBibleView::_UpdateChainScrollBar(int32 anchorPosition)
+{
+	int32 driver = _ChainEnd(anchorPosition);
+	BScrollView* scroller = _ColumnScroller(driver);
+	BScrollBar* bar = scroller != NULL
+		? scroller->ScrollBar(B_VERTICAL) : NULL;
+	if (bar == NULL)
+		return;
+
+	float viewportHeight = std::max(0.0f, Bounds().Height());
+	float contentHeight = _ChainContentHeight(anchorPosition);
+	long maxRange = (long)ceilf(contentHeight) - (long)viewportHeight;
+
+	bar->SetRange(0.0f, (float)std::max(maxRange, 0L));
+	if (contentHeight > 0.0f)
+		bar->SetProportion(viewportHeight / contentHeight);
+	bar->SetSteps(kVerticalScrollStep, viewportHeight);
+}
+
+
+// A column's queued resize has landed, so its layout has now re-measured
+// at its real width -- the first moment its chain's true content height
+// can be read (see _UpdateChainScrollBar()'s own comment).
+void
+ParallelBibleView::_ColumnResized(int32 position)
+{
+	if (position < 0 || (size_t)position >= fColumnOrder.size())
+		return;
+	_UpdateChainScrollBar(position);
+}
+
+
 void
 ParallelBibleView::_ScrollChainTo(int32 anchorPosition, float y)
 {
@@ -2029,6 +2134,18 @@ ParallelBibleView::_ScrollChainTo(int32 anchorPosition, float y)
 
 	int32 start = _ChainStart(anchorPosition);
 	int32 end = _ChainEnd(anchorPosition);
+
+	// Clamped, because the columns of a chain do NOT all refuse an
+	// out-of-range scroll the same way: only the chain's rightmost column
+	// has a real BScrollBar attached (see _RebuildLayout()), and BView
+	// clamps ScrollTo() against an attached bar's range. So an
+	// unreachable y left the bar-less columns scrolled down and the one
+	// with the bar where it was -- and with the bar's range at zero
+	// (nothing to scroll), there was no way to bring the others back.
+	// Reported live: jumping to 1 John 1:3, a chapter short enough to fit
+	// on screen, scrolled the Bible column to verse 3 and stranded it
+	// there while the notes column beside it stayed on verse 1.
+	y = std::max(0.0f, std::min(y, _MaxChainScroll(anchorPosition)));
 
 	fSuppressScrollPropagation = true;
 	for (int32 i = start; i <= end; i++) {
@@ -3193,6 +3310,14 @@ ParallelBibleView::_Realign()
 			fNotesColumns[i].view->Invalidate();
 		}
 	}
+
+	// Every column has just been re-laid out at its (unchanged) width, so
+	// each chain's real content height is readable now -- see
+	// _UpdateChainScrollBar().
+	for (int32 i = 0; (size_t)i < fColumnOrder.size(); i++) {
+		if (_IsChainRightmost(i))
+			_UpdateChainScrollBar(i);
+	}
 }
 
 
@@ -3295,6 +3420,16 @@ ParallelBibleView::_PositionColumns()
 		if (_IsChainRightmost((int32)i)) {
 			BScrollBar* bar = scroller != NULL
 				? scroller->ScrollBar(B_VERTICAL) : NULL;
+			// Deliberately NOT sized here from _ChainContentHeight():
+			// the scroller->ResizeTo() just above only QUEUES a
+			// B_VIEW_RESIZED for the view inside it, so its
+			// FrameResized() -- and with it the layout re-measurement at
+			// the new width -- has not run yet. Measuring now reads the
+			// PREVIOUS width's line breaks: confirmed live, a column
+			// whose content really needed 1256px reported 596px here and
+			// got a zero scroll range as a result. _ColumnResized()
+			// applies the chain range once the resize has actually
+			// landed.
 			float rangeMin = 0.0f, rangeMax = 0.0f;
 			if (bar != NULL)
 				bar->GetRange(&rangeMin, &rangeMax);

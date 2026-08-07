@@ -584,6 +584,13 @@ TextDocumentView::Relayout()
 }
 
 
+float
+TextDocumentView::ContentHeight()
+{
+	return fTextDocumentLayout.Height() + fInsetTop + fInsetBottom;
+}
+
+
 // #pragma mark - private
 
 

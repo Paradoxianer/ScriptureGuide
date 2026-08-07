@@ -105,6 +105,20 @@ public:
 			void				Copy(BClipboard* clipboard);
 			void				Paste(BClipboard* clipboard);
 
+				// Total height of the laid-out document plus this view's
+				// own insets -- exactly the "data height" this view's
+				// own vertical scrollbar range is derived from. Cheap:
+				// the layout is cached, so this only re-measures when
+				// something already invalidated it. Unlike
+				// GetHeightForWidth(), it measures at the width the view
+				// actually has rather than copying the whole layout to
+				// measure at some other width.
+				//
+				// For callers that must size ONE scrollbar to cover
+				// several views at once (see ParallelBibleView, where a
+				// chain of columns shares the rightmost column's bar).
+			float				ContentHeight();
+
 protected:
 				// This view's own editor (always set -- the constructor
 				// installs a default one). Exposed so a subclass can

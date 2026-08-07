@@ -64,30 +64,24 @@ struct NotesColumn {
 
 // Displays one or more Bible translations side by side, each in its own
 // TextDocumentView, plus any number of notes columns backed by a shared
-// personal SWORD module (see PersonalNotesModule). A notes column's own
-// READ-ONLY display is a single BibleTextDocument spanning the whole
-// chapter (one paragraph per verse, wrapping that module's own RawCom*
-// -- itself an SWModule, see PersonalNotesModule::Module()), rendered
-// exactly like a Bible/Commentary column's own document -- same
-// self-healing scrollbar, same VerseAligner group, same everything (see
-// NotesColumn's own comment). Clicking a verse hands off to a single,
-// short-lived per-verse editor instead of editing that shared document
-// directly (see _StartEditingNoteVerse()).
+// personal SWORD module (see PersonalNotesModule). A notes column is a
+// single BibleTextDocument spanning the whole chapter (one paragraph per
+// verse, wrapping that module's own RawCom* -- itself an SWModule, see
+// PersonalNotesModule::Module()), shown and edited in place exactly like
+// a Bible/Commentary column's own document -- same self-healing
+// scrollbar, same VerseAligner group, same everything (see NotesColumn's
+// own comment).
 //
-// This project already tried "one BibleTextDocument per column, edited
-// directly" (a paragraph boundary sits between every adjacent pair of
-// verses, and an offset exactly at that boundary is inherently
-// ambiguous -- see BibleTextDocument::SetSingleVerse()'s own comment)
-// and, separately, "one small BibleTextDocument+TextEditor per verse,
-// all built and kept alive at once, for every verse of the chapter" (no
-// boundary ambiguity, but O(chapter length) real TextEditors alive at
-// all times -- confirmed live as multiple seconds of UI-blocking work
-// and its own class of redraw/timing bugs for a 176-verse chapter, e.g.
-// Psalm 119). This design keeps the ambiguity-free property of the
-// second one -- the ONE editor that ever exists at a time is still
-// scoped to exactly one verse, same as before -- while keeping the
-// O(1)-per-column cost of the first one for everything that isn't
-// actively being typed into.
+// Two other designs were tried and dropped. "One small
+// BibleTextDocument+TextEditor per verse, all alive at once" cost
+// O(chapter length) real TextEditors permanently, whether or not any of
+// them was ever touched. "A read-only display that hands a clicked verse
+// to a short-lived single-verse overlay editor" kept that cost down but
+// gave up caret placement, selection and live row growth to do it. What
+// made the current design viable was finding that the slowness blamed on
+// the first one came from somewhere else entirely -- VerseAligner
+// rebuilding documents to change paragraph spacing, and every keystroke
+// re-shaping every paragraph in the document -- both since fixed.
 //
 // Every column -- Bible, Commentary, or a notes column -- has the same
 // kind of header cell: a BMenuField listing every installed "Biblical
@@ -188,7 +182,7 @@ public:
 				// other layout constants) for the same reason
 				// _ColumnScrolled()/_SetActiveColumn()/
 				// _ForwardWheelToChain() are: NotesDisplayView/
-				// NoteVerseView (unrelated classes, not friends) need it
+				// NotesSaveListener (unrelated classes, not friends) need it
 				// too, to draw/inset around that gutter aligned with
 				// what _MeasurementWidth() already reserved space for.
 				static	const float	kNoteGutterWidth;
@@ -416,7 +410,7 @@ public:
 										_ColumnViews() const
 											{ return fTextViews; }
 
-				// Called by BibleColumnView/NotesDisplayView/NoteVerseView
+				// Called by BibleColumnView/NotesDisplayView
 				// (unrelated classes, not friends -- same reasoning as
 				// the selection coordination methods above) -- not
 				// meant for other callers.
@@ -451,6 +445,13 @@ public:
 				// re-measures every verse of every column in the chain
 				// and is far too expensive to run per keystroke.
 				void				NoteTextEdited();
+				// Reports that this column's queued resize has landed and
+				// its layout has re-measured at the real width -- the
+				// first moment its chain's true content height can be
+				// read. Called by BibleColumnView/NotesDisplayView from
+				// their own FrameResized(), same not-a-friend reasoning
+				// as _ColumnScrolled() above.
+				void				_ColumnResized(int32 position);
 
 private:
 				friend class ParallelHeaderView;
@@ -530,6 +531,24 @@ private:
 				// FrameResized().
 				void				_Realign();
 				void				_PositionColumns();
+				// Tallest laid-out content among the columns of the
+				// chain containing `anchorPosition` -- what the chain
+				// scrolls through as a unit, since its columns scroll
+				// together and only its rightmost one has a real
+				// BScrollBar. Used both to size that one bar (see
+				// _PositionColumns()) and to clamp programmatic scrolls
+				// (see _ScrollChainTo()).
+				float				_ChainContentHeight(
+										int32 anchorPosition);
+				// Furthest that chain can scroll down -- zero when its
+				// content fits the viewport.
+				float				_MaxChainScroll(int32 anchorPosition);
+				// Sizes the one visible BScrollBar of the chain
+				// containing `anchorPosition` to span that chain's
+				// tallest column, not just the rightmost one it hangs
+				// off.
+				void				_UpdateChainScrollBar(
+										int32 anchorPosition);
 				void				_UpdateScrollBars();
 				// The height of the given verse's row within the chain
 				// containing chainAnchorPosition, used by scroll-target
@@ -616,7 +635,7 @@ private:
 				status_t			_SetColumnToBible(int32 position,
 										const char* moduleName);
 				status_t			_SetColumnToNotes(int32 position);
-				// Builds a fresh notes column's whole-chapter, read-only
+				// Builds a fresh notes column's whole-chapter, editable
 				// display document -- wraps fNotes->Module() (see the
 				// class comment), seeds it with seedAnchorPosition's own
 				// chain key (or the active chain's if seedAnchorPosition
