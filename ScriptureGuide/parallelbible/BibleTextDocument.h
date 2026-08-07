@@ -150,6 +150,21 @@ public:
 			// visible height.
 			void				SetParagraphsEndWithNewline(bool enabled);
 
+			// Which kinds of Strong's number this document should render
+			// as clickable links: only those a dictionary is actually
+			// installed for (see HasStrongsDictionary() in
+			// SwordBackend.h). Both default to true, which keeps every
+			// caller that doesn't care behaving exactly as before.
+			//
+			// The point is not to save a failed lookup -- it is that a
+			// styled, clickable word is a promise. On a system with only
+			// a Greek dictionary installed, every Strong's-tagged word in
+			// the whole Old Testament looked like a link and led nowhere
+			// (confirmed: 1. Mose 1:1 offers H430, H853, H7225, H1254,
+			// H8064 and H776, none of them resolvable).
+			void				SetResolvableStrongsPrefixes(bool greek,
+									bool hebrew);
+
 			// -1 if the verse is not part of the currently loaded chapter
 			int32				ParagraphIndexForVerse(int verse) const;
 			int					VerseForParagraphIndex(int32 index) const;
@@ -250,6 +265,8 @@ private:
 			bool				fShowCrossReferences;
 			int					fSingleVerse;
 			bool				fParagraphsEndWithNewline;
+			bool				fResolvableStrongsGreek;
+			bool				fResolvableStrongsHebrew;
 
 			// paragraph index -> verse number, rebuilt in _Rebuild()
 			std::vector<int>	fParagraphVerse;

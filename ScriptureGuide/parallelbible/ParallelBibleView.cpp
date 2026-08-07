@@ -1686,6 +1686,11 @@ ParallelBibleView::InsertColumn(int32 afterPosition, const char* moduleName)
 		true);
 	document->SetShowVerseNumbers(fShowVerseNumbers);
 	document->SetShowStrongsNumbers(fShowStrongsNumbers);
+	// Only offer a Strong's link where a dictionary could actually answer
+	// it -- see BibleTextDocument::SetResolvableStrongsPrefixes().
+	document->SetResolvableStrongsPrefixes(
+		HasStrongsDictionary(fManager, 'G'),
+		HasStrongsDictionary(fManager, 'H'));
 	document->SetShowCrossReferences(fShowCrossReferences);
 	document->SetBaseFont(fBaseFont);
 
@@ -2409,6 +2414,11 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 	// this only matters when the setting has been turned off.
 	document->SetShowVerseNumbers(fShowVerseNumbers);
 	document->SetShowStrongsNumbers(fShowStrongsNumbers);
+	// Only offer a Strong's link where a dictionary could actually answer
+	// it -- see BibleTextDocument::SetResolvableStrongsPrefixes().
+	document->SetResolvableStrongsPrefixes(
+		HasStrongsDictionary(fManager, 'G'),
+		HasStrongsDictionary(fManager, 'H'));
 	document->SetShowCrossReferences(fShowCrossReferences);
 	// Match the current base font (see SetBaseFont()) -- only matters once
 	// the user has actually picked something other than be_plain_font.

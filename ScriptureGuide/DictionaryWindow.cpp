@@ -289,9 +289,32 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 				BString entry = fBackend->LookupStrongsNumber(
 					number.String());
 				if (entry.IsEmpty()) {
-					fEntryView->SetText(B_TRANSLATE(
-						"No matching Strong's dictionary is installed "
-						"for this number."));
+					// Two genuinely different situations, and telling
+					// them apart is the difference between a message the
+					// user can act on and one they can only shrug at:
+					// either the whole dictionary for this language is
+					// missing (install it), or it is present and simply
+					// has no entry for this number (nothing to do).
+					char prefix = number.Length() > 0
+						? number.ByteAt(0) : '\0';
+					const char* moduleName
+						= SwordBackend::StrongsDictionaryNameFor(prefix);
+					if (moduleName != NULL
+						&& !fBackend->HasStrongsDictionary(prefix)) {
+						BString missing(B_TRANSLATE(
+							"No Strong's dictionary for these numbers is "
+							"installed. Install the %module% module via "
+							"Program > Book Manager to look up %number%."));
+						missing.ReplaceFirst("%module%", moduleName);
+						missing.ReplaceFirst("%number%", number);
+						fEntryView->SetText(missing.String());
+					} else {
+						BString missing(B_TRANSLATE(
+							"No entry for %number% in the installed "
+							"Strong's dictionary."));
+						missing.ReplaceFirst("%number%", number);
+						fEntryView->SetText(missing.String());
+					}
 				} else {
 					_ShowEntry(entry);
 				}

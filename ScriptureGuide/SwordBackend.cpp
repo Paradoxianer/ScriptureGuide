@@ -469,33 +469,95 @@ SGModule* SwordBackend::GeneralTextAt(const int32 &index) const
 }
 
 
+// True if `lexicon` declares the standard SWORD Feature= config entry
+// that marks it as a Strong's dictionary of the wanted kind.
+static bool
+declares_feature(SGModule* lexicon, const char* wantedFeature)
+{
+	if (lexicon == NULL || lexicon->GetModule() == NULL)
+		return false;
+
+	const ConfigEntMap& conf = lexicon->GetModule()->getConfig();
+	std::pair<ConfigEntMap::const_iterator, ConfigEntMap::const_iterator>
+		range = conf.equal_range("Feature");
+	for (ConfigEntMap::const_iterator it = range.first;
+			it != range.second; ++it) {
+		if (it->second == wantedFeature)
+			return true;
+	}
+	return false;
+}
+
+
+static const char*
+strongs_feature_for(char prefix)
+{
+	if (prefix == 'G')
+		return "GreekDef";
+	if (prefix == 'H')
+		return "HebrewDef";
+	return NULL;
+}
+
+
+bool HasStrongsDictionary(SWMgr* manager, char prefix)
+{
+	const char* wantedFeature = strongs_feature_for(prefix);
+	if (manager == NULL || wantedFeature == NULL)
+		return false;
+
+	// Scans every installed module rather than only those SwordBackend
+	// sorted into its lexicon list: what makes a module able to answer a
+	// Strong's lookup is the Feature entry, not which list it landed in.
+	ModMap::iterator it;
+	for (it = manager->Modules.begin(); it != manager->Modules.end(); it++) {
+		SWModule* module = it->second;
+		if (module == NULL)
+			continue;
+		const ConfigEntMap& conf = module->getConfig();
+		std::pair<ConfigEntMap::const_iterator, ConfigEntMap::const_iterator>
+			range = conf.equal_range("Feature");
+		for (ConfigEntMap::const_iterator f = range.first;
+				f != range.second; ++f) {
+			if (f->second == wantedFeature)
+				return true;
+		}
+	}
+	return false;
+}
+
+
+bool SwordBackend::HasStrongsDictionary(char prefix) const
+{
+	return ::HasStrongsDictionary(fManager, prefix);
+}
+
+
+const char* SwordBackend::StrongsDictionaryNameFor(char prefix)
+{
+	if (prefix == 'G')
+		return "StrongsGreek";
+	if (prefix == 'H')
+		return "StrongsHebrew";
+	return NULL;
+}
+
+
 BString SwordBackend::LookupStrongsNumber(const char* strongsNumber) const
 {
 	if (strongsNumber == NULL || *strongsNumber == '\0')
 		return BString();
 
 	char prefix = strongsNumber[0];
-	if (prefix != 'G' && prefix != 'H')
+	const char* wantedFeature = strongs_feature_for(prefix);
+	if (wantedFeature == NULL)
 		return BString();
 
-	const char* wantedFeature = (prefix == 'G') ? "GreekDef" : "HebrewDef";
 	const char* number = strongsNumber + 1;
 
 	for (int32 i = 0; i < CountLexicons(); i++) {
 		SGModule* lexicon = LexiconAt(i);
-		if (lexicon == NULL)
-			continue;
-
-		const ConfigEntMap& conf = lexicon->GetModule()->getConfig();
-		std::pair<ConfigEntMap::const_iterator, ConfigEntMap::const_iterator>
-			range = conf.equal_range("Feature");
-		bool matches = false;
-		for (ConfigEntMap::const_iterator it = range.first;
-				it != range.second && !matches; ++it) {
-			if (it->second == wantedFeature)
-				matches = true;
-		}
-		if (!matches)
+		if (!declares_feature(lexicon, wantedFeature))
 			continue;
 
 		BString entry(lexicon->GetEntry(number));

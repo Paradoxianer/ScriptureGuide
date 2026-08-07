@@ -66,7 +66,9 @@ BibleTextDocument::BibleTextDocument(SWModule* module, int singleVerse)
 	fShowStrongsNumbers(true),
 	fShowCrossReferences(true),
 	fSingleVerse(singleVerse),
-	fParagraphsEndWithNewline(false)
+	fParagraphsEndWithNewline(false),
+	fResolvableStrongsGreek(true),
+	fResolvableStrongsHebrew(true)
 {
 	fVerseNumberStyle.SetBold(true);
 	fParagraphStyle.SetJustify(true);
@@ -368,6 +370,20 @@ BibleTextDocument::SetSingleVerse(int verse)
 
 
 void
+BibleTextDocument::SetResolvableStrongsPrefixes(bool greek, bool hebrew)
+{
+	if (fResolvableStrongsGreek == greek
+		&& fResolvableStrongsHebrew == hebrew) {
+		return;
+	}
+
+	fResolvableStrongsGreek = greek;
+	fResolvableStrongsHebrew = hebrew;
+	_Rebuild();
+}
+
+
+void
 BibleTextDocument::SetParagraphsEndWithNewline(bool enabled)
 {
 	if (fParagraphsEndWithNewline == enabled)
@@ -638,8 +654,24 @@ BibleTextDocument::_Rebuild()
 		// stale (and, since text is still empty here, harmless either
 		// way) if linkedToPrevious skipped calling it this iteration.
 		std::vector<StrongsWord> strongsWords;
-		if (!linkedToPrevious && fShowStrongsNumbers)
+		if (!linkedToPrevious && fShowStrongsNumbers) {
 			strongsWords = FindStrongsWordsInText(fModule, text);
+
+			// Drop the ones nothing installed could resolve, so they
+			// render as ordinary text instead of as a link that cannot
+			// lead anywhere -- see SetResolvableStrongsPrefixes().
+			std::vector<StrongsWord> resolvable;
+			for (size_t i = 0; i < strongsWords.size(); i++) {
+				char prefix = strongsWords[i].strongsNumber.Length() > 0
+					? strongsWords[i].strongsNumber.ByteAt(0) : '\0';
+				bool keep = (prefix == 'G') ? fResolvableStrongsGreek
+					: (prefix == 'H') ? fResolvableStrongsHebrew
+					: true;
+				if (keep)
+					resolvable.push_back(strongsWords[i]);
+			}
+			strongsWords = resolvable;
+		}
 
 		ParagraphStyle style(fParagraphStyle);
 		std::map<int, float>::const_iterator spacing

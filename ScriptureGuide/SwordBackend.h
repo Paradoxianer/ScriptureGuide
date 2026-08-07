@@ -206,6 +206,19 @@ public:
 	// nearby, unrelated entry instead of failing outright.
 	BString				LookupStrongsNumber(const char* strongsNumber) const;
 
+	// Whether a dictionary that could resolve numbers of this kind is
+	// installed at all -- 'G' for Greek (New Testament), 'H' for Hebrew
+	// (Old Testament). Answers the question BEFORE a lookup, so a caller
+	// can avoid offering a link that provably cannot lead anywhere:
+	// rendering every Strong's-tagged word as clickable regardless makes
+	// the affordance lie, and on a system with only one of the two
+	// dictionaries installed that is a whole testament of dead ends.
+	bool				HasStrongsDictionary(char prefix) const;
+	// The conventional CrossWire module name a user would need to install
+	// to make HasStrongsDictionary(prefix) true -- for naming the actual
+	// missing piece in a message instead of "no matching dictionary".
+	static const char*	StrongsDictionaryNameFor(char prefix);
+
 	sword::SWMgr*		Manager(void) const
 							{ return fManager; }
 
@@ -218,5 +231,14 @@ private:
 						*fLexiconList,
 						*fTextList;
 };
+
+
+// Same question as SwordBackend::HasStrongsDictionary(), for callers that
+// hold only a bare SWMgr (see ParallelBibleView, which needs to know
+// whether a Strong's number is worth rendering as a link before it builds
+// the document). The member function delegates here, so both answers can
+// never drift apart.
+bool HasStrongsDictionary(sword::SWMgr* manager, char prefix);
+
 #endif
 
