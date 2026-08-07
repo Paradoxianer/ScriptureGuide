@@ -15,6 +15,8 @@
 
 #include <vector>
 
+#include <vector>
+
 #include "DictionaryWindow.h"
 #include "LogosSearchWindow.h"
 #include "SwordBackend.h"
@@ -105,7 +107,26 @@ private:
 	// number (#27, PARALLEL_STRONGS_CLICKED).
 	void EnsureDictionaryWindow(void);
 
+	// Navigation history (see fHistory). RecordHistory() captures where
+	// the chain that is about to move currently is, and must be called
+	// BEFORE the move; GoBack() puts that chain back there.
+	void RecordHistory(void);
+	void GoBack(void);
+	// True while GoBack() is driving the navigation, so the move it
+	// performs isn't itself recorded as a new history entry -- which
+	// would make Back toggle between two places instead of walking back.
+	bool fRestoringHistory;
+	// Where the active chain was, most recent last. Bounded (see
+	// kMaxHistoryEntries) because this only ever needs to cover "undo
+	// the last few jumps", not a full session log.
+	struct HistoryEntry {
+		int32	column;	// position in fParallelView's column order
+		BString	key;
+	};
+	std::vector<HistoryEntry>	fHistory;
+
 	BMenuBar		*fMenuBar;
+	BMenuItem		*fBackItem;
 	BMenuItem		*fShowVerseNumItem;
 	BMenuItem		*fShowStrongsNumItem;
 	BMenuItem		*fShowCrossRefItem;

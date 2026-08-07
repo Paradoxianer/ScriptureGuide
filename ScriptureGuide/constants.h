@@ -56,6 +56,12 @@ const uint32 MENU_PROGRAM_EXPORT_HTML		= 'MPe4';
 
 const uint32 MENU_EDIT_NOTE				= 'MEno';
 const uint32 MENU_EDIT_FIND				= 'MEfi';
+// Steps the active chain back to wherever it was before the last jump
+// (see SGMainWindow::GoBack()). Every navigation funnels through
+// UpdateParallelKey(), so this covers following a cross-reference, the
+// toolbar fields, search results and dropped references alike -- not
+// just links.
+const uint32 MENU_NAVIGATION_BACK		= 'MNbk';
 
 const uint32 MENU_OPTIONS_LINE			= 'MOli';
 const uint32 MENU_OPTIONS_FONT			= 'MOfo';

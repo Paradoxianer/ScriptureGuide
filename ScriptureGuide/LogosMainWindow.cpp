@@ -41,13 +41,15 @@
 SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 		uint16 selectVers, uint16 selectVersEnd )
  :	BWindow(frame, "Scripture Guide", B_DOCUMENT_WINDOW, 0),
+ 	fRestoringHistory(false),
+	fBackItem(NULL),
+	fSearchWindow(NULL),
+	fDictionaryWindow(NULL),
  	fModManager(NULL),
  	fCurrentModule(NULL),
  	fCurrentChapter(1),
- 	fFindMessenger(NULL),
-	fSearchWindow(NULL),
-	fDictionaryWindow(NULL),
-	fFontPanel(NULL)
+	fFontPanel(NULL),
+ 	fFindMessenger(NULL)
 {
 	fCurrentVerse = selectVers;
 	fCurrentVerseEnd = selectVersEnd;
@@ -221,6 +223,15 @@ void SGMainWindow::BuildGUI(void)
 	fMenuBar->AddItem(menu);
 
 	menu = new BMenu(B_TRANSLATE("Navigation"));
+	// Deliberately first, and on the shortcut a browser would use:
+	// following a cross-reference navigates the chain you were reading
+	// in, so without a way back a link costs you your place (see
+	// RecordHistory()/GoBack()).
+	fBackItem = new BMenuItem(B_TRANSLATE("Back"),
+		new BMessage(MENU_NAVIGATION_BACK), '[');
+	fBackItem->SetEnabled(false);
+	menu->AddItem(fBackItem);
+	menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Find Verse…"),
 		new BMessage(MENU_EDIT_FIND), 'F'));
 	menu->AddSeparatorItem();
@@ -795,6 +806,11 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fFindMessenger = NULL;
 			break;
 		}
+		case MENU_NAVIGATION_BACK:
+		{
+			GoBack();
+			break;
+		}
 		case MENU_EDIT_FIND:
 		{
 			EnsureSearchWindow();
@@ -1056,7 +1072,86 @@ SGMainWindow::UpdateParallelKey(void)
 	BString key;
 	key << fBookMenu->FindMarked()->Label() << " " << fCurrentChapter << ":"
 		<< verse;
+
+	// The single funnel every navigation passes through -- the toolbar
+	// fields, next/previous book and chapter, a dropped or searched-for
+	// reference, and a followed cross-reference alike -- which is why
+	// recording here covers all of them rather than just the one that
+	// prompted this.
+	RecordHistory();
+
 	fParallelView->SetKey(key.String());
+}
+
+
+// Remembers where the chain that is about to move currently is. Must run
+// BEFORE the move, and records the CHAIN's own key rather than the
+// toolbar's, because SetKey() only ever moves the active chain (see
+// issue #12) and the toolbar may already have been updated to the
+// destination by the caller.
+void
+SGMainWindow::RecordHistory(void)
+{
+	if (fParallelView == NULL || fRestoringHistory)
+		return;
+
+	int32 column = fParallelView->ActiveColumn();
+	if (column < 0)
+		return;
+
+	BString current = fParallelView->ChainKey(column);
+	if (current.IsEmpty())
+		return;
+
+	// Re-navigating a chain to where it already is (the toolbar re-emits
+	// the same key in a few paths) is not a step worth being able to undo.
+	if (!fHistory.empty() && fHistory.back().column == column
+		&& fHistory.back().key == current) {
+		return;
+	}
+
+	HistoryEntry entry;
+	entry.column = column;
+	entry.key = current;
+	fHistory.push_back(entry);
+
+	// Bounded: this exists to undo the last few jumps, not to log a
+	// session. Dropping from the front keeps the most recent entries,
+	// which are the ones Back actually reaches.
+	const size_t kMaxHistoryEntries = 50;
+	if (fHistory.size() > kMaxHistoryEntries)
+		fHistory.erase(fHistory.begin());
+
+	if (fBackItem != NULL)
+		fBackItem->SetEnabled(true);
+}
+
+
+void
+SGMainWindow::GoBack(void)
+{
+	if (fParallelView == NULL || fHistory.empty())
+		return;
+
+	HistoryEntry entry = fHistory.back();
+	fHistory.pop_back();
+
+	// The chain that entry was recorded for may have been removed or
+	// reordered since. Falling back to the active chain still puts the
+	// user back at the passage they asked for, which is what Back is
+	// actually promising -- better than doing nothing.
+	if (entry.column >= 0 && entry.column < fParallelView->CountColumns())
+		fParallelView->SetActiveColumn(entry.column);
+
+	// Guarded so the navigation below isn't itself recorded -- otherwise
+	// Back would push where it came from and just toggle between two
+	// places instead of walking backwards.
+	fRestoringHistory = true;
+	JumpToKey(entry.key.String());
+	fRestoringHistory = false;
+
+	if (fBackItem != NULL)
+		fBackItem->SetEnabled(!fHistory.empty());
 }
 
 
