@@ -3259,7 +3259,13 @@ ParallelBibleView::_Realign()
 			widths.push_back(_MeasurementWidth(i));
 		}
 
-		if (columns.size() >= 2) {
+		// Called for EVERY chain, including one-column ones. A single
+		// column has nothing to align against, but Align() is also what
+		// clears alignment padding left over from when that column had a
+		// partner -- see its own comment on why the clear happens before
+		// it gives up on the size check, and why skipping the call here
+		// left a disconnected column permanently stretched.
+		{
 			bigtime_t alignStart = system_time();
 			VerseAligner::Align(columns, widths);
 			fprintf(stderr, "[SG-PERF] VerseAligner::Align chain [%d,%d] "

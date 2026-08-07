@@ -14,7 +14,7 @@ void
 VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 	const std::vector<float>& columnWidths)
 {
-	if (columns.size() < 2 || columns.size() != columnWidths.size())
+	if (columns.size() != columnWidths.size())
 		return;
 
 	// Measurements below must reflect each verse's natural, un-padded
@@ -26,6 +26,17 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 		if (columns[c] != NULL)
 			columns[c]->SetVerseSpacing(std::map<int, float>());
 	}
+
+	// Deliberately AFTER the clear, not before it. A single column has
+	// nothing to align against, but it may well be carrying padding from
+	// back when it did -- a chain that was just split apart, or one whose
+	// partner was removed. Returning before the clear left that padding
+	// in place permanently, since nothing else ever removes it: reported
+	// live as a column keeping its old, stretched verse spacing after
+	// being disconnected, and keeping it even after navigating to an
+	// entirely different book.
+	if (columns.size() < 2)
+		return;
 
 	int maxVerse = 0;
 	for (size_t c = 0; c < columns.size(); c++) {

@@ -591,6 +591,67 @@ TestRemovingSecondBibleColumnClearsStaleSpacing(SWMgr* manager,
 }
 
 
+// Regression test for a column keeping its old verse spacing after being
+// DISCONNECTED from its chain (as opposed to having its partner removed,
+// which TestRemovingSecondBibleColumnClearsStaleSpacing covers -- that
+// case leaves a two-member chain behind, so alignment still runs and
+// still recomputes). Splitting instead leaves a chain of ONE, and
+// _Realign() used to skip VerseAligner::Align() entirely for those, so
+// nothing ever cleared what the previous alignment had assigned. Reported
+// live: a disconnected column stayed stretched to its former partner's
+// verse heights, and stayed that way even after navigating to a
+// different book.
+static void
+TestDisconnectingColumnClearsStaleSpacing(SWMgr* manager, SWModule* moduleA,
+	SWModule* moduleB)
+{
+	const char* name = "ParallelBibleView::SetColumnLinked: disconnecting a "
+		"column clears the spacing its chain had given it";
+	if (manager == NULL || moduleA == NULL || moduleB == NULL) {
+		Skip(name, "need two distinct Bible modules installed");
+		return;
+	}
+
+	PersonalNotesModule seedNotes;
+	if (seedNotes.Open() != B_OK) {
+		Skip(name, "could not open personal notes module");
+		return;
+	}
+	// A note long enough that aligning against it visibly stretches
+	// whatever verse row it sits in.
+	BString longNote;
+	for (int i = 0; i < 60; i++)
+		longNote << "a long note line that keeps going on and on. ";
+	BString originalNote = seedNotes.GetNote("Gen 1:2");
+	seedNotes.SetNote("Gen 1:2", longNote.String());
+
+	// Baseline: a column that was never in a chain with anything else.
+	ParallelBibleView freshView("testFreshSplit", manager, 900.0f);
+	freshView.AddColumn(moduleA->getName());
+	freshView.SetKey("Gen 1:1");
+	float freshHeight = freshView.RowHeight(2, 0);
+
+	// Same column, but it spent time linked to a notes column carrying
+	// that long note before being split off on its own.
+	ParallelBibleView splitView("testSplitView", manager, 900.0f);
+	splitView.AddColumn(moduleA->getName());
+	splitView.AddNotesColumn();
+	splitView.SetKey("Gen 1:1");
+	float linkedHeight = splitView.RowHeight(2, 0);
+
+	splitView.SetColumnLinked(0, false); // disconnect the two
+	float splitHeight = splitView.RowHeight(2, 0);
+
+	seedNotes.SetNote("Gen 1:2", originalNote.String());
+
+	// The middle assertion keeps the test honest: if the note weren't
+	// actually stretching the row while linked, the other two would match
+	// trivially and prove nothing.
+	Check(linkedHeight > freshHeight + 1.0f
+		&& fabs(splitHeight - freshHeight) < 1.0f, name);
+}
+
+
 // Regression test for issue #12's neighbor-relink rule (see
 // ParallelBibleView::RemoveColumn()): removing a linked middle column
 // from a 3-column chain must leave its two former neighbors linked to
@@ -740,6 +801,7 @@ main()
 	TestTallNotesGrowRowWithoutCompounding(&manager, moduleA);
 	TestRemovingSecondBibleColumnClearsStaleSpacing(&manager, moduleA,
 		moduleB);
+	TestDisconnectingColumnClearsStaleSpacing(&manager, moduleA, moduleB);
 	TestRemoveMiddleColumnRelinksNeighbors(&manager, moduleA, moduleB);
 	TestSplitChainKeepsOtherChainUnaffected(&manager, moduleA, moduleB);
 	TestMoveColumnPreservesEachColumnsOwnKey(&manager, moduleA, moduleB);
