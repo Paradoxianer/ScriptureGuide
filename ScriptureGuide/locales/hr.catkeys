@@ -1,40 +1,62 @@
-1	Croatian	application/x-vnd.Scripture-Guide	740233707
+1	Croatian	application/x-vnd.Scripture-Guide	3458641352
 Find Verse…	MainWindow		Nađi stih…
-Program	MainWindow		Program
-Next Chapter	MainWindow		Slijedeće poglavlje
-About Scripture Guide…	MainWindow		About Scripture Guide…
-This module does not have this section.	MainWindow		This module does not have this section.
-Previous Book	MainWindow		Prethodna knjiga
-Select All	MainWindow		Odaberi sve
+Dictionary 	DictionaryWindow		Rječnik 
+Regular Expression	SearchWindow		Regularni izraz
+Commentaries	ParallelBibleView		Komentari
+Choose Font…	MainWindow		Odaberi font…
+As HTML Table	MainWindow		Kao HTML tablicu
+Back	MainWindow		Natrag
+Verse	MainWindow		Stih
+Notes	ExportFormats		Bilješke
+Show Cross-References	MainWindow		Prikaži unakrsne reference
 Quit	MainWindow		Isključi
-Chapter	MainWindow		Poglavlje
-Options	MainWindow		Opcije
-Copy Verses	MainWindow		Copy Verses
+Forward	MainWindow		Naprijed
+Copy Comparison	MainWindow		Kopiraj usporedbu
+Look up: 	DictionaryWindow		Potraži: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Rezultati traženja (prikazuju se samo ako pretraga pronađe više od jednog podudaranja):
+As Plain Text	MainWindow		Kao obični tekst
+Find	SearchWindow		Nađi
+Book Manager…	MainWindow		Upravitelj knjiga…
 Duplicate This Window…	MainWindow		Duplirajte ovaj prozor…
-Choose Font...	MainWindow		Odaberite font...
-Commentaries	MainWindow		Commentaries
+Search in 	SearchWindow		Traži u 
+Font Size: 	FontPanel		Veličina fonta:
 Close This Window	MainWindow		Zatvorite ovaj prozor
 Show Verse Numbers	MainWindow		Pokaži brojeve stihova
-Text:	MainWindow		Tekst:
-Navigation	MainWindow		Navigacija
-Bibles	MainWindow		Bibles
-Notes…	MainWindow		Bilješke…
-Next Book	MainWindow		Slijedeća knjiga
-Previous Chapter	MainWindow		Prethodno poglavlje
-Book:	MainWindow		Knjiga:
-Verse	MainWindow		Stih
-No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.
-Font Name	FontPanel		Ime fonta
-Preview	FontPanel		Preview
-OK	FontPanel		U redu
-Font Size: 	FontPanel		Veličina fonta:
-Regular Expression	SearchWindow		Regular Expression
-Search Progress:	SearchWindow		Tijek traženja:
-Find Phrase	SearchWindow		Nađi frazu
-Match Case	SearchWindow		Match Case
-Search Results:	SearchWindow		Rezultati traženja:
-Find	SearchWindow		Nađi
-End in 	SearchWindow		End in 
-Start in 	SearchWindow		Start in 
+Start in 	SearchWindow		Počni u 
 Find Words	SearchWindow		Nađi riječi
+As Tab-Separated	MainWindow		Kao vrijednosti odvojene tabulatorom
+Next Book	MainWindow		Slijedeća knjiga
+Verse	ExportFormats		Stih
+Go to / Search:	MainWindow		Idi na / Traži:
+Book:	MainWindow		Knjiga:
+Program	MainWindow		Program
+About Scripture Guide…	MainWindow		O programu Scripture Guide…
+Font Name	FontPanel		Ime fonta
+Next Chapter	MainWindow		Slijedeće poglavlje
+Dictionary…	MainWindow		Rječnik…
+Previous Book	MainWindow		Prethodna knjiga
+Search Progress:	SearchWindow		Tijek traženja:
+Look up	DictionaryWindow		Potraži
+Preview	FontPanel		Pretpregled
+Find Phrase	SearchWindow		Nađi frazu
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		Za te brojeve nije instaliran nijedan Strongov rječnik. Instalirajte modul %module% putem Program > Book Manager da biste potražili %number%.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		Nema natuknice za %number% u instaliranom Strongovom rječniku.
+Show Strong's Numbers	MainWindow		Prikaži Strongove brojeve
+Match Case	SearchWindow		Razlikuj velika i mala slova
+Chapter	MainWindow		Poglavlje
+OK	FontPanel		U redu
+Options	MainWindow		Opcije
+No matching entry found.	DictionaryWindow		Nije pronađena nijedna odgovarajuća natuknica.
+Search Results:	SearchWindow		Rezultati traženja:
+Notes	ParallelBibleView		Bilješke
+End in 	SearchWindow		Završi u 
+Dictionary	DictionaryWindow		Rječnik
+As Markdown Table	MainWindow		Kao Markdown tablicu
+Entry:	DictionaryWindow		Natuknica:
+Notes	MainWindow		Bilješke
+No module selected.	BibleTextDocument		Nijedan modul nije odabran.
+Navigation	MainWindow		Navigacija
+Biblical Texts	ParallelBibleView		Biblijski tekstovi
+Previous Chapter	MainWindow		Prethodno poglavlje
 Find: 	SearchWindow		Nađi:
+%d matching entries -- pick one below.	DictionaryWindow		%d odgovarajućih natuknica – odaberite jednu ispod.

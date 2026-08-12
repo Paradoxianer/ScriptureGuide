@@ -1,40 +1,62 @@
-1	Romanian	application/x-vnd.Scripture-Guide	740233707
+1	Romanian	application/x-vnd.Scripture-Guide	3458641352
 Find Verse…	MainWindow		Caută verset…
-Program	MainWindow		Program
-Next Chapter	MainWindow		Capitolul următor
-About Scripture Guide…	MainWindow		Despre Scripture Guide…
-This module does not have this section.	MainWindow		Modulul selectat nu conține aceasta secțiune.
-Previous Book	MainWindow		Cartea precedentă
-Select All	MainWindow		Selectează tot
+Dictionary 	DictionaryWindow		Dicționar 
+Regular Expression	SearchWindow		Expresia regulară
+Commentaries	ParallelBibleView		Comentarii
+Choose Font…	MainWindow		Alege fontul…
+As HTML Table	MainWindow		Ca tabel HTML
+Back	MainWindow		Înapoi
+Verse	MainWindow		Verset
+Notes	ExportFormats		Note
+Show Cross-References	MainWindow		Arată referințele încrucișate
 Quit	MainWindow		Ieșire
-Chapter	MainWindow		Capitol
-Options	MainWindow		Opțiuni
-Copy Verses	MainWindow		Copiază versete
+Forward	MainWindow		Înainte
+Copy Comparison	MainWindow		Copiază comparația
+Look up: 	DictionaryWindow		Caută: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Rezultatele căutării (afișate doar dacă o căutare găsește mai multe potriviri):
+As Plain Text	MainWindow		Ca text simplu
+Find	SearchWindow		Caută
+Book Manager…	MainWindow		Administrator de cărți…
 Duplicate This Window…	MainWindow		Duplifică fereastra curentă…
-Choose Font...	MainWindow		Selectați font...
-Commentaries	MainWindow		Comentarii
+Search in 	SearchWindow		Caută în 
+Font Size: 	FontPanel		Dimensiunea fontului:
 Close This Window	MainWindow		Închide fereastra curentă
 Show Verse Numbers	MainWindow		Arată numerele versetelor
-Text:	MainWindow		Text:
-Navigation	MainWindow		Navigare
-Bibles	MainWindow		Biblii
-Notes…	MainWindow		Notițe…
-Next Book	MainWindow		Cartea următoare
-Previous Chapter	MainWindow		Capitolul precedent
-Book:	MainWindow		Cartea:
-Verse	MainWindow		Verset
-No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		Niciun modul instalat\n\n Folosiți ScriptureGuideManager pentru a descărca cărțile dorite.
-Font Name	FontPanel		Font
-Preview	FontPanel		Previzualizare
-OK	FontPanel		OK
-Font Size: 	FontPanel		Dimensiunea fontului:
-Regular Expression	SearchWindow		Expresia regulară
-Search Progress:	SearchWindow		Progresul căutării:
-Find Phrase	SearchWindow		Caută fraza
-Match Case	SearchWindow		Respectând registru
-Search Results:	SearchWindow		Rezultatele căutării:
-Find	SearchWindow		Caută
-End in 	SearchWindow		Se termină cu
 Start in 	SearchWindow		Începe cu
 Find Words	SearchWindow		Caută cuvinte
+As Tab-Separated	MainWindow		Ca valori separate prin tabulator
+Next Book	MainWindow		Cartea următoare
+Verse	ExportFormats		Verset
+Go to / Search:	MainWindow		Mergi la / Caută:
+Book:	MainWindow		Cartea:
+Program	MainWindow		Program
+About Scripture Guide…	MainWindow		Despre Scripture Guide…
+Font Name	FontPanel		Font
+Next Chapter	MainWindow		Capitolul următor
+Dictionary…	MainWindow		Dicționar…
+Previous Book	MainWindow		Cartea precedentă
+Search Progress:	SearchWindow		Progresul căutării:
+Look up	DictionaryWindow		Caută
+Preview	FontPanel		Previzualizare
+Find Phrase	SearchWindow		Caută fraza
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		Nu este instalat niciun dicționar Strong pentru aceste numere. Instalați modulul %module% din Program > Book Manager pentru a căuta %number%.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		Nicio intrare pentru %number% în dicționarul Strong instalat.
+Show Strong's Numbers	MainWindow		Arată numerele Strong
+Match Case	SearchWindow		Respectând registru
+Chapter	MainWindow		Capitol
+OK	FontPanel		OK
+Options	MainWindow		Opțiuni
+No matching entry found.	DictionaryWindow		Nu s-a găsit nicio intrare potrivită.
+Search Results:	SearchWindow		Rezultatele căutării:
+Notes	ParallelBibleView		Note
+End in 	SearchWindow		Se termină cu
+Dictionary	DictionaryWindow		Dicționar
+As Markdown Table	MainWindow		Ca tabel Markdown
+Entry:	DictionaryWindow		Intrare:
+Notes	MainWindow		Note
+No module selected.	BibleTextDocument		Niciun modul selectat.
+Navigation	MainWindow		Navigare
+Biblical Texts	ParallelBibleView		Texte biblice
+Previous Chapter	MainWindow		Capitolul precedent
 Find: 	SearchWindow		Caută:
+%d matching entries -- pick one below.	DictionaryWindow		%d intrări potrivite – alegeți una mai jos.

@@ -1,40 +1,62 @@
-1	German	application/x-vnd.Scripture-Guide	740233707
+1	Dutch	application/x-vnd.Scripture-Guide	3458641352
 Find Verse…	MainWindow		Vers vinden…
-Program	MainWindow		Programma
-Next Chapter	MainWindow		Volgend hoofdstuk
-About Scripture Guide…	MainWindow		Over Scripture Guide…
-This module does not have this section.	MainWindow		Deze module heeft deze sectie niet
-Previous Book	MainWindow		Vorig boek
-Select All	MainWindow		Alles selecteren
+Dictionary 	DictionaryWindow		Woordenboek 
+Regular Expression	SearchWindow		Reguliere uitdrukking
+Commentaries	ParallelBibleView		Commentaren
+Choose Font…	MainWindow		Lettertype kiezen…
+As HTML Table	MainWindow		Als HTML-tabel
+Back	MainWindow		Terug
+Verse	MainWindow		Vers
+Notes	ExportFormats		Notities
+Show Cross-References	MainWindow		Kruisverwijzingen tonen
 Quit	MainWindow		Afsluiten
-Chapter	MainWindow		Hoofdstuk
-Options	MainWindow		Instellingen
-Copy Verses	MainWindow		Vers kopiëren
+Forward	MainWindow		Vooruit
+Copy Comparison	MainWindow		Vergelijking kopiëren
+Look up: 	DictionaryWindow		Opzoeken: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Zoekresultaten (alleen zichtbaar als een zoekopdracht meer dan één overeenkomst vindt):
+As Plain Text	MainWindow		Als platte tekst
+Find	SearchWindow		Zoek
+Book Manager…	MainWindow		Boekbeheer…
 Duplicate This Window…	MainWindow		Venster dupliceren...
-Choose Font...	MainWindow		Kies Font...
-Commentaries	MainWindow		Commentaren
+Search in 	SearchWindow		Zoeken in 
+Font Size: 	FontPanel		Font grootte:
 Close This Window	MainWindow		Venster sluiten
 Show Verse Numbers	MainWindow		Toon vers nummers
-Text:	MainWindow		Tekst:
-Navigation	MainWindow		Navigatie
-Bibles	MainWindow		Bijbels
-Notes…	MainWindow		Aantekeningen...
-Next Book	MainWindow		Volgend boek
-Previous Chapter	MainWindow		Vorig hoofdstuk
-Book:	MainWindow		Boek:
-Verse	MainWindow		Vers
-No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		Geen modules geïnstalleerd\n\n Gebruik ScriptureGuideManager om de boeken die je wil te downloaden.
-Font Name	FontPanel		Font naam
-Preview	FontPanel		Voorbeeld
-OK	FontPanel		OK
-Font Size: 	FontPanel		Font grootte:
-Regular Expression	SearchWindow		Reguliere uitdrukking
-Search Progress:	SearchWindow		Voortgang zoeken:
-Find Phrase	SearchWindow		Zoek Uitdrukking
-Match Case	SearchWindow		Hoofdletter gevoelig
-Search Results:	SearchWindow		Zoekresultaten:
-Find	SearchWindow		Zoek
-End in 	SearchWindow		Eindig in
 Start in 	SearchWindow		Start in
 Find Words	SearchWindow		Zoek woorden
+As Tab-Separated	MainWindow		Als tab-gescheiden waarden
+Next Book	MainWindow		Volgend boek
+Verse	ExportFormats		Vers
+Go to / Search:	MainWindow		Ga naar / Zoeken:
+Book:	MainWindow		Boek:
+Program	MainWindow		Programma
+About Scripture Guide…	MainWindow		Over Scripture Guide…
+Font Name	FontPanel		Font naam
+Next Chapter	MainWindow		Volgend hoofdstuk
+Dictionary…	MainWindow		Woordenboek…
+Previous Book	MainWindow		Vorig boek
+Search Progress:	SearchWindow		Voortgang zoeken:
+Look up	DictionaryWindow		Opzoeken
+Preview	FontPanel		Voorbeeld
+Find Phrase	SearchWindow		Zoek Uitdrukking
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		Er is geen Strong-woordenboek voor deze nummers geïnstalleerd. Installeer de module %module% via Programma > Book Manager om %number% op te zoeken.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		Geen lemma voor %number% in het geïnstalleerde Strong-woordenboek.
+Show Strong's Numbers	MainWindow		Strong-nummers tonen
+Match Case	SearchWindow		Hoofdletter gevoelig
+Chapter	MainWindow		Hoofdstuk
+OK	FontPanel		OK
+Options	MainWindow		Instellingen
+No matching entry found.	DictionaryWindow		Geen overeenkomend lemma gevonden.
+Search Results:	SearchWindow		Zoekresultaten:
+Notes	ParallelBibleView		Notities
+End in 	SearchWindow		Eindig in
+Dictionary	DictionaryWindow		Woordenboek
+As Markdown Table	MainWindow		Als Markdown-tabel
+Entry:	DictionaryWindow		Lemma:
+Notes	MainWindow		Notities
+No module selected.	BibleTextDocument		Geen module geselecteerd.
+Navigation	MainWindow		Navigatie
+Biblical Texts	ParallelBibleView		Bijbelteksten
+Previous Chapter	MainWindow		Vorig hoofdstuk
 Find: 	SearchWindow		Zoek:
+%d matching entries -- pick one below.	DictionaryWindow		%d overeenkomende lemma's – kies er hieronder één.

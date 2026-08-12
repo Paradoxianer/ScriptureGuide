@@ -1,0 +1,29 @@
+1	Romanian	application/x-vnd.wgp.ScriptureGuideManager	668444746
+Removing %module%…	BookManager		Se elimină %module%…
+Quit	BookManager		Ieșire
+Removing…	BookManager		Se elimină…
+Type	BookManager		Tip
+Their downloaded data will be deleted.	BookManager		Datele lor descărcate vor fi șterse.
+Downloading %module%…	BookManager		Se descarcă %module%…
+Error: couldn't read the config file for %module% -- skipping its removal rather than guessing.	BookManager		Eroare: fișierul de configurare pentru %module% nu a putut fi citit; eliminarea sa este omisă în loc să fie ghicită.
+Book	BookManager		Carte
+Archive size:	BookManager		Dimensiunea arhivei:
+ScriptureGuide Book Manager	System name		Administratorul de cărți ScriptureGuide
+Remove %count% modules?	BookManager		Elimini %count% module?
+%count% modules selected	BookManager		%count% module selectate
+Done	BookManager		Gata
+Available	BookManager		Disponibile
+Remove %module%?	BookManager		Elimini %module%?
+Installing…	BookManager		Se instalează…
+Status	BookManager		Stare
+Remove modules	BookManager		Elimină module
+Finished	BookManager		Finalizat
+Installing %module%…	BookManager		Se instalează %module%…
+Remove	BookManager		Elimină
+Install the modules selected on the left	BookManager		Instalează modulele selectate în stânga
+Waiting…	BookManager		În așteptare…
+Installed	BookManager		Instalate
+Language	BookManager		Limbă
+Remove the modules selected on the right	BookManager		Elimină modulele selectate în dreapta
+Cancel	BookManager		Anulează
+Program	BookManager		Program

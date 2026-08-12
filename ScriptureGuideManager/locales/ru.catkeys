@@ -1,0 +1,29 @@
+1	Russian	application/x-vnd.wgp.ScriptureGuideManager	668444746
+Removing %module%…	BookManager		Удаление %module%…
+Quit	BookManager		Завершить
+Removing…	BookManager		Удаление…
+Type	BookManager		Тип
+Their downloaded data will be deleted.	BookManager		Их загруженные данные будут удалены.
+Downloading %module%…	BookManager		Загрузка %module%…
+Error: couldn't read the config file for %module% -- skipping its removal rather than guessing.	BookManager		Ошибка: не удалось прочитать файл настроек для %module% — удаление пропущено, чтобы не действовать наугад.
+Book	BookManager		Книга
+Archive size:	BookManager		Размер архива:
+ScriptureGuide Book Manager	System name		Менеджер книг ScriptureGuide
+Remove %count% modules?	BookManager		Удалить %count% модулей?
+%count% modules selected	BookManager		Выбрано модулей: %count%
+Done	BookManager		Готово
+Available	BookManager		Доступные
+Remove %module%?	BookManager		Удалить %module%?
+Installing…	BookManager		Установка…
+Status	BookManager		Состояние
+Remove modules	BookManager		Удаление модулей
+Finished	BookManager		Завершено
+Installing %module%…	BookManager		Установка %module%…
+Remove	BookManager		Удалить
+Install the modules selected on the left	BookManager		Установить модули, выбранные слева
+Waiting…	BookManager		Ожидание…
+Installed	BookManager		Установленные
+Language	BookManager		Язык
+Remove the modules selected on the right	BookManager		Удалить модули, выбранные справа
+Cancel	BookManager		Отмена
+Program	BookManager		Программа

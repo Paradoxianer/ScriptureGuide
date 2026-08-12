@@ -1,40 +1,62 @@
-1	Russian	application/x-vnd.Scripture-Guide	740233707
+1	Russian	application/x-vnd.Scripture-Guide	3458641352
 Find Verse…	MainWindow		Найти стих…
-Program	MainWindow		Программа
-Next Chapter	MainWindow		Следующая глава
-About Scripture Guide…	MainWindow		О Scripture Guide…
-This module does not have this section.	MainWindow		Текущий модуль не содержит этут раздел.
-Previous Book	MainWindow		Предыдущая книга
-Select All	MainWindow		Выбрать всё
+Dictionary 	DictionaryWindow		Словарь 
+Regular Expression	SearchWindow		Регулярное выражение
+Commentaries	ParallelBibleView		Комментарии
+Choose Font…	MainWindow		Выбрать шрифт…
+As HTML Table	MainWindow		Как таблицу HTML
+Back	MainWindow		Назад
+Verse	MainWindow		Стих
+Notes	ExportFormats		Заметки
+Show Cross-References	MainWindow		Показывать перекрёстные ссылки
 Quit	MainWindow		Завершить
-Chapter	MainWindow		Глава
-Options	MainWindow		Параметры
-Copy Verses	MainWindow		Скопировать стихи
+Forward	MainWindow		Вперёд
+Copy Comparison	MainWindow		Копировать сравнение
+Look up: 	DictionaryWindow		Найти: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Результаты поиска (показываются, только если найдено несколько совпадений):
+As Plain Text	MainWindow		Как обычный текст
+Find	SearchWindow		Найти
+Book Manager…	MainWindow		Менеджер книг…
 Duplicate This Window…	MainWindow		Дублировать это окно…
-Choose Font...	MainWindow		Выбрать шрифт...
-Commentaries	MainWindow		Комментарии
+Search in 	SearchWindow		Искать в 
+Font Size: 	FontPanel		Размер шрифта:
 Close This Window	MainWindow		Закрыть это окно
 Show Verse Numbers	MainWindow		Показывать нумерацию стихов
-Text:	MainWindow		Текст:
-Navigation	MainWindow		Навигация
-Bibles	MainWindow		Библии
-Notes…	MainWindow		Заметки…
-Next Book	MainWindow		Следующая книга
-Previous Chapter	MainWindow		Предыдущая глава
-Book:	MainWindow		Книга:
-Verse	MainWindow		Стих
-No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		Нет установленных модулей\n\n Вы можете скачать нужные книги с помощью ScriptureGuideManager.
-Font Name	FontPanel		Гарнитура шрифта
-Preview	FontPanel		Предпросмотр
-OK	FontPanel		OK
-Font Size: 	FontPanel		Размер шрифта:
-Regular Expression	SearchWindow		Регулярное выражение
-Search Progress:	SearchWindow		Прогресс поиска:
-Find Phrase	SearchWindow		Найти фразу
-Match Case	SearchWindow		С учётом регистра
-Search Results:	SearchWindow		Результаты поиска:
-Find	SearchWindow		Найти
-End in 	SearchWindow		Заканчивается
 Start in 	SearchWindow		Начинаится с
 Find Words	SearchWindow		Найти слова
+As Tab-Separated	MainWindow		Как значения, разделённые табуляцией
+Next Book	MainWindow		Следующая книга
+Verse	ExportFormats		Стих
+Go to / Search:	MainWindow		Перейти / Найти:
+Book:	MainWindow		Книга:
+Program	MainWindow		Программа
+About Scripture Guide…	MainWindow		О Scripture Guide…
+Font Name	FontPanel		Гарнитура шрифта
+Next Chapter	MainWindow		Следующая глава
+Dictionary…	MainWindow		Словарь…
+Previous Book	MainWindow		Предыдущая книга
+Search Progress:	SearchWindow		Прогресс поиска:
+Look up	DictionaryWindow		Найти
+Preview	FontPanel		Предпросмотр
+Find Phrase	SearchWindow		Найти фразу
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		Словарь Стронга для этих номеров не установлен. Установите модуль %module% через «Программа > Book Manager», чтобы найти %number%.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		Нет статьи для %number% в установленном словаре Стронга.
+Show Strong's Numbers	MainWindow		Показывать номера Стронга
+Match Case	SearchWindow		С учётом регистра
+Chapter	MainWindow		Глава
+OK	FontPanel		OK
+Options	MainWindow		Параметры
+No matching entry found.	DictionaryWindow		Подходящих статей не найдено.
+Search Results:	SearchWindow		Результаты поиска:
+Notes	ParallelBibleView		Заметки
+End in 	SearchWindow		Заканчивается
+Dictionary	DictionaryWindow		Словарь
+As Markdown Table	MainWindow		Как таблицу Markdown
+Entry:	DictionaryWindow		Статья:
+Notes	MainWindow		Заметки
+No module selected.	BibleTextDocument		Модуль не выбран.
+Navigation	MainWindow		Навигация
+Biblical Texts	ParallelBibleView		Библейские тексты
+Previous Chapter	MainWindow		Предыдущая глава
 Find: 	SearchWindow		Найти:
+%d matching entries -- pick one below.	DictionaryWindow		%d подходящих статей — выберите одну ниже.

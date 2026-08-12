@@ -1,40 +1,62 @@
-1	Spanish	application/x-vnd.Scripture-Guide	740233707
-Find Verse…	MainWindow		Find Verse…
-Program	MainWindow		Program
-Next Chapter	MainWindow		Next Chapter
-About Scripture Guide…	MainWindow		About Scripture Guide…
-This module does not have this section.	MainWindow		This module does not have this section.
-Previous Book	MainWindow		Previous Book
-Select All	MainWindow		Select All
-Quit	MainWindow		Quit
-Chapter	MainWindow		Capítulo
-Options	MainWindow		Opciones
-Copy Verses	MainWindow		Copy Verses
-Duplicate This Window…	MainWindow		Duplicar esta ventana...
-Choose Font...	MainWindow		Choose Font...
-Commentaries	MainWindow		Comentarios
-Close This Window	MainWindow		Cerrar esta ventana
-Show Verse Numbers	MainWindow		Show Verse Numbers
-Text:	MainWindow		Text:
-Navigation	MainWindow		Navegación
-Bibles	MainWindow		Biblias
-Notes…	MainWindow		Notas…
-Next Book	MainWindow		Next Book
-Previous Chapter	MainWindow		Previous Chapter
-Book:	MainWindow		Libro:
-Verse	MainWindow		Verse
-No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.	MainWindow		No Modules installed\n\n Please use ScriptureGuideManager to download the books you want.
-Font Name	FontPanel		Font Name
-Preview	FontPanel		Preview
-OK	FontPanel		Aceptar
-Font Size: 	FontPanel		Font Size: 
+1	Spanish	application/x-vnd.Scripture-Guide	3458641352
+Find Verse…	MainWindow		Buscar versículo…
+Dictionary 	DictionaryWindow		Diccionario 
 Regular Expression	SearchWindow		Expresión regular
+Commentaries	ParallelBibleView		Comentarios
+Choose Font…	MainWindow		Elegir tipo de letra…
+As HTML Table	MainWindow		Como tabla HTML
+Back	MainWindow		Atrás
+Verse	MainWindow		Versículo
+Notes	ExportFormats		Notas
+Show Cross-References	MainWindow		Mostrar referencias cruzadas
+Quit	MainWindow		Salir
+Forward	MainWindow		Adelante
+Copy Comparison	MainWindow		Copiar comparación
+Look up: 	DictionaryWindow		Buscar: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Resultados de la búsqueda (solo se muestran si una consulta encuentra más de una coincidencia):
+As Plain Text	MainWindow		Como texto sin formato
+Find	SearchWindow		Buscar
+Book Manager…	MainWindow		Gestor de libros…
+Duplicate This Window…	MainWindow		Duplicar esta ventana...
+Search in 	SearchWindow		Buscar en 
+Font Size: 	FontPanel		Tamaño: 
+Close This Window	MainWindow		Cerrar esta ventana
+Show Verse Numbers	MainWindow		Mostrar números de versículo
+Start in 	SearchWindow		Empezar en 
+Find Words	SearchWindow		Buscar palabras
+As Tab-Separated	MainWindow		Como valores separados por tabuladores
+Next Book	MainWindow		Libro siguiente
+Verse	ExportFormats		Versículo
+Go to / Search:	MainWindow		Ir a / Buscar:
+Book:	MainWindow		Libro:
+Program	MainWindow		Programa
+About Scripture Guide…	MainWindow		Acerca de Scripture Guide…
+Font Name	FontPanel		Tipo de letra
+Next Chapter	MainWindow		Capítulo siguiente
+Dictionary…	MainWindow		Diccionario…
+Previous Book	MainWindow		Libro anterior
 Search Progress:	SearchWindow		Progreso de la búsqueda:
-Find Phrase	SearchWindow		Find Phrase
-Match Case	SearchWindow		Match Case
-Search Results:	SearchWindow		Search Results:
-Find	SearchWindow		Find
-End in 	SearchWindow		End in 
-Start in 	SearchWindow		Start in 
-Find Words	SearchWindow		Find Words
-Find: 	SearchWindow		Find: 
+Look up	DictionaryWindow		Buscar
+Preview	FontPanel		Vista previa
+Find Phrase	SearchWindow		Buscar frase
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		No hay instalado ningún diccionario de Strong para estos números. Instale el módulo %module% desde Programa > Book Manager para consultar %number%.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		No hay ninguna entrada para %number% en el diccionario de Strong instalado.
+Show Strong's Numbers	MainWindow		Mostrar números de Strong
+Match Case	SearchWindow		Distinguir mayúsculas
+Chapter	MainWindow		Capítulo
+OK	FontPanel		Aceptar
+Options	MainWindow		Opciones
+No matching entry found.	DictionaryWindow		No se encontró ninguna entrada.
+Search Results:	SearchWindow		Resultados de la búsqueda:
+Notes	ParallelBibleView		Notas
+End in 	SearchWindow		Terminar en 
+Dictionary	DictionaryWindow		Diccionario
+As Markdown Table	MainWindow		Como tabla Markdown
+Entry:	DictionaryWindow		Entrada:
+Notes	MainWindow		Notas
+No module selected.	BibleTextDocument		Ningún módulo seleccionado.
+Navigation	MainWindow		Navegación
+Biblical Texts	ParallelBibleView		Textos bíblicos
+Previous Chapter	MainWindow		Capítulo anterior
+Find: 	SearchWindow		Buscar: 
+%d matching entries -- pick one below.	DictionaryWindow		%d entradas coincidentes: elija una abajo.
