@@ -1,0 +1,62 @@
+1	Greek (Modern)	application/x-vnd.Scripture-Guide	3458641352
+Find Verse…	MainWindow		Εύρεση Στίχου...
+Dictionary 	DictionaryWindow		Dictionary 
+Regular Expression	SearchWindow		Regular Expression
+Commentaries	ParallelBibleView		Commentaries
+Choose Font…	MainWindow		Choose Font…
+As HTML Table	MainWindow		As HTML Table
+Back	MainWindow		Back
+Verse	MainWindow		Στίχος
+Notes	ExportFormats		Notes
+Show Cross-References	MainWindow		Show Cross-References
+Quit	MainWindow		Έξοδος
+Forward	MainWindow		Forward
+Copy Comparison	MainWindow		Copy Comparison
+Look up: 	DictionaryWindow		Look up: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Search results (only shown if a lookup finds more than one match):
+As Plain Text	MainWindow		As Plain Text
+Find	SearchWindow		Find
+Book Manager…	MainWindow		Book Manager…
+Duplicate This Window…	MainWindow		Duplicate This Window…
+Search in 	SearchWindow		Search in 
+Font Size: 	FontPanel		Μέγεθος Γραμματοσειράς:
+Close This Window	MainWindow		Κλείσιμο Παραθύρου
+Show Verse Numbers	MainWindow		Εμφάνιση Αριθμών Στίχων
+Start in 	SearchWindow		Start in 
+Find Words	SearchWindow		Find Words
+As Tab-Separated	MainWindow		As Tab-Separated
+Next Book	MainWindow		Επόμενο Βιβλίο
+Verse	ExportFormats		Verse
+Go to / Search:	MainWindow		Go to / Search:
+Book:	MainWindow		Βιβλίο:
+Program	MainWindow		Πρόγραμμα
+About Scripture Guide…	MainWindow		Σχετικά με το Scripture Guide…
+Font Name	FontPanel		Όνομα Γραμματοσειράς
+Next Chapter	MainWindow		Επόμενο Κεφάλαιο
+Dictionary…	MainWindow		Dictionary…
+Previous Book	MainWindow		Προηγούμενο Βιβλίο
+Search Progress:	SearchWindow		Search Progress:
+Look up	DictionaryWindow		Look up
+Preview	FontPanel		Προεπισκόπηση
+Find Phrase	SearchWindow		Find Phrase
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		No entry for %number% in the installed Strong's dictionary.
+Show Strong's Numbers	MainWindow		Show Strong's Numbers
+Match Case	SearchWindow		Match Case
+Chapter	MainWindow		Κεφάλαιο
+OK	FontPanel		Εντάξει
+Options	MainWindow		Ρυθμίσεις
+No matching entry found.	DictionaryWindow		No matching entry found.
+Search Results:	SearchWindow		Search Results:
+Notes	ParallelBibleView		Notes
+End in 	SearchWindow		Τέλος σε
+Dictionary	DictionaryWindow		Dictionary
+As Markdown Table	MainWindow		As Markdown Table
+Entry:	DictionaryWindow		Entry:
+Notes	MainWindow		Notes
+No module selected.	BibleTextDocument		No module selected.
+Navigation	MainWindow		Καθοδήγηση
+Biblical Texts	ParallelBibleView		Biblical Texts
+Previous Chapter	MainWindow		Προηγούμενο Κεφάλαιο
+Find: 	SearchWindow		Find: 
+%d matching entries -- pick one below.	DictionaryWindow		%d matching entries -- pick one below.

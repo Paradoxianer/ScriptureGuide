@@ -22,7 +22,7 @@ Search in 	SearchWindow		Искать в
 Font Size: 	FontPanel		Размер шрифта:
 Close This Window	MainWindow		Закрыть это окно
 Show Verse Numbers	MainWindow		Показывать нумерацию стихов
-Start in 	SearchWindow		Начинаится с
+Start in 	SearchWindow		Начинается с
 Find Words	SearchWindow		Найти слова
 As Tab-Separated	MainWindow		Как значения, разделённые табуляцией
 Next Book	MainWindow		Следующая книга

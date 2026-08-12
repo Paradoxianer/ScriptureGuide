@@ -1,0 +1,62 @@
+1	Catalan	application/x-vnd.Scripture-Guide	3458641352
+Find Verse…	MainWindow		Troba un vers...
+Dictionary 	DictionaryWindow		Dictionary 
+Regular Expression	SearchWindow		Expressió regular
+Commentaries	ParallelBibleView		Commentaries
+Choose Font…	MainWindow		Choose Font…
+As HTML Table	MainWindow		As HTML Table
+Back	MainWindow		Back
+Verse	MainWindow		Vers
+Notes	ExportFormats		Notes
+Show Cross-References	MainWindow		Show Cross-References
+Quit	MainWindow		Surt
+Forward	MainWindow		Forward
+Copy Comparison	MainWindow		Copy Comparison
+Look up: 	DictionaryWindow		Look up: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Search results (only shown if a lookup finds more than one match):
+As Plain Text	MainWindow		As Plain Text
+Find	SearchWindow		Troba
+Book Manager…	MainWindow		Book Manager…
+Duplicate This Window…	MainWindow		Duplica aquesta finestra
+Search in 	SearchWindow		Search in 
+Font Size: 	FontPanel		Mida de la lletra:
+Close This Window	MainWindow		Tanca aquesta finestra
+Show Verse Numbers	MainWindow		Mostra els números de versos
+Start in 	SearchWindow		Comença a
+Find Words	SearchWindow		Troba paraules
+As Tab-Separated	MainWindow		As Tab-Separated
+Next Book	MainWindow		Llibre següent
+Verse	ExportFormats		Verse
+Go to / Search:	MainWindow		Go to / Search:
+Book:	MainWindow		Llibre:
+Program	MainWindow		Programa
+About Scripture Guide…	MainWindow		Quant a l'Scripture Guide…
+Font Name	FontPanel		Nom de la lletra
+Next Chapter	MainWindow		Capítol següent
+Dictionary…	MainWindow		Dictionary…
+Previous Book	MainWindow		Llibre anterior
+Search Progress:	SearchWindow		Progrés de la cerca:
+Look up	DictionaryWindow		Look up
+Preview	FontPanel		Previsualització
+Find Phrase	SearchWindow		Troba la frase
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		No entry for %number% in the installed Strong's dictionary.
+Show Strong's Numbers	MainWindow		Show Strong's Numbers
+Match Case	SearchWindow		Coincidència de caixa
+Chapter	MainWindow		Capítol
+OK	FontPanel		D'acord
+Options	MainWindow		Opcions
+No matching entry found.	DictionaryWindow		No matching entry found.
+Search Results:	SearchWindow		Resultats de la cerca:
+Notes	ParallelBibleView		Notes
+End in 	SearchWindow		Acaba a
+Dictionary	DictionaryWindow		Dictionary
+As Markdown Table	MainWindow		As Markdown Table
+Entry:	DictionaryWindow		Entry:
+Notes	MainWindow		Notes
+No module selected.	BibleTextDocument		No module selected.
+Navigation	MainWindow		Navegació
+Biblical Texts	ParallelBibleView		Biblical Texts
+Previous Chapter	MainWindow		Capítol anterior
+Find: 	SearchWindow		Troba:
+%d matching entries -- pick one below.	DictionaryWindow		%d matching entries -- pick one below.

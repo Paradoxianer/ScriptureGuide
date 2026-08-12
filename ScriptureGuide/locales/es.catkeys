@@ -1,5 +1,5 @@
 1	Spanish	application/x-vnd.Scripture-Guide	3458641352
-Find Verse…	MainWindow		Buscar versículo…
+Find Verse…	MainWindow		Encontrar versículo…
 Dictionary 	DictionaryWindow		Diccionario 
 Regular Expression	SearchWindow		Expresión regular
 Commentaries	ParallelBibleView		Comentarios
@@ -15,15 +15,15 @@ Copy Comparison	MainWindow		Copiar comparación
 Look up: 	DictionaryWindow		Buscar: 
 Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Resultados de la búsqueda (solo se muestran si una consulta encuentra más de una coincidencia):
 As Plain Text	MainWindow		Como texto sin formato
-Find	SearchWindow		Buscar
+Find	SearchWindow		Encontrar
 Book Manager…	MainWindow		Gestor de libros…
 Duplicate This Window…	MainWindow		Duplicar esta ventana...
 Search in 	SearchWindow		Buscar en 
-Font Size: 	FontPanel		Tamaño: 
+Font Size: 	FontPanel		Tamaño de fuente: 
 Close This Window	MainWindow		Cerrar esta ventana
 Show Verse Numbers	MainWindow		Mostrar números de versículo
-Start in 	SearchWindow		Empezar en 
-Find Words	SearchWindow		Buscar palabras
+Start in 	SearchWindow		Comenzar en
+Find Words	SearchWindow		Encontrar palabras
 As Tab-Separated	MainWindow		Como valores separados por tabuladores
 Next Book	MainWindow		Libro siguiente
 Verse	ExportFormats		Versículo
@@ -31,18 +31,18 @@ Go to / Search:	MainWindow		Ir a / Buscar:
 Book:	MainWindow		Libro:
 Program	MainWindow		Programa
 About Scripture Guide…	MainWindow		Acerca de Scripture Guide…
-Font Name	FontPanel		Tipo de letra
+Font Name	FontPanel		Nombre de fuente
 Next Chapter	MainWindow		Capítulo siguiente
 Dictionary…	MainWindow		Diccionario…
 Previous Book	MainWindow		Libro anterior
 Search Progress:	SearchWindow		Progreso de la búsqueda:
 Look up	DictionaryWindow		Buscar
-Preview	FontPanel		Vista previa
-Find Phrase	SearchWindow		Buscar frase
+Preview	FontPanel		Vista preliminar
+Find Phrase	SearchWindow		Encontrar frase
 No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		No hay instalado ningún diccionario de Strong para estos números. Instale el módulo %module% desde Programa > Book Manager para consultar %number%.
 No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		No hay ninguna entrada para %number% en el diccionario de Strong instalado.
 Show Strong's Numbers	MainWindow		Mostrar números de Strong
-Match Case	SearchWindow		Distinguir mayúsculas
+Match Case	SearchWindow		Coincidir mayúsculas y minúsculas
 Chapter	MainWindow		Capítulo
 OK	FontPanel		Aceptar
 Options	MainWindow		Opciones
@@ -58,5 +58,5 @@ No module selected.	BibleTextDocument		Ningún módulo seleccionado.
 Navigation	MainWindow		Navegación
 Biblical Texts	ParallelBibleView		Textos bíblicos
 Previous Chapter	MainWindow		Capítulo anterior
-Find: 	SearchWindow		Buscar: 
+Find: 	SearchWindow		Encontrar: 
 %d matching entries -- pick one below.	DictionaryWindow		%d entradas coincidentes: elija una abajo.

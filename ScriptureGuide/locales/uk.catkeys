@@ -1,0 +1,62 @@
+1	Ukrainian	application/x-vnd.Scripture-Guide	3458641352
+Find Verse…	MainWindow		Знайти вірш…
+Dictionary 	DictionaryWindow		Dictionary 
+Regular Expression	SearchWindow		Регулярний вираз
+Commentaries	ParallelBibleView		Commentaries
+Choose Font…	MainWindow		Choose Font…
+As HTML Table	MainWindow		As HTML Table
+Back	MainWindow		Back
+Verse	MainWindow		Вірш
+Notes	ExportFormats		Notes
+Show Cross-References	MainWindow		Show Cross-References
+Quit	MainWindow		Вийти
+Forward	MainWindow		Forward
+Copy Comparison	MainWindow		Copy Comparison
+Look up: 	DictionaryWindow		Look up: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Search results (only shown if a lookup finds more than one match):
+As Plain Text	MainWindow		As Plain Text
+Find	SearchWindow		Знайти
+Book Manager…	MainWindow		Book Manager…
+Duplicate This Window…	MainWindow		Дублювати це вікно…
+Search in 	SearchWindow		Search in 
+Font Size: 	FontPanel		Розмір шрифта: 
+Close This Window	MainWindow		Закрити це вікно
+Show Verse Numbers	MainWindow		Показати номери віршів
+Start in 	SearchWindow		Почати в
+Find Words	SearchWindow		Знайти слова
+As Tab-Separated	MainWindow		As Tab-Separated
+Next Book	MainWindow		Наступна книга
+Verse	ExportFormats		Verse
+Go to / Search:	MainWindow		Go to / Search:
+Book:	MainWindow		Книга:
+Program	MainWindow		Програма
+About Scripture Guide…	MainWindow		Про Scripture Guide…
+Font Name	FontPanel		Назва шрифта
+Next Chapter	MainWindow		Наступний розділ
+Dictionary…	MainWindow		Dictionary…
+Previous Book	MainWindow		Попередня книга
+Search Progress:	SearchWindow		Хід пошуку:
+Look up	DictionaryWindow		Look up
+Preview	FontPanel		Попередній перегляд
+Find Phrase	SearchWindow		Знайти фразу
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		No entry for %number% in the installed Strong's dictionary.
+Show Strong's Numbers	MainWindow		Show Strong's Numbers
+Match Case	SearchWindow		випадок збігу
+Chapter	MainWindow		Розділ
+OK	FontPanel		OK
+Options	MainWindow		Опції
+No matching entry found.	DictionaryWindow		No matching entry found.
+Search Results:	SearchWindow		Результати пошуку:
+Notes	ParallelBibleView		Notes
+End in 	SearchWindow		Закінчується в 
+Dictionary	DictionaryWindow		Dictionary
+As Markdown Table	MainWindow		As Markdown Table
+Entry:	DictionaryWindow		Entry:
+Notes	MainWindow		Notes
+No module selected.	BibleTextDocument		No module selected.
+Navigation	MainWindow		Навігація
+Biblical Texts	ParallelBibleView		Biblical Texts
+Previous Chapter	MainWindow		Попередній розділ
+Find: 	SearchWindow		Знайти: 
+%d matching entries -- pick one below.	DictionaryWindow		%d matching entries -- pick one below.

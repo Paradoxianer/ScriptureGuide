@@ -22,7 +22,7 @@ Search in 	SearchWindow		Rechercher dans
 Font Size: 	FontPanel		Dimension de la police : 
 Close This Window	MainWindow		Fermer cette fenêtre
 Show Verse Numbers	MainWindow		Afficher les numéros des versets
-Start in 	SearchWindow		Débute
+Start in 	SearchWindow		Débuter dans 
 Find Words	SearchWindow		Chercher des mots
 As Tab-Separated	MainWindow		En valeurs séparées par des tabulations
 Next Book	MainWindow		Livre suivant
@@ -44,12 +44,12 @@ No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		Au
 Show Strong's Numbers	MainWindow		Afficher les numéros Strong
 Match Case	SearchWindow		Respecter la casse
 Chapter	MainWindow		Chapitre
-OK	FontPanel		OK
+OK	FontPanel		D’accord
 Options	MainWindow		Options
 No matching entry found.	DictionaryWindow		Aucune entrée correspondante trouvée.
 Search Results:	SearchWindow		Résultats de la recherche :
 Notes	ParallelBibleView		Notes
-End in 	SearchWindow		Prend fin
+End in 	SearchWindow		Prendre fin dans 
 Dictionary	DictionaryWindow		Dictionnaire
 As Markdown Table	MainWindow		En tableau Markdown
 Entry:	DictionaryWindow		Entrée :

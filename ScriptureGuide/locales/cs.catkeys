@@ -1,0 +1,62 @@
+1	Czech	application/x-vnd.Scripture-Guide	3458641352
+Find Verse…	MainWindow		Najít verše...
+Dictionary 	DictionaryWindow		Dictionary 
+Regular Expression	SearchWindow		Regulární výraz
+Commentaries	ParallelBibleView		Commentaries
+Choose Font…	MainWindow		Choose Font…
+As HTML Table	MainWindow		As HTML Table
+Back	MainWindow		Back
+Verse	MainWindow		Verš
+Notes	ExportFormats		Notes
+Show Cross-References	MainWindow		Show Cross-References
+Quit	MainWindow		Ukončit
+Forward	MainWindow		Forward
+Copy Comparison	MainWindow		Copy Comparison
+Look up: 	DictionaryWindow		Look up: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Search results (only shown if a lookup finds more than one match):
+As Plain Text	MainWindow		As Plain Text
+Find	SearchWindow		Najít
+Book Manager…	MainWindow		Book Manager…
+Duplicate This Window…	MainWindow		Duplikovat tahle okna...
+Search in 	SearchWindow		Search in 
+Font Size: 	FontPanel		Velikost písma
+Close This Window	MainWindow		Zavřete toto okno
+Show Verse Numbers	MainWindow		Zobrazit čisla veršů
+Start in 	SearchWindow		Začína v
+Find Words	SearchWindow		Najít slova
+As Tab-Separated	MainWindow		As Tab-Separated
+Next Book	MainWindow		Další kniha
+Verse	ExportFormats		Verse
+Go to / Search:	MainWindow		Go to / Search:
+Book:	MainWindow		Kniha:
+Program	MainWindow		Program
+About Scripture Guide…	MainWindow		O průvodci Písmem…
+Font Name	FontPanel		Jméno písma
+Next Chapter	MainWindow		Další kapitola
+Dictionary…	MainWindow		Dictionary…
+Previous Book	MainWindow		Předchozí kniha
+Search Progress:	SearchWindow		Průběh hledání:
+Look up	DictionaryWindow		Look up
+Preview	FontPanel		Náhled
+Find Phrase	SearchWindow		Najít frázi
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		No entry for %number% in the installed Strong's dictionary.
+Show Strong's Numbers	MainWindow		Show Strong's Numbers
+Match Case	SearchWindow		Match Case
+Chapter	MainWindow		Kapitola
+OK	FontPanel		OK
+Options	MainWindow		Možnosti
+No matching entry found.	DictionaryWindow		No matching entry found.
+Search Results:	SearchWindow		Výsledek hledání:
+Notes	ParallelBibleView		Notes
+End in 	SearchWindow		Končí v
+Dictionary	DictionaryWindow		Dictionary
+As Markdown Table	MainWindow		As Markdown Table
+Entry:	DictionaryWindow		Entry:
+Notes	MainWindow		Notes
+No module selected.	BibleTextDocument		No module selected.
+Navigation	MainWindow		Navigace
+Biblical Texts	ParallelBibleView		Biblical Texts
+Previous Chapter	MainWindow		Předchozí kapitola
+Find: 	SearchWindow		Najít: 
+%d matching entries -- pick one below.	DictionaryWindow		%d matching entries -- pick one below.

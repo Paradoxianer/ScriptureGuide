@@ -1,0 +1,62 @@
+1	Friulian	application/x-vnd.Scripture-Guide	3458641352
+Find Verse…	MainWindow		Cjate viers…
+Dictionary 	DictionaryWindow		Dictionary 
+Regular Expression	SearchWindow		Espression regolâr
+Commentaries	ParallelBibleView		Commentaries
+Choose Font…	MainWindow		Choose Font…
+As HTML Table	MainWindow		As HTML Table
+Back	MainWindow		Back
+Verse	MainWindow		Viers
+Notes	ExportFormats		Notes
+Show Cross-References	MainWindow		Show Cross-References
+Quit	MainWindow		Jes
+Forward	MainWindow		Forward
+Copy Comparison	MainWindow		Copy Comparison
+Look up: 	DictionaryWindow		Look up: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Search results (only shown if a lookup finds more than one match):
+As Plain Text	MainWindow		As Plain Text
+Find	SearchWindow		Cjate
+Book Manager…	MainWindow		Book Manager…
+Duplicate This Window…	MainWindow		Doplee chest barcon…
+Search in 	SearchWindow		Search in 
+Font Size: 	FontPanel		Dimension caratar: 
+Close This Window	MainWindow		Siere chest barcon
+Show Verse Numbers	MainWindow		Mostre numars dai viers
+Start in 	SearchWindow		Scomence in 
+Find Words	SearchWindow		Cjate peraulis
+As Tab-Separated	MainWindow		As Tab-Separated
+Next Book	MainWindow		Prossim libri
+Verse	ExportFormats		Verse
+Go to / Search:	MainWindow		Go to / Search:
+Book:	MainWindow		Libri:
+Program	MainWindow		Program
+About Scripture Guide…	MainWindow		Informazions su Scripture Guide…
+Font Name	FontPanel		Non caratar
+Next Chapter	MainWindow		Prossim cjapitul
+Dictionary…	MainWindow		Dictionary…
+Previous Book	MainWindow		Libri precedent
+Search Progress:	SearchWindow		Avanzament de ricercje:
+Look up	DictionaryWindow		Look up
+Preview	FontPanel		Anteprime
+Find Phrase	SearchWindow		Cjate frase
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		No entry for %number% in the installed Strong's dictionary.
+Show Strong's Numbers	MainWindow		Show Strong's Numbers
+Match Case	SearchWindow		Corispondence maiusculis
+Chapter	MainWindow		Cjapitul
+OK	FontPanel		Va ben
+Options	MainWindow		Opzions
+No matching entry found.	DictionaryWindow		No matching entry found.
+Search Results:	SearchWindow		Risultâts de ricercje:
+Notes	ParallelBibleView		Notes
+End in 	SearchWindow		Finìs in 
+Dictionary	DictionaryWindow		Dictionary
+As Markdown Table	MainWindow		As Markdown Table
+Entry:	DictionaryWindow		Entry:
+Notes	MainWindow		Notes
+No module selected.	BibleTextDocument		No module selected.
+Navigation	MainWindow		Navigazion
+Biblical Texts	ParallelBibleView		Biblical Texts
+Previous Chapter	MainWindow		Cjapitul precedent
+Find: 	SearchWindow		Cjate: 
+%d matching entries -- pick one below.	DictionaryWindow		%d matching entries -- pick one below.

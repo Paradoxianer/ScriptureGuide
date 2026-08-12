@@ -1,0 +1,62 @@
+1	Turkish	application/x-vnd.Scripture-Guide	3458641352
+Find Verse…	MainWindow		Ayet bul…
+Dictionary 	DictionaryWindow		Dictionary 
+Regular Expression	SearchWindow		Düzenli ifade
+Commentaries	ParallelBibleView		Commentaries
+Choose Font…	MainWindow		Choose Font…
+As HTML Table	MainWindow		As HTML Table
+Back	MainWindow		Back
+Verse	MainWindow		Ayet
+Notes	ExportFormats		Notes
+Show Cross-References	MainWindow		Show Cross-References
+Quit	MainWindow		Çık
+Forward	MainWindow		Forward
+Copy Comparison	MainWindow		Copy Comparison
+Look up: 	DictionaryWindow		Look up: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Search results (only shown if a lookup finds more than one match):
+As Plain Text	MainWindow		As Plain Text
+Find	SearchWindow		Bul
+Book Manager…	MainWindow		Book Manager…
+Duplicate This Window…	MainWindow		Bu pencereyi çoğalt…
+Search in 	SearchWindow		Search in 
+Font Size: 	FontPanel		Yazıtipi boyutu: 
+Close This Window	MainWindow		Bu pencereyi kapat
+Show Verse Numbers	MainWindow		Ayet numaralarını göster
+Start in 	SearchWindow		Şurada başlar: 
+Find Words	SearchWindow		Sözcük bul
+As Tab-Separated	MainWindow		As Tab-Separated
+Next Book	MainWindow		Sonraki kitap
+Verse	ExportFormats		Verse
+Go to / Search:	MainWindow		Go to / Search:
+Book:	MainWindow		Kitap:
+Program	MainWindow		Program
+About Scripture Guide…	MainWindow		Kutsal Kitap Kılavuzu hakkında…
+Font Name	FontPanel		Yazıtipi adı
+Next Chapter	MainWindow		Sonraki fasıl
+Dictionary…	MainWindow		Dictionary…
+Previous Book	MainWindow		Önceki kitap
+Search Progress:	SearchWindow		Arama ilerlemesi:
+Look up	DictionaryWindow		Look up
+Preview	FontPanel		Önizleme
+Find Phrase	SearchWindow		İfade bul
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		No entry for %number% in the installed Strong's dictionary.
+Show Strong's Numbers	MainWindow		Show Strong's Numbers
+Match Case	SearchWindow		BÜYÜK/küçük harf eşleştir
+Chapter	MainWindow		Fasıl
+OK	FontPanel		Tamam
+Options	MainWindow		Seçenekler
+No matching entry found.	DictionaryWindow		No matching entry found.
+Search Results:	SearchWindow		Arama sonuçları:
+Notes	ParallelBibleView		Notes
+End in 	SearchWindow		Şurada biter: 
+Dictionary	DictionaryWindow		Dictionary
+As Markdown Table	MainWindow		As Markdown Table
+Entry:	DictionaryWindow		Entry:
+Notes	MainWindow		Notes
+No module selected.	BibleTextDocument		No module selected.
+Navigation	MainWindow		Dolaşım
+Biblical Texts	ParallelBibleView		Biblical Texts
+Previous Chapter	MainWindow		Önceki fasıl
+Find: 	SearchWindow		Bul: 
+%d matching entries -- pick one below.	DictionaryWindow		%d matching entries -- pick one below.

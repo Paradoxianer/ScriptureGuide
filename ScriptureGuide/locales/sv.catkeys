@@ -1,0 +1,62 @@
+1	Swedish	application/x-vnd.Scripture-Guide	3458641352
+Find Verse…	MainWindow		Hitta vers...
+Dictionary 	DictionaryWindow		Dictionary 
+Regular Expression	SearchWindow		Vanligt uttryck
+Commentaries	ParallelBibleView		Commentaries
+Choose Font…	MainWindow		Choose Font…
+As HTML Table	MainWindow		As HTML Table
+Back	MainWindow		Back
+Verse	MainWindow		Vers
+Notes	ExportFormats		Notes
+Show Cross-References	MainWindow		Show Cross-References
+Quit	MainWindow		Avsluta
+Forward	MainWindow		Forward
+Copy Comparison	MainWindow		Copy Comparison
+Look up: 	DictionaryWindow		Look up: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Search results (only shown if a lookup finds more than one match):
+As Plain Text	MainWindow		As Plain Text
+Find	SearchWindow		Hitta
+Book Manager…	MainWindow		Book Manager…
+Duplicate This Window…	MainWindow		Duplicera det här fönstret...
+Search in 	SearchWindow		Search in 
+Font Size: 	FontPanel		Textstorlek:
+Close This Window	MainWindow		Stäng det här fönstret
+Show Verse Numbers	MainWindow		Visa versnummer
+Start in 	SearchWindow		Startar i
+Find Words	SearchWindow		Hitta ord
+As Tab-Separated	MainWindow		As Tab-Separated
+Next Book	MainWindow		Nästa bok
+Verse	ExportFormats		Verse
+Go to / Search:	MainWindow		Go to / Search:
+Book:	MainWindow		Bok:
+Program	MainWindow		Program
+About Scripture Guide…	MainWindow		Om Scripture Guide…
+Font Name	FontPanel		Teckensnitt Namn
+Next Chapter	MainWindow		Nästa kapitel
+Dictionary…	MainWindow		Dictionary…
+Previous Book	MainWindow		Föregående bok
+Search Progress:	SearchWindow		Sökframsteg:
+Look up	DictionaryWindow		Look up
+Preview	FontPanel		Förhandsvisning
+Find Phrase	SearchWindow		Hitta fras
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		No entry for %number% in the installed Strong's dictionary.
+Show Strong's Numbers	MainWindow		Show Strong's Numbers
+Match Case	SearchWindow		Liknande fall
+Chapter	MainWindow		Kapitel
+OK	FontPanel		OK
+Options	MainWindow		Alternativ
+No matching entry found.	DictionaryWindow		No matching entry found.
+Search Results:	SearchWindow		Sökresultat:
+Notes	ParallelBibleView		Notes
+End in 	SearchWindow		Slutar i
+Dictionary	DictionaryWindow		Dictionary
+As Markdown Table	MainWindow		As Markdown Table
+Entry:	DictionaryWindow		Entry:
+Notes	MainWindow		Notes
+No module selected.	BibleTextDocument		No module selected.
+Navigation	MainWindow		Navigering
+Biblical Texts	ParallelBibleView		Biblical Texts
+Previous Chapter	MainWindow		Föregående kapitel
+Find: 	SearchWindow		Hitta:
+%d matching entries -- pick one below.	DictionaryWindow		%d matching entries -- pick one below.
