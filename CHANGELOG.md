@@ -39,6 +39,11 @@ When a lookup does fail, the message now distinguishes "that dictionary
 isn't installed" (and names the module to install) from "no entry for
 this number".
 
+Strong's numbers need the matching dictionary installed to be of any use:
+`StrongsGreek` for the New Testament, `StrongsHebrew` for the Old. Both
+are in the Book Manager's list. Until one is installed its numbers simply
+render as ordinary text.
+
 ### Fixes
 
 - A column group could be left scrolled somewhere it could not scroll
@@ -101,9 +106,6 @@ do outside this workflow — see CLAUDE.md.
 
 ### Known issues
 
-- No Hebrew Strong's dictionary is available from the module list used
-  here, so Old Testament Strong's numbers cannot be looked up regardless
-  of this release. Install `StrongsHebrew` if your repository offers it.
 - `ScriptureGuide/tests` only builds when the application has been built
   first. Its Makefile reaches into `../` for sources, which puts `..` on
   make's VPATH — and VPATH applies to targets too, so make answers a
