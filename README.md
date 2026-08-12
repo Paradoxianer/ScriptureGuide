@@ -108,6 +108,10 @@ Diagnostics are off unless asked for:
 
     SG_DEBUG=1 ./ScriptureGuide
 
+## Where it's going
+
+[ROADMAP.md](ROADMAP.md) — bookmarks and passage highlighting are next.
+
 ## Documentation
 
 The manual is in `App/docs`, in [English](App/docs/index.html) and
