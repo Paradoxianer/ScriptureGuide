@@ -586,7 +586,23 @@ void SGMainWindow::SavePrefsForModule(void)
 	preferences.RemoveData("module");
 	preferences.AddString("module",fCurrentModule->Name());
 	preferences.RemoveData("key");
-	preferences.AddString("key",fCurrentModule->GetKey());
+	// The ACTIVE CHAIN's own position, not fCurrentModule's (#24).
+	// Nothing ever calls fCurrentModule->SetKey() -- confirmed, there is
+	// no such call anywhere in this file -- so its key was only ever
+	// whatever the underlying shared SWModule happened to be left at by
+	// the last BibleTextDocument that rebuilt from it. It does not track
+	// what the user is reading: navigating to Psalmen 119:5 and quitting
+	// saved "1. Mose 1:1" (reproduced). ChainKey() is the value the
+	// history feature already relies on for exactly this question.
+	BString savedKey;
+	if (fParallelView != NULL) {
+		int32 column = fParallelView->ActiveColumn();
+		if (column >= 0)
+			savedKey = fParallelView->ChainKey(column);
+	}
+	if (savedKey.IsEmpty() && fCurrentModule != NULL)
+		savedKey = fCurrentModule->GetKey();
+	preferences.AddString("key",savedKey);
 
 	// Full column layout (#9): every column's type and, for Bible/
 	// Commentary columns, its module -- in on-screen order, so a saved
