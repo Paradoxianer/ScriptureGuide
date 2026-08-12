@@ -1,5 +1,9 @@
+#include <Alert.h>
 #include <Application.h>
 #include <LayoutBuilder.h>
+#include <GroupView.h>
+#include <List.h>
+#include <StringView.h>
 
 #include <stdlib.h>
 #include <ColumnTypes.h>
@@ -18,7 +22,9 @@ enum
 	M_MARK_MODULE,
 	M_SET_PACKAGES,
 	M_INSTALL_SELECTION,
-	M_REMOVE_SELECTION
+	M_REMOVE_SELECTION,
+	M_SELECT_AVAILABLE,
+	M_SELECT_INSTALLED
 };
 
 
@@ -71,46 +77,29 @@ MainWindow::MainWindow(BRect frame)
 	menu->AddItem(new BMenuItem("Quit",new BMessage(B_QUIT_REQUESTED),'Q',0));
 	mbar->AddItem(menu);
 	
-	// Set up the module list
-	fBookListView = new BColumnListView("booklist",0);
-	// Wide enough for "Will install" -- the old 25px fitted one character
-	// and nothing more.
-	BStringColumn *installed_column = new BStringColumn("Status",90,50,150,0);
-	BStringColumn *book_column = new BStringColumn("Book",200,50,1000,0);
-	// SWORD's own module vocabulary, so this column says the same thing
-	// the reading app's module menu does (see ReadConfigFile()). Sortable
-	// like every other column, which is what issue #41 asks for.
-	BStringColumn *type_column = new BStringColumn("Type",150,50,400,0);
-	BStringColumn *language_column = new BStringColumn("Language",75,50,1000,0);
-	fBookListView->AddColumn(installed_column,COLUMN_STATUS);
-	fBookListView->AddColumn(book_column,COLUMN_BOOK);
-	fBookListView->AddColumn(type_column,COLUMN_TYPE);
-	fBookListView->AddColumn(language_column,COLUMN_LANGUAGE);
-	// The point of issue #37: mark a whole batch at once instead of
-	// double-clicking every entry in turn.
-	fBookListView->SetSelectionMode(B_MULTIPLE_SELECTION_LIST);
-	fBookListView->SetSelectionMessage(new BMessage(M_SELECT_MODULE));
-	// Double-click still works as a shortcut for "install this one" on a
-	// single row, but it is no longer the ONLY way to mark anything.
-	fBookListView->SetInvocationMessage(new BMessage(M_MARK_MODULE));	
+	// Set up the two module lists. Which side a row is on is its state
+	// (see MainWindow.h); the Status column carries only the pending part.
+	fAvailableList = MakeModuleList("availablelist", M_SELECT_AVAILABLE);
+	fInstalledList = MakeModuleList("installedlist", M_SELECT_INSTALLED);
+
 	for(int32 i=0; i<fConfFileList.CountItems(); i++)
 	{
 		ConfigFile *cfile=(ConfigFile*)fConfFileList.ItemAt(i);
-		if(cfile)
-		{
-			BookRow *row = new BookRow(cfile);
-			bool installed = IsInstalled(cfile->fFileName.String());
-			row->SetField(new BStringField(state_text(installed
-					? STATE_INSTALLED : STATE_AVAILABLE)),
-				COLUMN_STATUS);
-			row->SetField(new BStringField(cfile->fDescription.String()),
-				COLUMN_BOOK);
-			row->SetField(new BStringField(cfile->fType.String()),
-				COLUMN_TYPE);
-			row->SetField(new BStringField(cfile->fLanguage.String()),
-				COLUMN_LANGUAGE);
-			fBookListView->AddRow(row);
-		}
+		if(cfile==NULL)
+			continue;
+
+		BookRow *row = new BookRow(cfile);
+		row->SetField(new BStringField(""),COLUMN_STATUS);
+		row->SetField(new BStringField(cfile->fDescription.String()),
+			COLUMN_BOOK);
+		row->SetField(new BStringField(cfile->fType.String()),COLUMN_TYPE);
+		row->SetField(new BStringField(cfile->fLanguage.String()),
+			COLUMN_LANGUAGE);
+
+		if(IsInstalled(cfile->fFileName.String()))
+			fInstalledList->AddRow(row);
+		else
+			fAvailableList->AddRow(row);
 	}
 	
 	// Add the box we use for descriptions
@@ -119,35 +108,99 @@ MainWindow::MainWindow(BRect frame)
 	fTextScrollView=new BScrollView("textscrollview",fTextView,0,false,true);
 	fTextScrollView->SetViewColor(ui_color(B_PANEL_BACKGROUND_COLOR));
 	
-	fInstallButton=new BButton("install button", "Install",
+	// Arrows rather than words: they say WHICH WAY a module moves, which
+	// is the whole point of the two-list layout. The tooltip carries the
+	// verb for anyone who wants it spelled out.
+	fInstallButton=new BButton("install button", "\xE2\x86\x92",
 			new BMessage(M_INSTALL_SELECTION));
+	fInstallButton->SetToolTip("Install the modules selected on the left");
 	fInstallButton->SetEnabled(false);
-	fRemoveButton=new BButton("remove button", "Remove",
+	fRemoveButton=new BButton("remove button", "\xE2\x86\x90",
 			new BMessage(M_REMOVE_SELECTION));
+	fRemoveButton->SetToolTip("Remove the modules selected on the right");
 	fRemoveButton->SetEnabled(false);
-	fApplyButton=new BButton("apply button", "Apply",
-			new BMessage(M_SET_PACKAGES));
-	fApplyButton->SetEnabled(false);
+	BStringView *availableLabel=new BStringView("availablelabel","Available");
+	BStringView *installedLabel=new BStringView("installedlabel","Installed");
+	// Without this the labels were what pinned the lists to their minimum
+	// width, and every spare pixel went to the arrows between them:
+	// BStringView::MaxSize() reports its PREFERRED width unless an
+	// explicit maximum is set, and a vertical group is only as wide as
+	// its narrowest-capped child allows.
+	availableLabel->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED,B_SIZE_UNSET));
+	installedLabel->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED,B_SIZE_UNSET));
+
+	// Its own view with a pinned maximum width. Left as a plain group
+	// with weight 0 it still absorbed a third of the window: weight only
+	// governs how SPARE space is shared, and nothing else was capping how
+	// wide the column could grow, so the two lists -- the things actually
+	// being read -- ended up narrower than the gap between them.
+	// Capped on the BUTTONS as well as the group. Neither weight 0 nor a
+	// max size on the group alone was enough: a group whose children can
+	// grow without bound reports an unbounded maximum itself, so the
+	// column kept claiming a third of the window while the two lists --
+	// the things actually being read -- were squeezed.
+	const float kArrowWidth=40.0f;
+	fInstallButton->SetExplicitMaxSize(BSize(kArrowWidth,B_SIZE_UNSET));
+	fRemoveButton->SetExplicitMaxSize(BSize(kArrowWidth,B_SIZE_UNSET));
+
+	BGroupView *moveButtons=new BGroupView(B_VERTICAL, B_USE_SMALL_SPACING);
+	BLayoutBuilder::Group<>(moveButtons)
+		.AddGlue()
+		.Add(fInstallButton)
+		.Add(fRemoveButton)
+		.AddGlue();
+	moveButtons->SetExplicitMaxSize(BSize(kArrowWidth,B_SIZE_UNLIMITED));
 	
+	// The description/progress pane spans the full width UNDER both
+	// lists, in its own half of a vertical split, so a long About text or
+	// a run of installation output has room without stealing width from
+	// the lists.
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(mbar)
-		// 2:1 rather than 1:1 -- the list carries four columns now and is
-		// the thing being worked in; the description pane only has to
-		// hold a paragraph.
-		.AddSplit(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
-			.Add(fBookListView, 2)
-			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING, 1)
-				.Add(fTextScrollView)
-				.AddGroup(B_HORIZONTAL)
-					.Add(fInstallButton)
-					.Add(fRemoveButton)
-					.AddGlue()
-					.Add(fApplyButton)
+		.AddSplit(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
+			.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING, 3.0f)
+				.AddGroup(B_VERTICAL, 0)
+					.Add(availableLabel)
+					.Add(fAvailableList)
 				.End()
+				// Weight 0: .Add() hands out 1.0 by default, which had this
+				// narrow column claiming an equal share of the width
+				// alongside the two lists.
+				.Add(moveButtons, 0.0f)
+				.AddGroup(B_VERTICAL, 0)
+					.Add(installedLabel)
+					.Add(fInstalledList)
+				.End()
+			.End()
+			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING, 1.0f)
+				.Add(fTextScrollView)
+				.SetInsets(B_USE_SMALL_INSETS)
 			.End()
 		.End()
 	.End();
 }
+
+
+BColumnListView*
+MainWindow::MakeModuleList(const char *name, uint32 selectionMessage)
+{
+	BColumnListView *list = new BColumnListView(name,0);
+	list->AddColumn(new BStringColumn("Status",90,50,150,0),COLUMN_STATUS);
+	list->AddColumn(new BStringColumn("Book",200,50,1000,0),COLUMN_BOOK);
+	// SWORD's own module vocabulary, so this says the same thing the
+	// reading app's module menu does (see ReadConfigFile()). Sortable
+	// like every other column, which is what issue #41 asks for.
+	list->AddColumn(new BStringColumn("Type",150,50,400,0),COLUMN_TYPE);
+	list->AddColumn(new BStringColumn("Language",75,50,1000,0),
+		COLUMN_LANGUAGE);
+	// The point of issue #37: mark a whole batch at once instead of
+	// double-clicking every entry in turn.
+	list->SetSelectionMode(B_MULTIPLE_SELECTION_LIST);
+	list->SetSelectionMessage(new BMessage(selectionMessage));
+	list->SetInvocationMessage(new BMessage(M_MARK_MODULE));
+	return list;
+}
+
 
 bool MainWindow::QuitRequested(void)
 {
@@ -159,33 +212,24 @@ void MainWindow::MessageReceived(BMessage *msg)
 {
 	switch(msg->what)
 	{
-		case M_SELECT_MODULE:
+		case M_SELECT_AVAILABLE:
 		{
 			if(fApplyThread!=-1)
 				break;
-			
-			// With multiple selection there may be no single module to
-			// describe. One row still shows its description; several show
-			// how many are selected, so the pane never looks stale by
-			// describing whichever row happened to be clicked first.
-			BookRow *first=(BookRow*)fBookListView->CurrentSelection();
-			int32 count=0;
-			for(BRow *r=first; r!=NULL; r=fBookListView->CurrentSelection(r))
-				count++;
-			
-			if(count==1 && first && first->File())
-			{
-				BString str(first->File()->fAbout);
-				str << "\n\n" << "Archive Size: " << first->File()->fFileSize
-					<< " K";
-				fTextView->SetText(str.String());
-			}
-			else if(count>1)
-			{
-				BString str;
-				str << count << " modules selected";
-				fTextView->SetText(str.String());
-			}
+			// Selecting in one list clears the other's selection, so the
+			// two move buttons can never both look armed and leave it
+			// ambiguous which way a click would go.
+			fInstalledList->DeselectAll();
+			ShowSelectionInfo(fAvailableList);
+			UpdateButtons();
+			break;
+		}
+		case M_SELECT_INSTALLED:
+		{
+			if(fApplyThread!=-1)
+				break;
+			fAvailableList->DeselectAll();
+			ShowSelectionInfo(fInstalledList);
 			UpdateButtons();
 			break;
 		}
@@ -193,33 +237,23 @@ void MainWindow::MessageReceived(BMessage *msg)
 		{
 			if(fApplyThread!=-1)
 				break;
-			MarkSelection(true);
+			MoveSelection(true);
 			break;
 		}
 		case M_REMOVE_SELECTION:
 		{
 			if(fApplyThread!=-1)
 				break;
-			MarkSelection(false);
+			MoveSelection(false);
 			break;
 		}
 		case M_MARK_MODULE:
 		{
 			if(fApplyThread!=-1)
 				break;
-			// Double-click means "move this one toward installed", the
-			// same thing the Install button does for a whole selection.
-			MarkSelection(true);
-			break;
-		}
-		case M_SET_PACKAGES:
-		{
-			if(fApplyThread!=-1)
-				break;
-			
-			fApplyThread=spawn_thread(ApplyThread,"applythread",B_NORMAL_PRIORITY,this);
-			resume_thread(fApplyThread);
-			
+			// Double-click moves the row to the other side, the same as
+			// the arrow button for whichever list it lives in.
+			MoveSelection(fAvailableList->CurrentSelection()!=NULL);
 			break;
 		}
 		default:
@@ -227,26 +261,115 @@ void MainWindow::MessageReceived(BMessage *msg)
 	}
 }
 
-// `install` reads as "move toward installed": it marks an available
-// module for installation, and it also CANCELS a pending removal, which
-// is what lets two buttons cover marking and unmarking both ways without
-// a third control.
-void MainWindow::MarkSelection(bool install)
+// Moves everything selected in the source list across to the other one.
+// A row always sits in the list it will be in AFTER Apply, so moving it
+// is both the gesture and the feedback.
+//
+// Moving a row BACK cancels the pending mark instead of adding an
+// opposite one, which is why the two buttons need no third "unmark"
+// companion: the state is derived from where the row now is versus what
+// is actually on disk.
+void MainWindow::MoveSelection(bool toInstalled)
 {
-	for(BRow *r=fBookListView->CurrentSelection(); r!=NULL;
-			r=fBookListView->CurrentSelection(r))
+	BColumnListView *source = toInstalled ? fAvailableList : fInstalledList;
+
+	// Collected first, then moved: RemoveRow() while iterating the
+	// selection would pull the row the iteration is standing on out from
+	// under it.
+	BList selected;
+	for(BRow *r=source->CurrentSelection(); r!=NULL;
+			r=source->CurrentSelection(r))
 	{
-		BookRow *row=(BookRow*)r;
+		selected.AddItem(r);
+	}
+
+	for(int32 i=0; i<selected.CountItems(); i++)
+	{
+		BookRow *row=(BookRow*)selected.ItemAt(i);
 		if(row->File()==NULL)
 			continue;
-		
+
 		bool installed=IsInstalled(row->File()->fFileName.String());
 		int32 state;
-		if(install)
+		if(toInstalled)
 			state = installed ? STATE_INSTALLED : STATE_WILL_INSTALL;
 		else
 			state = installed ? STATE_WILL_REMOVE : STATE_AVAILABLE;
 		SetRowState(row,state);
+	}
+	UpdateButtons();
+
+	// Moving a module IS the instruction -- there is no separate Apply
+	// step any more, so the work starts here.
+	StartApply();
+}
+
+
+// Confirms first when anything is about to be REMOVED, and only then.
+//
+// Installing is additive, slow but harmless, and undone by moving the
+// module back. Removing deletes a module's data directory outright, and
+// this is the code path with a documented history of doing that too
+// broadly (see ApplyThread()'s own comment on the empty-fDataPath bug
+// that once wiped every installed module). An accidental drag of the
+// wrong row is a plausible mistake with an expensive, download-sized
+// undo, so it gets one question. Installing gets none.
+void MainWindow::StartApply(void)
+{
+	if(fApplyThread!=-1)
+		return;
+	if(fInstallList.CountStrings()==0 && fUninstallList.CountStrings()==0)
+		return;
+
+	if(fUninstallList.CountStrings()>0)
+	{
+		BString message;
+		if(fUninstallList.CountStrings()==1)
+			message << "Remove " << fUninstallList.StringAt(0) << "?";
+		else
+			message << "Remove " << fUninstallList.CountStrings()
+				<< " modules?";
+		message << "\n\nTheir downloaded data will be deleted.";
+
+		BAlert *alert=new BAlert("Remove modules",message.String(),
+			"Cancel","Remove",NULL,B_WIDTH_AS_USUAL,B_WARNING_ALERT);
+		alert->SetShortcut(0,B_ESCAPE);
+		if(alert->Go()==0)
+		{
+			// Put every pending row back where it actually is on disk,
+			// so a cancelled removal leaves no row stranded on the wrong
+			// side saying "Will remove".
+			RevertPending();
+			return;
+		}
+	}
+
+	fApplyThread=spawn_thread(ApplyThread,"applythread",B_NORMAL_PRIORITY,
+		this);
+	resume_thread(fApplyThread);
+}
+
+
+// Re-derives every row's side and status from what is installed right
+// now, discarding anything pending.
+void MainWindow::RevertPending(void)
+{
+	fInstallList.MakeEmpty();
+	fUninstallList.MakeEmpty();
+
+	BList rows;
+	for(int32 i=0; i<fAvailableList->CountRows(); i++)
+		rows.AddItem(fAvailableList->RowAt(i));
+	for(int32 i=0; i<fInstalledList->CountRows(); i++)
+		rows.AddItem(fInstalledList->RowAt(i));
+
+	for(int32 i=0; i<rows.CountItems(); i++)
+	{
+		BookRow *row=(BookRow*)rows.ItemAt(i);
+		if(row==NULL || row->File()==NULL)
+			continue;
+		SetRowState(row, IsInstalled(row->File()->fFileName.String())
+			? STATE_INSTALLED : STATE_AVAILABLE);
 	}
 	UpdateButtons();
 }
@@ -256,10 +379,9 @@ void MainWindow::SetRowState(BookRow *row, int32 state)
 {
 	BStringField *field
 		= dynamic_cast<BStringField*>(row->GetField(COLUMN_STATUS));
-	if(field==NULL)
-		return;
-	field->SetString(state_text(state));
-	
+	if(field!=NULL)
+		field->SetString(state_text(state));
+
 	// The pending lists are keyed by zip file name and are what
 	// ApplyThread() works from; keep them in step with what the row now
 	// says rather than deriving one from the other later.
@@ -270,46 +392,60 @@ void MainWindow::SetRowState(BookRow *row, int32 state)
 		fInstallList.Add(zip);
 	else if(state==STATE_WILL_REMOVE)
 		fUninstallList.Add(zip);
-	
-	row->Invalidate();
-	fBookListView->InvalidateRow(row);
+
+	// "Installed" and "will be installed" share the right-hand list;
+	// "available" and "will be removed" share the left.
+	BColumnListView *wanted
+		= (state==STATE_INSTALLED || state==STATE_WILL_INSTALL)
+			? fInstalledList : fAvailableList;
+	BColumnListView *current
+		= (fInstalledList->IndexOf(row)>=0) ? fInstalledList : fAvailableList;
+
+	if(current!=wanted)
+	{
+		current->RemoveRow(row);	// detaches only, does not delete
+		wanted->AddRow(row);
+	}
+	else
+		wanted->UpdateRow(row);
+}
+
+
+void MainWindow::ShowSelectionInfo(BColumnListView *list)
+{
+	BookRow *first=(BookRow*)list->CurrentSelection();
+	int32 count=0;
+	for(BRow *r=first; r!=NULL; r=list->CurrentSelection(r))
+		count++;
+
+	// With multiple selection there may be no single module to describe.
+	// One row shows its description; several show how many, so the pane
+	// never looks stale by describing whichever row was clicked first.
+	if(count==1 && first!=NULL && first->File()!=NULL)
+	{
+		BString str(first->File()->fAbout);
+		str << "\n\n" << "Archive Size: " << first->File()->fFileSize << " K";
+		fTextView->SetText(str.String());
+	}
+	else if(count>1)
+	{
+		BString str;
+		str << count << " modules selected";
+		fTextView->SetText(str.String());
+	}
 }
 
 
 void MainWindow::UpdateButtons(void)
 {
-	// A button is offered only when it would actually do something to
-	// what is selected -- an Install that silently no-ops on an already
-	// installed module is the same kind of lie as a link that leads
-	// nowhere.
-	bool canInstall=false, canRemove=false;
-	for(BRow *r=fBookListView->CurrentSelection(); r!=NULL;
-			r=fBookListView->CurrentSelection(r))
-	{
-		BookRow *row=(BookRow*)r;
-		if(row->File()==NULL)
-			continue;
-		const BString &zip=row->File()->fZipFileName;
-		if(IsInstalled(row->File()->fFileName.String()))
-		{
-			if(!fUninstallList.HasString(zip))
-				canRemove=true;
-			else
-				canInstall=true;	// cancels the pending removal
-		}
-		else
-		{
-			if(!fInstallList.HasString(zip))
-				canInstall=true;
-			else
-				canRemove=true;		// cancels the pending installation
-		}
-	}
-	
-	fInstallButton->SetEnabled(canInstall && fApplyThread==-1);
-	fRemoveButton->SetEnabled(canRemove && fApplyThread==-1);
-	fApplyButton->SetEnabled(fApplyThread==-1
-		&& (fInstallList.CountStrings()>0 || fUninstallList.CountStrings()>0));
+	// Each arrow is offered only when there is something on its own side
+	// to move -- an arrow that silently does nothing is the same kind of
+	// lie as a link that leads nowhere.
+	bool idle = fApplyThread==-1;
+	fInstallButton->SetEnabled(idle
+		&& fAvailableList->CurrentSelection()!=NULL);
+	fRemoveButton->SetEnabled(idle
+		&& fInstalledList->CurrentSelection()!=NULL);
 }
 
 
@@ -322,7 +458,6 @@ int32 MainWindow::ApplyThread(void *data)
 	BString zipfilename, configpath, syscmd, displaystring;
 
 	win->Lock();
-	win->fApplyButton->SetEnabled(false);
 	win->fTextView->SetText("");
 	
 	installcount=win->fInstallList.CountStrings();
@@ -464,16 +599,26 @@ int32 MainWindow::ApplyThread(void *data)
 	// lists have just been emptied, so rewrite each row from what is now
 	// actually on disk. Without this a just-installed module kept saying
 	// "Will install" until the window was reopened.
-	for(int32 i=0; i<win->fBookListView->CountRows(); i++)
+	// Every row's status still says what was PENDING and may be sitting on
+	// the side it was heading for; the pending lists have just been
+	// emptied, so put each row back where what is actually on disk says
+	// it belongs. Collected first because SetRowState() moves rows
+	// between the two lists, which would disturb an iteration over either.
+	BList rows;
+	for(int32 i=0; i<win->fAvailableList->CountRows(); i++)
+		rows.AddItem(win->fAvailableList->RowAt(i));
+	for(int32 i=0; i<win->fInstalledList->CountRows(); i++)
+		rows.AddItem(win->fInstalledList->RowAt(i));
+
+	for(int32 i=0; i<rows.CountItems(); i++)
 	{
-		BookRow *row=(BookRow*)win->fBookListView->RowAt(i);
+		BookRow *row=(BookRow*)rows.ItemAt(i);
 		if(row==NULL || row->File()==NULL)
 			continue;
 		win->SetRowState(row, IsInstalled(row->File()->fFileName.String())
 			? STATE_INSTALLED : STATE_AVAILABLE);
 	}
-	// Drives Install/Remove/Apply together -- setting fApplyButton alone
-	// here would leave the two new buttons stuck disabled after an apply.
+	// Re-arms the two arrows now that the thread is done.
 	win->UpdateButtons();
 	win->Unlock();
 
