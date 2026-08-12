@@ -36,6 +36,7 @@
 #include <versekey.h>
 
 #include "ParagraphLayout.h"
+#include "SGDebug.h"
 #include "SwordBackend.h"
 #include "VerseAligner.h"
 #include "constants.h"
@@ -1326,7 +1327,7 @@ void
 ParallelBibleView::AttachedToWindow()
 {
 	BView::AttachedToWindow();
-	fprintf(stderr, "[SG] AttachedToWindow: Bounds()=(%.1f,%.1f,%.1f,%.1f)\n",
+	SG_LOG("[SG] AttachedToWindow: Bounds()=(%.1f,%.1f,%.1f,%.1f)\n",
 		Bounds().left, Bounds().top, Bounds().right, Bounds().bottom);
 	_RebuildLayout();
 }
@@ -1335,7 +1336,7 @@ ParallelBibleView::AttachedToWindow()
 void
 ParallelBibleView::FrameResized(float width, float height)
 {
-	fprintf(stderr, "[SG] FrameResized(width=%.1f, height=%.1f)\n",
+	SG_LOG("[SG] FrameResized(width=%.1f, height=%.1f)\n",
 		width, height);
 	BView::FrameResized(width, height);
 	_Realign();
@@ -1713,7 +1714,7 @@ ParallelBibleView::InsertColumn(int32 afterPosition, const char* moduleName)
 status_t
 ParallelBibleView::InsertNotesColumn(int32 afterPosition)
 {
-	fprintf(stderr, "[SG] InsertNotesColumn(afterPosition=%d)\n",
+	SG_LOG("[SG] InsertNotesColumn(afterPosition=%d)\n",
 		(int)afterPosition);
 	if (afterPosition < 0 || (size_t)afterPosition >= fColumnOrder.size())
 		return B_BAD_INDEX;
@@ -2184,7 +2185,7 @@ ParallelBibleView::_ToggleLink(int32 gapIndex)
 void
 ParallelBibleView::SetColumnLinked(int32 gapIndex, bool linked)
 {
-	fprintf(stderr, "[SG] SetColumnLinked(gapIndex=%d, linked=%d)\n",
+	SG_LOG("[SG] SetColumnLinked(gapIndex=%d, linked=%d)\n",
 		(int)gapIndex, linked);
 	if (gapIndex < 0 || (size_t)gapIndex >= fLinkedToNext.size())
 		return;
@@ -2373,7 +2374,7 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 	if (module == NULL)
 		return B_NAME_NOT_FOUND;
 
-	fprintf(stderr, "[SG] _SetColumnToBible(position=%d, module=%s) "
+	SG_LOG("[SG] _SetColumnToBible(position=%d, module=%s) "
 		"module ptr=%p\n", (int)position, moduleName, (void*)module);
 
 	// Seed the new/replaced module with whatever its own chain (the
@@ -2658,7 +2659,7 @@ ParallelBibleView::SetKey(const char* key)
 		verse > 1 ? _ChainVerseY(fActivePosition, verse) : 0.0f);
 	bigtime_t perfEnd = system_time();
 
-	fprintf(stderr, "[SG-PERF] SetKey(\"%s\") total=%.2fms "
+	SG_LOG("[SG-PERF] SetKey(\"%s\") total=%.2fms "
 		"bibleLoop=%.2fms notesLoop=%.2fms realign=%.2fms scroll=%.2fms\n",
 		key, (perfEnd - perfStart) / 1000.0,
 		(perfAfterBible - perfStart) / 1000.0,
@@ -3050,14 +3051,14 @@ ParallelBibleView::_RebuildLayout()
 		BString gaps;
 		for (size_t g = 0; g < fLinkedToNext.size(); g++)
 			gaps << (fLinkedToNext[g] ? "1" : "0");
-		fprintf(stderr, "[SG] _RebuildLayout: %zu columns, gaps=[%s]\n",
+		SG_LOG("[SG] _RebuildLayout: %zu columns, gaps=[%s]\n",
 			fColumnOrder.size(), gaps.String());
 	}
 
 	int32 bibleIndex = 0;
 	for (size_t i = 0; i < fColumnOrder.size(); i++) {
 		bool vertical = _IsChainRightmost((int32)i);
-		fprintf(stderr, "[SG]   pos %zu: %s vertical=%d "
+		SG_LOG("[SG]   pos %zu: %s vertical=%d "
 			"(chainStart=%d chainEnd=%d)\n", i,
 			fColumnOrder[i] == COLUMN_BIBLE ? "BIBLE" : "NOTES",
 			vertical, (int)_ChainStart((int32)i), (int)_ChainEnd((int32)i));
@@ -3092,7 +3093,7 @@ ParallelBibleView::_RebuildLayout()
 			BScrollView* scroller = new BScrollView("columnScroll",
 				view, 0, false, vertical, B_NO_BORDER);
 			AddChild(scroller);
-			fprintf(stderr, "[SG]     notes view=%p\n", (void*)view);
+			SG_LOG("[SG]     notes view=%p\n", (void*)view);
 		}
 	}
 
@@ -3278,7 +3279,7 @@ ParallelBibleView::_Realign()
 		{
 			bigtime_t alignStart = system_time();
 			VerseAligner::Align(columns, widths);
-			fprintf(stderr, "[SG-PERF] VerseAligner::Align chain [%d,%d] "
+			SG_LOG("[SG-PERF] VerseAligner::Align chain [%d,%d] "
 				"columns=%zu elapsed=%.2fms\n", (int)start, (int)end,
 				columns.size(), (system_time() - alignStart) / 1000.0);
 
@@ -3293,22 +3294,30 @@ ParallelBibleView::_Realign()
 			// performance bug: for a long chapter (Psalm 119, 176 verses)
 			// this happened once per column, on every _Realign() call,
 			// entirely to produce a log line nobody was reading in the
-			// hot path. fprintf(stderr, "[SG] _Realign chain [%d,%d] "
+			// hot path. SG_LOG("[SG] _Realign chain [%d,%d] "
 			// paragraph counts alone (no height) are cheap and don't need
 			// removing:
-			fprintf(stderr, "[SG] _Realign chain [%d,%d] after Align: "
-				"paragraphs=[", (int)start, (int)end);
-			for (int32 i = start; i <= end; i++) {
-				BibleTextDocument* doc;
-				if (fColumnOrder[i] == COLUMN_BIBLE)
-					doc = fDocuments[_BibleIndexForPosition(i)].Get();
-				else
-					doc = fNotesColumns[_NotesIndexForPosition(i)]
-						.document.Get();
-				fprintf(stderr, "%d%s", (int)doc->CountParagraphs(),
-					i < end ? "," : "");
+			// Guarded as a whole rather than per fprintf: this block
+			// builds ONE log line across several calls, so gating only
+			// the first would leave the rest printing into the void --
+			// which is exactly what happened when these were converted
+			// by matching on the "[SG]" prefix, since the continuation
+			// calls don't carry it.
+			if (SGDebugEnabled()) {
+				fprintf(stderr, "[SG] _Realign chain [%d,%d] after Align: "
+					"paragraphs=[", (int)start, (int)end);
+				for (int32 i = start; i <= end; i++) {
+					BibleTextDocument* doc;
+					if (fColumnOrder[i] == COLUMN_BIBLE)
+						doc = fDocuments[_BibleIndexForPosition(i)].Get();
+					else
+						doc = fNotesColumns[_NotesIndexForPosition(i)]
+							.document.Get();
+					fprintf(stderr, "%d%s", (int)doc->CountParagraphs(),
+						i < end ? "," : "");
+				}
+				fprintf(stderr, "]\n");
 			}
-			fprintf(stderr, "]\n");
 		}
 
 		start = end + 1;
@@ -3370,7 +3379,7 @@ ParallelBibleView::_PositionColumns()
 	// place well before that -- this clamp is the fallback for whatever
 	// still runs before even that).
 	float viewportHeight = std::max(0.0f, Bounds().Height());
-	fprintf(stderr, "[SG] _PositionColumns: Bounds()=(%.1f,%.1f,%.1f,%.1f) "
+	SG_LOG("[SG] _PositionColumns: Bounds()=(%.1f,%.1f,%.1f,%.1f) "
 		"Window()=%p Frame()=(%.1f,%.1f,%.1f,%.1f)\n",
 		Bounds().left, Bounds().top, Bounds().right, Bounds().bottom,
 		(void*)Window(), Frame().left, Frame().top, Frame().right,
@@ -3449,7 +3458,7 @@ ParallelBibleView::_PositionColumns()
 			float rangeMin = 0.0f, rangeMax = 0.0f;
 			if (bar != NULL)
 				bar->GetRange(&rangeMin, &rangeMax);
-			fprintf(stderr, "[SG] _PositionColumns %s pos %zu "
+			SG_LOG("[SG] _PositionColumns %s pos %zu "
 				"(chain-rightmost): width=%.1f viewportHeight=%.1f "
 				"viewBounds=(%.1f,%.1f) bar=%p range=[%.1f,%.1f] "
 				"barFrame=(%.1f,%.1f,%.1f,%.1f) barHidden=%d\n",
@@ -3503,7 +3512,7 @@ ParallelBibleView::_PositionColumns()
 	if (fHeaderView != NULL)
 		fHeaderView->Invalidate();
 
-	fprintf(stderr, "[SG-PERF] _PositionColumns elapsed=%.2fms\n",
+	SG_LOG("[SG-PERF] _PositionColumns elapsed=%.2fms\n",
 		(system_time() - perfStart) / 1000.0);
 }
 
@@ -3519,7 +3528,7 @@ ParallelBibleView::_UpdateScrollBars()
 {
 	BScrollBar* horizontalScrollBar = ScrollBar(B_HORIZONTAL);
 	if (horizontalScrollBar == NULL) {
-		fprintf(stderr, "[SG] _UpdateScrollBars: NO horizontal bar "
+		SG_LOG("[SG] _UpdateScrollBars: NO horizontal bar "
 			"attached at all (fContentWidth=%.1f Bounds().Width()=%.1f)\n",
 			fContentWidth, Bounds().Width());
 		return;
@@ -3537,7 +3546,7 @@ ParallelBibleView::_UpdateScrollBars()
 
 	float curMin, curMax;
 	horizontalScrollBar->GetRange(&curMin, &curMax);
-	fprintf(stderr, "[SG] _UpdateScrollBars (outer horizontal): "
+	SG_LOG("[SG] _UpdateScrollBars (outer horizontal): "
 		"fContentWidth=%.1f viewWidth=%.1f maxRange=%.1f "
 		"barRangeAfterSet=[%.1f,%.1f] barValue=%.1f\n",
 		fContentWidth, viewWidth, maxRange, curMin, curMax,

@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "constants.h"
+#include "SGDebug.h"
 #include "SwordBackend.h"
 
 #undef B_TRANSLATION_CONTEXT
@@ -576,7 +577,7 @@ BibleTextDocument::_Rebuild()
 	// this function then wrote back as the module's new position,
 	// undoing whatever SetKey()/SetChapter() had just correctly set
 	// right before calling _Rebuild().
-	fprintf(stderr, "[SG] BibleTextDocument::_Rebuild this=%p module=%p "
+	SG_LOG("[SG] BibleTextDocument::_Rebuild this=%p module=%p "
 		"fKeyText=\"%s\" module->getKeyText()=\"%s\"\n", (void*)this,
 		(void*)fModule, fKeyText.String(), fModule->getKeyText());
 	BString savedKeyText(fKeyText);
@@ -816,7 +817,7 @@ BibleTextDocument::_Rebuild()
 
 	_SetModuleKey(savedKey);
 
-	fprintf(stderr, "[SG-PERF] BibleTextDocument::_Rebuild this=%p "
+	SG_LOG("[SG-PERF] BibleTextDocument::_Rebuild this=%p "
 		"verses=%d elapsed=%.2fms\n", (void*)this, verseCount,
 		(system_time() - rebuildStart) / 1000.0);
 }
