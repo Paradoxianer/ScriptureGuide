@@ -42,3 +42,32 @@ resource vector_icon {
 	$"4000000000000000000A0501051240000000000000000040000000000000000001"
 	$"178122040A05010502400000000000000000400000000000000000"
 };
+
+
+// Navigation back/forward arrows for the toolbar (see
+// SGMainWindow::BuildGUI()). These are Haiku's own Tracker navigation
+// icons (R_ResBackNav / R_ResForwNav from
+// src/kits/tracker/TrackerIcons.rdef), reproduced here so the buttons
+// look like the ones users already know from every Tracker window
+// instead of like a second, near-miss set of arrows. Haiku is MIT
+// licensed, which permits this reuse in a GPL v2 program.
+//
+// Embedded rather than read out of libtracker.so at runtime: those are
+// Tracker's private application resources, not a shared asset with any
+// stability promise, and a missing or renumbered resource would leave
+// the buttons blank.
+resource(10, "back_nav") #'VICN' array {
+	$"6E6369660304006603005900020006020000003C6000C000000000004C000048"
+	$"A0000080FF80FF00B300010A0722353622362C482C483E363E3648030A000100"
+	$"1240A32D00000000000040A32444CEA044D04B01178322040A0101001240A32D"
+	$"00000000000040A32442FA1242FD7201178322040A0201000240A32D00000000"
+	$"000040A32442FA1242FD72"
+};
+
+resource(11, "forward_nav") #'VICN' array {
+	$"6E6369660304006603005900020006020000003C6000C000000000004C000048"
+	$"A0000080FF80FF00B300010A0748353448343E223E222C342C3422030A000100"
+	$"1240A32D00000000000040A32444D19644D04B01178322040A0101001240A32D"
+	$"00000000000040A32442FFFF42FD7201178322040A0201000240A32D00000000"
+	$"000040A32442FFFF42FD72"
+};

@@ -62,6 +62,7 @@ const uint32 MENU_EDIT_FIND				= 'MEfi';
 // toolbar fields, search results and dropped references alike -- not
 // just links.
 const uint32 MENU_NAVIGATION_BACK		= 'MNbk';
+const uint32 MENU_NAVIGATION_FORWARD	= 'MNfw';
 
 const uint32 MENU_OPTIONS_LINE			= 'MOli';
 const uint32 MENU_OPTIONS_FONT			= 'MOfo';

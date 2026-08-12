@@ -4,6 +4,7 @@
 #include <Application.h>
 #include <AboutWindow.h>
 #include <Button.h>
+#include <Bitmap.h>
 #include <Box.h>
 #include <Catalog.h>
 #include <Clipboard.h>
@@ -20,6 +21,9 @@
 #include <PopUpMenu.h>
 #include <Roster.h>
 #include <String.h>
+#include <ControlLook.h>
+#include <IconUtils.h>
+#include <Resources.h>
 #include <ToolBar.h>
 
 
@@ -38,11 +42,59 @@
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "MainWindow"
 
+
+// Renders one of this app's own #'VICN' resources (see
+// ScriptureGuide.rdef) into a bitmap at the size the current control look
+// wants for a toolbar icon, so the buttons scale with the user's font
+// size instead of being pinned to one pixel size. NULL if the resource is
+// missing -- BToolBar::AddAction() accepts a NULL icon and simply draws a
+// text-only button, so a failure here costs the picture, not the button.
+// Caller owns the returned bitmap; AddAction() copies it.
+static BBitmap*
+_LoadVectorIcon(const char* name)
+{
+	app_info info;
+	if (be_app->GetAppInfo(&info) != B_OK)
+		return NULL;
+
+	BFile file(&info.ref, B_READ_ONLY);
+	if (file.InitCheck() != B_OK)
+		return NULL;
+
+	BResources resources(&file);
+	if (resources.InitCheck() != B_OK)
+		return NULL;
+
+	size_t dataSize = 0;
+	const void* data = resources.LoadResource(B_VECTOR_ICON_TYPE, name,
+		&dataSize);
+	if (data == NULL || dataSize == 0)
+		return NULL;
+
+	BSize iconSize = BControlLook::ComposeIconSize(B_MINI_ICON);
+	BBitmap* bitmap = new(std::nothrow) BBitmap(
+		BRect(BPoint(0, 0), iconSize), 0, B_RGBA32);
+	if (bitmap == NULL || bitmap->InitCheck() != B_OK
+		|| BIconUtils::GetVectorIcon((const uint8*)data, dataSize, bitmap)
+			!= B_OK) {
+		delete bitmap;
+		return NULL;
+	}
+	return bitmap;
+}
+
 SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 		uint16 selectVers, uint16 selectVersEnd )
  :	BWindow(frame, "Scripture Guide", B_DOCUMENT_WINDOW, 0),
- 	fRestoringHistory(false),
+ 	// Starts true so nothing the constructor itself does -- restoring the
+	// saved column layout, applying the startup key -- lands in the
+	// history. Cleared at the end of the constructor, once the window is
+	// actually sitting where the user left it. Otherwise Back came up
+	// enabled on a fresh launch and led somewhere the user had never been.
+ 	fRestoringHistory(true),
 	fBackItem(NULL),
+	fForwardItem(NULL),
+	fToolBar(NULL),
 	fSearchWindow(NULL),
 	fDictionaryWindow(NULL),
  	fModManager(NULL),
@@ -173,6 +225,11 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 		SetChapter(fCurrentChapter);
 		SetVerse(fCurrentVerse);
 	}
+
+	// Everything above is "where the window opens", not navigation the
+	// user performed -- see fRestoringHistory's initializer.
+	fRestoringHistory = false;
+	UpdateHistoryControls();
 }
 
 
@@ -231,6 +288,10 @@ void SGMainWindow::BuildGUI(void)
 		new BMessage(MENU_NAVIGATION_BACK), '[');
 	fBackItem->SetEnabled(false);
 	menu->AddItem(fBackItem);
+	fForwardItem = new BMenuItem(B_TRANSLATE("Forward"),
+		new BMessage(MENU_NAVIGATION_FORWARD), ']');
+	fForwardItem->SetEnabled(false);
+	menu->AddItem(fForwardItem);
 	menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Find Verse…"),
 		new BMessage(MENU_EDIT_FIND), 'F'));
@@ -327,7 +388,27 @@ void SGMainWindow::BuildGUI(void)
 	fScrollView = new BScrollView("scroll_view", fParallelView,
 		0, true, false, B_NO_BORDER);
 
-	BToolBar *toolBar = new BToolBar();
+	fToolBar = new BToolBar();
+	BToolBar* toolBar = fToolBar;
+
+	// Leading, in the order and with the artwork every Tracker window
+	// already trains users to expect (see ScriptureGuide.rdef) -- the
+	// menu entries stay as the discoverable/keyboard route, these are
+	// the reachable one. Both start disabled; UpdateHistoryControls()
+	// owns their state from here on.
+	BBitmap* backIcon = _LoadVectorIcon("back_nav");
+	BBitmap* forwardIcon = _LoadVectorIcon("forward_nav");
+	toolBar->AddAction(MENU_NAVIGATION_BACK, this, backIcon,
+		B_TRANSLATE("Back"));
+	toolBar->AddAction(MENU_NAVIGATION_FORWARD, this, forwardIcon,
+		B_TRANSLATE("Forward"));
+	// AddAction() copies the bitmap into its own button.
+	delete backIcon;
+	delete forwardIcon;
+	toolBar->SetActionEnabled(MENU_NAVIGATION_BACK, false);
+	toolBar->SetActionEnabled(MENU_NAVIGATION_FORWARD, false);
+	toolBar->AddSeparator();
+
 	toolBar->AddView(bookfield);
 	toolBar->AddView(fChapterBox);
 	toolBar->AddView(fVerseBox);
@@ -811,6 +892,11 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			GoBack();
 			break;
 		}
+		case MENU_NAVIGATION_FORWARD:
+		{
+			GoForward();
+			break;
+		}
 		case MENU_EDIT_FIND:
 		{
 			EnsureSearchWindow();
@@ -1105,53 +1191,106 @@ SGMainWindow::RecordHistory(void)
 
 	// Re-navigating a chain to where it already is (the toolbar re-emits
 	// the same key in a few paths) is not a step worth being able to undo.
-	if (!fHistory.empty() && fHistory.back().column == column
-		&& fHistory.back().key == current) {
+	if (!fBackStack.empty() && fBackStack.back().column == column
+		&& fBackStack.back().key == current) {
 		return;
 	}
 
 	HistoryEntry entry;
 	entry.column = column;
 	entry.key = current;
-	fHistory.push_back(entry);
+	fBackStack.push_back(entry);
+
+	// Going somewhere new abandons whatever trail Back had opened up --
+	// the same rule a browser's address bar follows.
+	fForwardStack.clear();
 
 	// Bounded: this exists to undo the last few jumps, not to log a
 	// session. Dropping from the front keeps the most recent entries,
 	// which are the ones Back actually reaches.
 	const size_t kMaxHistoryEntries = 50;
-	if (fHistory.size() > kMaxHistoryEntries)
-		fHistory.erase(fHistory.begin());
+	if (fBackStack.size() > kMaxHistoryEntries)
+		fBackStack.erase(fBackStack.begin());
 
-	if (fBackItem != NULL)
-		fBackItem->SetEnabled(true);
+	UpdateHistoryControls();
 }
 
 
 void
 SGMainWindow::GoBack(void)
 {
-	if (fParallelView == NULL || fHistory.empty())
+	if (fBackStack.empty())
 		return;
 
-	HistoryEntry entry = fHistory.back();
-	fHistory.pop_back();
+	HistoryEntry entry = fBackStack.back();
+	fBackStack.pop_back();
+	GoToHistoryEntry(entry, fForwardStack);
+}
 
-	// The chain that entry was recorded for may have been removed or
+
+void
+SGMainWindow::GoForward(void)
+{
+	if (fForwardStack.empty())
+		return;
+
+	HistoryEntry entry = fForwardStack.back();
+	fForwardStack.pop_back();
+	GoToHistoryEntry(entry, fBackStack);
+}
+
+
+void
+SGMainWindow::GoToHistoryEntry(const HistoryEntry& entry,
+	std::vector<HistoryEntry>& opposite)
+{
+	if (fParallelView == NULL)
+		return;
+
+	// Where we are right now becomes the far side's return point, so Back
+	// and Forward stay each other's inverse however far the user walks.
+	int32 column = fParallelView->ActiveColumn();
+	if (column >= 0) {
+		BString current = fParallelView->ChainKey(column);
+		if (!current.IsEmpty()) {
+			HistoryEntry here;
+			here.column = column;
+			here.key = current;
+			opposite.push_back(here);
+		}
+	}
+
+	// The chain this entry was recorded for may have been removed or
 	// reordered since. Falling back to the active chain still puts the
-	// user back at the passage they asked for, which is what Back is
-	// actually promising -- better than doing nothing.
+	// user at the passage they asked for, which is what Back and Forward
+	// actually promise -- better than doing nothing.
 	if (entry.column >= 0 && entry.column < fParallelView->CountColumns())
 		fParallelView->SetActiveColumn(entry.column);
 
 	// Guarded so the navigation below isn't itself recorded -- otherwise
-	// Back would push where it came from and just toggle between two
-	// places instead of walking backwards.
+	// it would clear the very forward trail the user is walking along.
 	fRestoringHistory = true;
 	JumpToKey(entry.key.String());
 	fRestoringHistory = false;
 
+	UpdateHistoryControls();
+}
+
+
+void
+SGMainWindow::UpdateHistoryControls(void)
+{
+	bool canGoBack = !fBackStack.empty();
+	bool canGoForward = !fForwardStack.empty();
+
 	if (fBackItem != NULL)
-		fBackItem->SetEnabled(!fHistory.empty());
+		fBackItem->SetEnabled(canGoBack);
+	if (fForwardItem != NULL)
+		fForwardItem->SetEnabled(canGoForward);
+	if (fToolBar != NULL) {
+		fToolBar->SetActionEnabled(MENU_NAVIGATION_BACK, canGoBack);
+		fToolBar->SetActionEnabled(MENU_NAVIGATION_FORWARD, canGoForward);
+	}
 }
 
 

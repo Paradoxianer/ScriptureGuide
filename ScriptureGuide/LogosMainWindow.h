@@ -15,8 +15,6 @@
 
 #include <vector>
 
-#include <vector>
-
 #include "DictionaryWindow.h"
 #include "LogosSearchWindow.h"
 #include "SwordBackend.h"
@@ -25,6 +23,8 @@
 
 class SGModule;
 class FontPanel;
+namespace BPrivate { class BToolBar; }
+using BPrivate::BToolBar;
 
 #define M_WINDOW_CLOSED 'wcls'
 using namespace std;
@@ -107,26 +107,40 @@ private:
 	// number (#27, PARALLEL_STRONGS_CLICKED).
 	void EnsureDictionaryWindow(void);
 
-	// Navigation history (see fHistory). RecordHistory() captures where
-	// the chain that is about to move currently is, and must be called
-	// BEFORE the move; GoBack() puts that chain back there.
-	void RecordHistory(void);
-	void GoBack(void);
-	// True while GoBack() is driving the navigation, so the move it
-	// performs isn't itself recorded as a new history entry -- which
-	// would make Back toggle between two places instead of walking back.
-	bool fRestoringHistory;
-	// Where the active chain was, most recent last. Bounded (see
-	// kMaxHistoryEntries) because this only ever needs to cover "undo
-	// the last few jumps", not a full session log.
+	// Navigation history, in the same two-stack shape a web browser uses:
+	// fBackStack holds where we came from, fForwardStack where Back has
+	// stepped away from. RecordHistory() captures where the chain that is
+	// about to move currently is and must be called BEFORE the move; it
+	// also clears fForwardStack, because navigating somewhere new
+	// abandons whatever trail Back had opened up.
 	struct HistoryEntry {
 		int32	column;	// position in fParallelView's column order
 		BString	key;
 	};
-	std::vector<HistoryEntry>	fHistory;
+
+	void RecordHistory(void);
+	void GoBack(void);
+	void GoForward(void);
+	// Shared tail of GoBack()/GoForward(): moves to `entry`, pushing the
+	// position being left onto `opposite`.
+	void GoToHistoryEntry(const HistoryEntry& entry,
+			std::vector<HistoryEntry>& opposite);
+	// Reflects both stacks onto the menu items and toolbar buttons.
+	void UpdateHistoryControls(void);
+	// True while Back/Forward are driving the navigation, so the move
+	// they perform isn't itself recorded as a fresh history entry --
+	// which would clear the forward trail the user is walking along and
+	// make Back toggle between two places instead of stepping back.
+	bool fRestoringHistory;
+	// Bounded (see kMaxHistoryEntries in RecordHistory()) because this
+	// only ever needs to cover the last few jumps, not a session log.
+	std::vector<HistoryEntry>	fBackStack;
+	std::vector<HistoryEntry>	fForwardStack;
 
 	BMenuBar		*fMenuBar;
 	BMenuItem		*fBackItem;
+	BMenuItem		*fForwardItem;
+	BToolBar		*fToolBar;
 	BMenuItem		*fShowVerseNumItem;
 	BMenuItem		*fShowStrongsNumItem;
 	BMenuItem		*fShowCrossRefItem;
