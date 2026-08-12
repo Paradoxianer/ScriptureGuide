@@ -92,6 +92,13 @@ Diagnostic logging is now off unless `SG_DEBUG` is set:
 
     SG_DEBUG=1 ./ScriptureGuide
 
+### Packaging
+
+The HaikuPorts recipe is not updated as part of this release. HaikuPorts
+does not accept contributions produced with AI agents, and this release
+was prepared with one. Updating the recipe is for a human maintainer to
+do outside this workflow — see CLAUDE.md.
+
 ### Known issues
 
 - No Hebrew Strong's dictionary is available from the module list used

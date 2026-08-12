@@ -7,7 +7,7 @@ the [SWORD library](http://www.crosswire.org/sword/). It ships with a
 companion package manager, ScriptureGuideManager, for downloading Bibles,
 commentaries, dictionaries, and other SWORD modules.
 
-Current release: **1.1.0**.
+Current release: **1.2.0** (test release, see [CHANGELOG.md](CHANGELOG.md)).
 
 Features
 --------
