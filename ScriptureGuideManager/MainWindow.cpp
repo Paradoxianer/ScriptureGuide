@@ -65,7 +65,17 @@ enum
 };
 
 MainWindow::MainWindow(BRect frame)
-	: BWindow(frame, "ScriptureGuide Book Manager",B_DOCUMENT_WINDOW_LOOK,
+	// B_TITLED_WINDOW_LOOK, not B_DOCUMENT_WINDOW_LOOK: per the Interface
+	// Kit docs the two differ in exactly one thing -- a document window
+	// gets a "draggable resize corner THUMB", a titled window "a resize
+	// CORNER instead". The thumb sits inside the content area, which is
+	// the BeOS arrangement for a window carrying BOTH scrollbars, where
+	// it tucks into the square between them. This window has no such
+	// square, so the thumb landed on top of the description pane's
+	// vertical scrollbar (reported). A titled window puts the resize
+	// affordance in the border where it belongs and gives the content
+	// its full height back.
+	: BWindow(frame, "ScriptureGuide Book Manager",B_TITLED_WINDOW_LOOK,
  		B_NORMAL_WINDOW_FEEL, 0)
 {
 	fApplyThread=-1;
@@ -107,6 +117,15 @@ MainWindow::MainWindow(BRect frame)
 	fTextView->MakeEditable(false);
 	fTextScrollView=new BScrollView("textscrollview",fTextView,0,false,true);
 	fTextScrollView->SetViewColor(ui_color(B_PANEL_BACKGROUND_COLOR));
+	// A floor, not a fixed height -- the split above it stays draggable.
+	// Without one the pane collapsed towards a single line, which is too
+	// little for either a module's About text or a run of installation
+	// output, the two things it exists to show.
+	font_height fontHeight;
+	be_plain_font->GetHeight(&fontHeight);
+	float lineHeight=fontHeight.ascent+fontHeight.descent+fontHeight.leading;
+	fTextScrollView->SetExplicitMinSize(
+		BSize(B_SIZE_UNSET, lineHeight*6.0f));
 	
 	// Arrows rather than words: they say WHICH WAY a module moves, which
 	// is the whole point of the two-list layout. The tooltip carries the
