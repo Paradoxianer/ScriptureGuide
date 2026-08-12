@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <new>
+
 #include <stdlib.h>
 #include <Alert.h>
 #include <Entry.h>
@@ -38,7 +40,12 @@ SGMApp::SGMApp(void)
 	// and still open the window, just with an empty list.
 	if (ConfirmNetworkAccess())
 		SetupPackageList();
-	MainWindow *win=new MainWindow(BRect(300,200,900,600));
+	// 600pt wide left the list showing only Status and Book, with Type and
+	// Language off the right edge behind a horizontal scrollbar -- the
+	// Type column added for issue #41 was invisible unless you went
+	// looking for it. The list's four columns want ~515pt between them,
+	// plus the description pane beside it.
+	MainWindow *win=new MainWindow(BRect(300,200,1180,700));
 	win->Show();
 }
 
@@ -158,26 +165,45 @@ void SGMApp::SetupPackageList(void)
 	if(dir.CountEntries() != 1)
 	{
 		BFile file(SG_PKGINFO_PATH "packages.txt",B_READ_ONLY);
-		off_t filesize;
+		// Initialized, and the open checked, because BFile::GetSize()
+		// leaves its out-parameter ALONE when the file could not be
+		// opened. This was an uninitialized stack variable: with
+		// packages.txt missing (the normal state on a machine whose
+		// package-info/ was populated by an older version -- confirmed
+		// live) whatever garbage was on the stack passed the <=0 test
+		// below and `new char[garbage+1]` threw std::bad_alloc, which
+		// nothing catches, so the manager aborted before its window ever
+		// appeared.
+		off_t filesize = 0;
 		BString filedata;
-		status_t err = B_OK;
+		status_t err = file.InitCheck();
 
-		file.GetSize(&filesize);
-
-		if(filesize<=0)
+		if(err != B_OK || file.GetSize(&filesize) != B_OK || filesize <= 0)
 		{
-			printf("Package list file size is 0\n");
+			printf("Could not read the package list (%s): %s\n",
+				SG_PKGINFO_PATH "packages.txt",
+				err != B_OK ? strerror(err) : "empty or unreadable");
 			return;
 		}
 
-		char *data=new char[filesize+1];
+		char *data=new(std::nothrow) char[filesize+1];
+		if(data == NULL)
+		{
+			printf("Package list is too large to read (%lld bytes)\n",
+				(long long)filesize);
+			return;
+		}
 
 		err = file.Seek(0,SEEK_SET);
-		if (err !=B_OK)
+		if (err < B_OK)
 			printf ("Error: %s\n",strerror(err));
-		err = file.Read(data,filesize);
-		if (err !=B_OK)
-			printf ("Error: %s\n",strerror(err));
+		// Read() returns the BYTE COUNT on success, not B_OK -- comparing
+		// it against B_OK printed an error on every successful read.
+		ssize_t bytesRead = file.Read(data,filesize);
+		if (bytesRead < 0)
+			printf ("Error: %s\n",strerror(bytesRead));
+		else
+			filesize = bytesRead;
 		data[filesize] = '\0';
 		file.Unset();
 
