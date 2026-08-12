@@ -31,6 +31,11 @@ public:
 	BString fDescription;
 	BString fLanguage;
 	BString fLicense;
+	// Module type in SWORD's own vocabulary -- "Biblical Texts",
+	// "Commentaries", "Lexicons / Dictionaries", "Generic Books", or a
+	// finer category like "Daily Devotional" where the .conf names one.
+	// See ReadConfigFile() for how it is derived.
+	BString fType;
 	float fFileSize;
 };
 
