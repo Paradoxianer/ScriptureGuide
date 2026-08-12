@@ -170,3 +170,45 @@ do outside this workflow — see CLAUDE.md.
   request for its own `objects.../foo.o` with the application's copy one
   level up, calls it up to date, and compiles nothing. The tests
   themselves pass.
+
+## 1.1.0
+
+Tagged but never published as a release; its changes reached users with
+1.2.0.
+
+### Column groups
+
+Columns can be joined into groups that scroll, align and navigate
+together, or split apart so one group sits in a different book from
+another. Every column got its own scrollbar, and the full layout --
+which modules are open, where the notes column is, which columns are
+joined -- is restored on the next start.
+
+Columns can also be reordered by dragging their header, and the notes
+column has a real draggable splitter rather than a fixed width.
+
+### Cross-references, Strong's numbers and a dictionary
+
+References in commentary text became clickable. Strong's-tagged words are
+highlighted and open a new Lexicon/Dictionary window. Both, plus verse
+numbers, can be switched off in the Options menu.
+
+### Copy Comparison
+
+Every open column's text for the current chapter, as a verse-by-verse
+table, on the clipboard as plain text, tab-separated, Markdown or HTML.
+
+### Fixes
+
+- A commentary entry spanning several verses inflated the row height once
+  per verse it covered.
+- Notes and Bible columns drifted apart in height.
+- A dangling pointer to the dictionary window could crash the app.
+- Adding a column could reorder verses through a VerseKey locale bug, and
+  the book menu listed its first book twice.
+- Book Manager: package sizes were paired with the wrong names, and an
+  uninstall with an unreadable config file could delete more than it
+  should.
+
+Both applications also got proper HVIF vector icons, replacing the BeOS
+raster ones.
