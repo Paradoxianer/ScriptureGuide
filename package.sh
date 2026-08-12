@@ -1,15 +1,19 @@
 #!/bin/sh
 # Builds a ScriptureGuide .hpkg on Haiku.
 #
-#   sh package.sh                -> build from THIS checkout
-#   sh package.sh v1.2.0         -> clone that tag into a temp dir and
-#                                   build from it, then clean up
-#   sh package.sh v1.2.0 --install
-#   sh package.sh --install
+#   sh package.sh v1.2.1           <- what most people want
+#   sh package.sh v1.2.1 --install <- ... and install it straight away
+#   sh package.sh                  <- build from THIS checkout instead
 #
-# Handed to someone as a single file, the tag form needs nothing else
-# present: it installs the build dependencies, fetches the source itself,
-# builds, packages, and removes everything it created except the .hpkg.
+# Why you might want this: a prebuilt .hpkg carries a "requires haiku >= "
+# for the version it was built on, so a package built on one Haiku release
+# can refuse to install on another. Running this on YOUR machine produces
+# a package that matches it.
+#
+# It needs nothing present but itself: it installs the build dependencies
+# (including the devel: ones), fetches the source at that tag, builds both
+# applications, writes the .hpkg into the current directory, and removes
+# everything it created along the way -- including if you interrupt it.
 #
 # Deliberately NOT a HaikuPorts recipe. It drives Haiku's own `package`
 # tool directly, for handing builds to testers and attaching them to a

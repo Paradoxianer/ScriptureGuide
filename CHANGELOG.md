@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.2.1 (test release)
+
+### Fixed
+
+- **Strong's numbers showed the wrong entry.** Clicking any Greek word
+  could produce the article for "alpha". `Feature=GreekDef` in a module's
+  configuration means "this defines Greek words", not "this is keyed by
+  Strong's number" -- the Dodson Greek-English Lexicon declares it and is
+  keyed by the Greek lemma, so asking it for 2316 did not fail: SWORD
+  snapped to the nearest key and returned a valid entry for something
+  else. The lookup now checks which key the module actually landed on,
+  and a lexicon that cannot answer Strong's lookups no longer makes
+  numbers render as links.
+- The app no longer creates an empty legacy `Notes.txt` on every start.
+  Notes have been a SWORD module for some time; nothing had read that
+  file since, and it was written to a differently-cased path that had
+  nothing to do with where notes are stored. Existing files are left
+  alone.
+
+### Documentation
+
+The manual was rewritten. Its pictures were seven full window shots at
+around 150 KB each; they are now crops of the part being described, taken
+against the current build -- 1.3 MB down to 156 KB. The text had fallen
+behind further than the pictures: it described an Apply button in the
+Book Manager and notes as one small field per verse, and said nothing
+about column groups, back/forward, the dictionary window or Copy
+Comparison. A German version is included, and menus are written out as
+text rather than screenshotted so they translate with the page.
+
+It also documented the wrong location for personal notes -- the path the
+empty legacy file went to, not where anything is stored.
+
+### Packaging
+
+`package.sh` can now build from a tag on a machine with no checkout:
+
+    sh package.sh v1.2.1
+
+It installs the build dependencies, fetches the source, builds both apps,
+writes the .hpkg and removes what it created. Useful on a Haiku version
+the attached package was not built for.
+
+The editable Icon-O-Matic icon sources are in the repository now, under
+`resources/icons`. The compiled icons were already there, embedded in
+each app's .rdef; the sources existed only on one machine.
+
 ## 1.2.0 (test release)
 
 Both ScriptureGuide and the Book Manager. Versions bumped together; they
