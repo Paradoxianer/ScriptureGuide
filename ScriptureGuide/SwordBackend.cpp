@@ -500,6 +500,28 @@ strongs_feature_for(char prefix)
 }
 
 
+// True if `landed` -- the key a module actually ended up on -- is the
+// same Strong's number as `wanted`, compared numerically.
+//
+// Both sides need normalizing: a Strong's module reports 2316 as "02316"
+// (leading zero), and some modules prefix the letter, so a plain string
+// compare rejects correct hits. Everything up to the first digit is
+// skipped and the rest read as a number.
+static bool
+landed_on_number(const char* landed, const char* wanted)
+{
+	if (landed == NULL || wanted == NULL)
+		return false;
+	while (*landed != '\0' && (*landed < '0' || *landed > '9'))
+		landed++;
+	while (*wanted != '\0' && (*wanted < '0' || *wanted > '9'))
+		wanted++;
+	if (*landed == '\0' || *wanted == '\0')
+		return false;
+	return strtol(landed, NULL, 10) == strtol(wanted, NULL, 10);
+}
+
+
 bool HasStrongsDictionary(SWMgr* manager, char prefix)
 {
 	const char* wantedFeature = strongs_feature_for(prefix);
@@ -517,11 +539,24 @@ bool HasStrongsDictionary(SWMgr* manager, char prefix)
 		const ConfigEntMap& conf = module->getConfig();
 		std::pair<ConfigEntMap::const_iterator, ConfigEntMap::const_iterator>
 			range = conf.equal_range("Feature");
+		bool declaresFeature = false;
 		for (ConfigEntMap::const_iterator f = range.first;
-				f != range.second; ++f) {
+				f != range.second && !declaresFeature; ++f) {
 			if (f->second == wantedFeature)
-				return true;
+				declaresFeature = true;
 		}
+		if (!declaresFeature)
+			continue;
+
+		// Declaring the feature is not enough -- see
+		// LookupStrongsNumber() for the module that proves it (Dodson
+		// declares GreekDef and is keyed by Greek lemma, not by number).
+		// Probe a number every Strong's dictionary has and see whether the
+		// module lands on it; if it snaps somewhere else, it cannot
+		// answer a Strong's lookup and must not make one look possible.
+		module->setKey("1");
+		if (landed_on_number(module->getKeyText(), "1"))
+			return true;
 	}
 	return false;
 }
@@ -561,7 +596,23 @@ BString SwordBackend::LookupStrongsNumber(const char* strongsNumber) const
 			continue;
 
 		BString entry(lexicon->GetEntry(number));
-		if (!entry.IsEmpty())
+		if (entry.IsEmpty())
+			continue;
+
+		// A non-empty entry is NOT proof of a hit. Feature=GreekDef means
+		// "this defines Greek words", not "this is keyed by Strong's
+		// number" -- Dodson's Greek-English Lexicon declares it and is
+		// keyed by the Greek lemma. Asking it for 2316 doesn't fail; SWORD
+		// snaps to the nearest key and hands back a perfectly valid entry
+		// for something else entirely (confirmed live: it landed on G0001
+		// and returned the article for alpha, which is what the dictionary
+		// window then showed for every Greek word clicked).
+		//
+		// So check where the lookup actually landed. A real Strong's
+		// module reports 02316 for 2316; Dodson reports G0001.
+		// getKeyText() on the module itself, NOT SGModule::GetKey(): that
+		// one casts the key to VerseKey, which a lexicon's key is not.
+		if (landed_on_number(lexicon->GetModule()->getKeyText(), number))
 			return entry;
 	}
 
