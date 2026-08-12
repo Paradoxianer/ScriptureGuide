@@ -19,7 +19,7 @@
 
 set -e
 
-TAG="v1.2.1"
+TAG="v1.2.2"
 REPO="https://github.com/Paradoxianer/ScriptureGuide.git"
 SRC_DIR="$HOME/ScriptureGuide-source"
 INSTALL_DIR="$HOME/apps/ScriptureGuide"

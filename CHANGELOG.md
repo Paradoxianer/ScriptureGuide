@@ -1,6 +1,17 @@
 # Changelog
 
-## 1.2.1 (test release)
+## 1.2.2 (test release)
+
+Same programs as 1.2.1 -- only the documentation differs, so 1.2.1 was
+never published as a release.
+
+- The manual gained the two pictures it was describing without showing:
+  the column header's drop-down, which is how a column is added or turned
+  into notes, and the search window.
+- The README is now an introduction to the project rather than a
+  paragraph and a bullet list.
+
+## 1.2.1
 
 ### Fixed
 
@@ -37,7 +48,7 @@ empty legacy file went to, not where anything is stored.
 
 `package.sh` can now build from a tag on a machine with no checkout:
 
-    sh package.sh v1.2.1
+    sh package.sh v1.2.2
 
 It installs the build dependencies, fetches the source, builds both apps,
 writes the .hpkg and removes what it created. Useful on a Haiku version

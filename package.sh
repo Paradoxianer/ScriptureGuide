@@ -1,8 +1,8 @@
 #!/bin/sh
 # Builds a ScriptureGuide .hpkg on Haiku.
 #
-#   sh package.sh v1.2.1           <- what most people want
-#   sh package.sh v1.2.1 --install <- ... and install it straight away
+#   sh package.sh v1.2.2           <- what most people want
+#   sh package.sh v1.2.2 --install <- ... and install it straight away
 #   sh package.sh                  <- build from THIS checkout instead
 #
 # Why you might want this: a prebuilt .hpkg carries a "requires haiku >= "
