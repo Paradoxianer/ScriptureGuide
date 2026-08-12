@@ -7,3 +7,6 @@ ScriptureGuide/tests/Tests
 # not something a contributor building the app from a fresh checkout
 # needs.
 /dev.sh
+
+# Output of package.sh -- rebuilt from the checkout, never committed.
+/build-package/
