@@ -22,6 +22,7 @@
 #include <Roster.h>
 #include <String.h>
 #include <ControlLook.h>
+#include <GroupView.h>
 #include <IconUtils.h>
 #include <Resources.h>
 #include <ToolBar.h>
@@ -409,9 +410,34 @@ void SGMainWindow::BuildGUI(void)
 	toolBar->SetActionEnabled(MENU_NAVIGATION_FORWARD, false);
 	toolBar->AddSeparator();
 
-	toolBar->AddView(bookfield);
-	toolBar->AddView(fChapterBox);
-	toolBar->AddView(fVerseBox);
+	// Book/chapter/verse get the same tinted band the active chain's own
+	// header cells carry (see ParallelHeaderView::Draw()). These three
+	// fields drive exactly that chain and nothing else, so wearing its
+	// colour is what says so -- otherwise, with several chains open,
+	// nothing visually ties the fields to the one they move.
+	//
+	// SetViewUIColor() with a tint rather than a fixed rgb_color, so it
+	// tracks the user's colour scheme the same way the header band does
+	// (which tints ViewColor() at draw time). The tint has to go on the
+	// controls as well as the group: a BMenuField and a BTextControl
+	// paint their own label area in their OWN view colour, so tinting
+	// only the group behind them would leave pale rectangles around each
+	// label.
+	BGroupView* verseFields = new BGroupView(B_HORIZONTAL,
+		B_USE_SMALL_SPACING);
+	verseFields->SetViewUIColor(B_PANEL_BACKGROUND_COLOR, B_DARKEN_1_TINT);
+	bookfield->SetViewUIColor(B_PANEL_BACKGROUND_COLOR, B_DARKEN_1_TINT);
+	fChapterBox->SetViewUIColor(B_PANEL_BACKGROUND_COLOR, B_DARKEN_1_TINT);
+	fVerseBox->SetViewUIColor(B_PANEL_BACKGROUND_COLOR, B_DARKEN_1_TINT);
+	BLayoutBuilder::Group<>(verseFields)
+		.Add(bookfield)
+		.Add(fChapterBox)
+		.Add(fVerseBox)
+		.SetInsets(B_USE_SMALL_INSETS, 0, B_USE_SMALL_INSETS, 0);
+
+	toolBar->AddView(verseFields);
+	// Deliberately OUTSIDE the band: the search field jumps to whatever
+	// is typed and is not tied to one chain.
 	toolBar->AddView(fUniversalSearchBox);
 	toolBar->AddGlue();
 	toolBar->AddView(fNoteButton);
