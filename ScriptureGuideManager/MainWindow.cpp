@@ -125,7 +125,7 @@ MainWindow::MainWindow(BRect frame)
 	be_plain_font->GetHeight(&fontHeight);
 	float lineHeight=fontHeight.ascent+fontHeight.descent+fontHeight.leading;
 	fTextScrollView->SetExplicitMinSize(
-		BSize(B_SIZE_UNSET, lineHeight*6.0f));
+		BSize(B_SIZE_UNSET, lineHeight*8.0f));
 	
 	// Arrows rather than words: they say WHICH WAY a module moves, which
 	// is the whole point of the two-list layout. The tooltip carries the
@@ -158,7 +158,7 @@ MainWindow::MainWindow(BRect frame)
 	// grow without bound reports an unbounded maximum itself, so the
 	// column kept claiming a third of the window while the two lists --
 	// the things actually being read -- were squeezed.
-	const float kArrowWidth=40.0f;
+	const float kArrowWidth=28.0f;
 	fInstallButton->SetExplicitMaxSize(BSize(kArrowWidth,B_SIZE_UNSET));
 	fRemoveButton->SetExplicitMaxSize(BSize(kArrowWidth,B_SIZE_UNSET));
 
@@ -177,7 +177,11 @@ MainWindow::MainWindow(BRect frame)
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(mbar)
 		.AddSplit(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
-			.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING, 3.0f)
+			// Spacing 0 across the top row: the arrow column is meant to
+			// read as a seam between the two lists, and item spacing on
+			// both sides of it made that seam three times wider than the
+			// buttons themselves.
+			.AddGroup(B_HORIZONTAL, 0, 2.0f)
 				.AddGroup(B_VERTICAL, 0)
 					.Add(availableLabel)
 					.Add(fAvailableList)
@@ -191,10 +195,10 @@ MainWindow::MainWindow(BRect frame)
 					.Add(fInstalledList)
 				.End()
 			.End()
-			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING, 1.0f)
-				.Add(fTextScrollView)
-				.SetInsets(B_USE_SMALL_INSETS)
-			.End()
+			// No insets: the pane is meant to span the window edge to
+			// edge, the same way the lists above it do. Insets here were
+			// what kept it short of both.
+			.Add(fTextScrollView, 1.0f)
 		.End()
 	.End();
 }
