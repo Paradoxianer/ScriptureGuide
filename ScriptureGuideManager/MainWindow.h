@@ -59,6 +59,8 @@ private:
 	BColumnListView* MakeModuleList(const char *name, uint32 selectionMessage);
 	// Description pane contents for whichever list was last clicked in.
 	void ShowSelectionInfo(BColumnListView *list);
+	// The row for a module, wherever it currently sits.
+	class BookRow* FindRow(const BString &zipFileName);
 };
 
 #endif

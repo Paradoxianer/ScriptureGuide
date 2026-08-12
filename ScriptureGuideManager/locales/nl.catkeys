@@ -1,0 +1,29 @@
+1	Dutch	application/x-vnd.wgp.ScriptureGuideManager	668444746
+Removing %module%…	BookManager		%module% wordt verwijderd…
+Quit	BookManager		Stoppen
+Removing…	BookManager		Verwijderen…
+Type	BookManager		Type
+Their downloaded data will be deleted.	BookManager		Hun gedownloade gegevens worden verwijderd.
+Downloading %module%…	BookManager		%module% wordt gedownload…
+Error: couldn't read the config file for %module% -- skipping its removal rather than guessing.	BookManager		Fout: het configuratiebestand voor %module% kon niet worden gelezen; verwijderen wordt overgeslagen in plaats van te gokken.
+Book	BookManager		Boek
+Archive size:	BookManager		Archiefgrootte:
+ScriptureGuide Book Manager	System name		ScriptureGuide Boekbeheer
+Remove %count% modules?	BookManager		%count% modules verwijderen?
+%count% modules selected	BookManager		%count% modules geselecteerd
+Done	BookManager		Klaar
+Available	BookManager		Beschikbaar
+Remove %module%?	BookManager		%module% verwijderen?
+Installing…	BookManager		Installeren…
+Status	BookManager		Status
+Remove modules	BookManager		Modules verwijderen
+Finished	BookManager		Voltooid
+Installing %module%…	BookManager		%module% wordt geïnstalleerd…
+Remove	BookManager		Verwijderen
+Install the modules selected on the left	BookManager		De links geselecteerde modules installeren
+Waiting…	BookManager		Wachten…
+Installed	BookManager		Geïnstalleerd
+Language	BookManager		Taal
+Remove the modules selected on the right	BookManager		De rechts geselecteerde modules verwijderen
+Cancel	BookManager		Annuleren
+Program	BookManager		Programma

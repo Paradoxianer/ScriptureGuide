@@ -1,0 +1,29 @@
+1	German	application/x-vnd.wgp.ScriptureGuideManager	668444746
+Removing %module%…	BookManager		%module% wird entfernt…
+Quit	BookManager		Beenden
+Removing…	BookManager		Wird entfernt…
+Type	BookManager		Typ
+Their downloaded data will be deleted.	BookManager		Ihre heruntergeladenen Daten werden gelöscht.
+Downloading %module%…	BookManager		%module% wird heruntergeladen…
+Error: couldn't read the config file for %module% -- skipping its removal rather than guessing.	BookManager		Fehler: Die Konfigurationsdatei für %module% konnte nicht gelesen werden – das Entfernen wird übersprungen, statt zu raten.
+Book	BookManager		Buch
+Archive size:	BookManager		Archivgröße:
+ScriptureGuide Book Manager	System name		ScriptureGuide Buchverwaltung
+Remove %count% modules?	BookManager		%count% Module entfernen?
+%count% modules selected	BookManager		%count% Module ausgewählt
+Done	BookManager		Fertig
+Available	BookManager		Verfügbar
+Remove %module%?	BookManager		%module% entfernen?
+Installing…	BookManager		Wird installiert…
+Status	BookManager		Status
+Remove modules	BookManager		Module entfernen
+Finished	BookManager		Abgeschlossen
+Installing %module%…	BookManager		%module% wird installiert…
+Remove	BookManager		Entfernen
+Install the modules selected on the left	BookManager		Die links ausgewählten Module installieren
+Waiting…	BookManager		Wartet…
+Installed	BookManager		Installiert
+Language	BookManager		Sprache
+Remove the modules selected on the right	BookManager		Die rechts ausgewählten Module entfernen
+Cancel	BookManager		Abbrechen
+Program	BookManager		Programm

@@ -1,5 +1,6 @@
 #include <Alert.h>
 #include <Application.h>
+#include <Catalog.h>
 #include <LayoutBuilder.h>
 #include <GroupView.h>
 #include <List.h>
@@ -12,6 +13,9 @@
 #include "ModUtils.h"
 #include "BookRow.h"
 #include "DownloadLocations.h"
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "BookManager"
 
 extern BList gFileNameList;
 extern BList fConfFileList;
@@ -28,17 +32,21 @@ enum
 };
 
 
-// What a row's status column says, and what it means for the pending
-// lists. Replaces the single characters this column used to hold (" ",
-// "*", "i", "X") -- those were unreadable without the source open, which
-// is half of why marking modules felt like guesswork (see issues #37,
-// #42).
+// What a row's status column says.
+//
+// The settled states say NOTHING: once a module is listed under
+// "Installed" or "Available", printing "Installed" beside it only repeats
+// which list the reader is already looking at. The column earns its place
+// during the work, where the side a row sits on is what it WILL be and
+// the text is what is happening to get there.
 enum
 {
 	STATE_AVAILABLE = 0,	// not installed, nothing pending
 	STATE_INSTALLED,		// installed, nothing pending
-	STATE_WILL_INSTALL,		// not installed, marked to install
-	STATE_WILL_REMOVE		// installed, marked to remove
+	STATE_WILL_INSTALL,		// queued to install
+	STATE_WILL_REMOVE,		// queued to remove
+	STATE_INSTALLING,		// being downloaded/unpacked right now
+	STATE_REMOVING			// being deleted right now
 };
 
 static const char*
@@ -46,9 +54,10 @@ state_text(int32 state)
 {
 	switch(state)
 	{
-		case STATE_INSTALLED:		return "Installed";
-		case STATE_WILL_INSTALL:	return "Will install";
-		case STATE_WILL_REMOVE:		return "Will remove";
+		case STATE_WILL_INSTALL:
+		case STATE_WILL_REMOVE:		return B_TRANSLATE("Waiting…");
+		case STATE_INSTALLING:		return B_TRANSLATE("Installing…");
+		case STATE_REMOVING:		return B_TRANSLATE("Removing…");
 		default:					return "";
 	}
 }
@@ -75,7 +84,7 @@ MainWindow::MainWindow(BRect frame)
 	// vertical scrollbar (reported). A titled window puts the resize
 	// affordance in the border where it belongs and gives the content
 	// its full height back.
-	: BWindow(frame, "ScriptureGuide Book Manager",B_TITLED_WINDOW_LOOK,
+	: BWindow(frame, B_TRANSLATE_SYSTEM_NAME("ScriptureGuide Book Manager"),B_TITLED_WINDOW_LOOK,
  		B_NORMAL_WINDOW_FEEL, 0)
 {
 	fApplyThread=-1;
@@ -83,8 +92,8 @@ MainWindow::MainWindow(BRect frame)
 	// Set up menu
 	BMenuBar *mbar=new BMenuBar("menu_bar");
 	
-	BMenu *menu=new BMenu("Program");
-	menu->AddItem(new BMenuItem("Quit",new BMessage(B_QUIT_REQUESTED),'Q',0));
+	BMenu *menu=new BMenu(B_TRANSLATE("Program"));
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Quit"),new BMessage(B_QUIT_REQUESTED),'Q',0));
 	mbar->AddItem(menu);
 	
 	// Set up the two module lists. Which side a row is on is its state
@@ -132,14 +141,14 @@ MainWindow::MainWindow(BRect frame)
 	// verb for anyone who wants it spelled out.
 	fInstallButton=new BButton("install button", "\xE2\x86\x92",
 			new BMessage(M_INSTALL_SELECTION));
-	fInstallButton->SetToolTip("Install the modules selected on the left");
+	fInstallButton->SetToolTip(B_TRANSLATE("Install the modules selected on the left"));
 	fInstallButton->SetEnabled(false);
 	fRemoveButton=new BButton("remove button", "\xE2\x86\x90",
 			new BMessage(M_REMOVE_SELECTION));
-	fRemoveButton->SetToolTip("Remove the modules selected on the right");
+	fRemoveButton->SetToolTip(B_TRANSLATE("Remove the modules selected on the right"));
 	fRemoveButton->SetEnabled(false);
-	BStringView *availableLabel=new BStringView("availablelabel","Available");
-	BStringView *installedLabel=new BStringView("installedlabel","Installed");
+	BStringView *availableLabel=new BStringView("availablelabel",B_TRANSLATE("Available"));
+	BStringView *installedLabel=new BStringView("installedlabel",B_TRANSLATE("Installed"));
 	// Without this the labels were what pinned the lists to their minimum
 	// width, and every spare pixel went to the arrows between them:
 	// BStringView::MaxSize() reports its PREFERRED width unless an
@@ -208,13 +217,14 @@ BColumnListView*
 MainWindow::MakeModuleList(const char *name, uint32 selectionMessage)
 {
 	BColumnListView *list = new BColumnListView(name,0);
-	list->AddColumn(new BStringColumn("Status",90,50,150,0),COLUMN_STATUS);
-	list->AddColumn(new BStringColumn("Book",200,50,1000,0),COLUMN_BOOK);
+	list->AddColumn(new BStringColumn(B_TRANSLATE("Status"),80,40,150,0),
+		COLUMN_STATUS);
+	list->AddColumn(new BStringColumn(B_TRANSLATE("Book"),200,50,1000,0),COLUMN_BOOK);
 	// SWORD's own module vocabulary, so this says the same thing the
 	// reading app's module menu does (see ReadConfigFile()). Sortable
 	// like every other column, which is what issue #41 asks for.
-	list->AddColumn(new BStringColumn("Type",150,50,400,0),COLUMN_TYPE);
-	list->AddColumn(new BStringColumn("Language",75,50,1000,0),
+	list->AddColumn(new BStringColumn(B_TRANSLATE("Type"),150,50,400,0),COLUMN_TYPE);
+	list->AddColumn(new BStringColumn(B_TRANSLATE("Language"),75,50,1000,0),
 		COLUMN_LANGUAGE);
 	// The point of issue #37: mark a whole batch at once instead of
 	// double-clicking every entry in turn.
@@ -346,16 +356,27 @@ void MainWindow::StartApply(void)
 
 	if(fUninstallList.CountStrings()>0)
 	{
+		// Placeholders rather than concatenation, so a translation can
+		// put the name or the number wherever its language needs it.
 		BString message;
 		if(fUninstallList.CountStrings()==1)
-			message << "Remove " << fUninstallList.StringAt(0) << "?";
+		{
+			message=B_TRANSLATE("Remove %module%?");
+			message.ReplaceFirst("%module%",fUninstallList.StringAt(0));
+		}
 		else
-			message << "Remove " << fUninstallList.CountStrings()
-				<< " modules?";
-		message << "\n\nTheir downloaded data will be deleted.";
+		{
+			BString countText;
+			countText << fUninstallList.CountStrings();
+			message=B_TRANSLATE("Remove %count% modules?");
+			message.ReplaceFirst("%count%",countText);
+		}
+		message << "\n\n"
+			<< B_TRANSLATE("Their downloaded data will be deleted.");
 
-		BAlert *alert=new BAlert("Remove modules",message.String(),
-			"Cancel","Remove",NULL,B_WIDTH_AS_USUAL,B_WARNING_ALERT);
+		BAlert *alert=new BAlert(B_TRANSLATE("Remove modules"),
+			message.String(),B_TRANSLATE("Cancel"),B_TRANSLATE("Remove"),
+			NULL,B_WIDTH_AS_USUAL,B_WARNING_ALERT);
 		alert->SetShortcut(0,B_ESCAPE);
 		if(alert->Go()==0)
 		{
@@ -409,17 +430,27 @@ void MainWindow::SetRowState(BookRow *row, int32 state)
 	// ApplyThread() works from; keep them in step with what the row now
 	// says rather than deriving one from the other later.
 	const BString &zip=row->File()->fZipFileName;
-	fInstallList.Remove(zip);
-	fUninstallList.Remove(zip);
-	if(state==STATE_WILL_INSTALL)
-		fInstallList.Add(zip);
-	else if(state==STATE_WILL_REMOVE)
-		fUninstallList.Add(zip);
+	// Only the QUEUED states belong in the pending lists. The in-progress
+	// ones are already being worked on by ApplyThread(), which owns those
+	// lists for the duration -- re-adding an entry there would hand it to
+	// the next run as well.
+	if(state!=STATE_INSTALLING && state!=STATE_REMOVING)
+	{
+		fInstallList.Remove(zip);
+		fUninstallList.Remove(zip);
+		if(state==STATE_WILL_INSTALL)
+			fInstallList.Add(zip);
+		else if(state==STATE_WILL_REMOVE)
+			fUninstallList.Add(zip);
+	}
 
-	// "Installed" and "will be installed" share the right-hand list;
-	// "available" and "will be removed" share the left.
+	// "Installed", "will be installed" and "installing" share the
+	// right-hand list; "available", "will be removed" and "removing"
+	// share the left. A row is always on the side it will END on, so the
+	// in-progress states move it nowhere -- it is already there.
 	BColumnListView *wanted
-		= (state==STATE_INSTALLED || state==STATE_WILL_INSTALL)
+		= (state==STATE_INSTALLED || state==STATE_WILL_INSTALL
+			|| state==STATE_INSTALLING)
 			? fInstalledList : fAvailableList;
 	BColumnListView *current
 		= (fInstalledList->IndexOf(row)>=0) ? fInstalledList : fAvailableList;
@@ -431,6 +462,28 @@ void MainWindow::SetRowState(BookRow *row, int32 state)
 	}
 	else
 		wanted->UpdateRow(row);
+}
+
+
+// The row for a module, wherever it currently sits. ApplyThread() works
+// from the pending lists (plain strings), but needs the row back to show
+// progress on it.
+BookRow* MainWindow::FindRow(const BString &zipFileName)
+{
+	BColumnListView *lists[2]={fAvailableList,fInstalledList};
+	for(int32 l=0; l<2; l++)
+	{
+		for(int32 i=0; i<lists[l]->CountRows(); i++)
+		{
+			BookRow *row=(BookRow*)lists[l]->RowAt(i);
+			if(row!=NULL && row->File()!=NULL
+				&& row->File()->fZipFileName==zipFileName)
+			{
+				return row;
+			}
+		}
+	}
+	return NULL;
 }
 
 
@@ -447,13 +500,17 @@ void MainWindow::ShowSelectionInfo(BColumnListView *list)
 	if(count==1 && first!=NULL && first->File()!=NULL)
 	{
 		BString str(first->File()->fAbout);
-		str << "\n\n" << "Archive Size: " << first->File()->fFileSize << " K";
+		str << "\n\n" << B_TRANSLATE("Archive size:") << " "
+			<< first->File()->fFileSize << " K";
 		fTextView->SetText(str.String());
 	}
 	else if(count>1)
 	{
 		BString str;
-		str << count << " modules selected";
+		BString countText;
+		countText << count;
+		str=B_TRANSLATE("%count% modules selected");
+		str.ReplaceFirst("%count%",countText);
 		fTextView->SetText(str.String());
 	}
 }
@@ -508,10 +565,19 @@ int32 MainWindow::ApplyThread(void *data)
 		configpath.Prepend(SG_PKGINFO_PATH "configfiles/");
 		ReadConfigFile(configpath.String(),cfile);
 
-		displaystring="Downloading ";
-		displaystring << cfile.fDescription << "\n";
+		// One whole sentence with a placeholder, not a prefix the module
+		// name is glued onto: a translation has to be free to put the name
+		// elsewhere, and a fragment ending in a space is easy to get wrong.
+		displaystring=B_TRANSLATE("Downloading %module%…");
+		displaystring.ReplaceFirst("%module%",cfile.fDescription);
+		displaystring << "\n";
 				
 		win->fTextView->Insert(displaystring.String());
+		// Which of the queued modules is actually being worked on right
+		// now -- the description pane scrolls, the row does not.
+		BookRow *row=win->FindRow(zipfilename);
+		if(row!=NULL)
+			win->SetRowState(row,STATE_INSTALLING);
 		win->Unlock();
 		
 		syscmd="wget -P " SG_PKGCACHE_PATH " " SG_DOWNLOAD_PKGS;
@@ -521,8 +587,9 @@ int32 MainWindow::ApplyThread(void *data)
 		system(syscmd.String());
 		
 		win->Lock();
-		displaystring="Installing ";
-		displaystring << cfile.fDescription << "\n";
+		displaystring=B_TRANSLATE("Installing %module%…");
+		displaystring.ReplaceFirst("%module%",cfile.fDescription);
+		displaystring << "\n";
 		win->fTextView->Insert(displaystring.String());
 		win->Unlock();
 		
@@ -532,7 +599,8 @@ int32 MainWindow::ApplyThread(void *data)
 		system(syscmd.String());
 		
 		win->Lock();
-		win->fTextView->Insert("Done\n");
+		win->fTextView->Insert(B_TRANSLATE("Done"));
+		win->fTextView->Insert("\n");
 		win->Unlock();
 	}
 	for(i=0; i<removecount; i++)
@@ -568,18 +636,22 @@ int32 MainWindow::ApplyThread(void *data)
 		// three commands below with a path we can't trust.
 		if (readStatus != B_OK || cfile.fDataPath.IsEmpty())
 		{
-			displaystring="Error: couldn't read the config file for ";
-			displaystring << zipfilename
-				<< " -- skipping its removal rather than guessing.\n";
+			displaystring=B_TRANSLATE("Error: couldn't read the config file for %module% -- skipping its removal rather than guessing.");
+			displaystring.ReplaceFirst("%module%",zipfilename);
+			displaystring << "\n";
 			win->fTextView->Insert(displaystring.String());
 			win->Unlock();
 			continue;
 		}
 
-		displaystring="Removing ";
-		displaystring << cfile.fDescription << "\n";
+		displaystring=B_TRANSLATE("Removing %module%…");
+		displaystring.ReplaceFirst("%module%",cfile.fDescription);
+		displaystring << "\n";
 
 		win->fTextView->Insert(displaystring.String());
+		BookRow *row=win->FindRow(zipfilename);
+		if(row!=NULL)
+			win->SetRowState(row,STATE_REMOVING);
 		win->Unlock();
 
 		// The two things needed to remove a module:
@@ -611,7 +683,9 @@ int32 MainWindow::ApplyThread(void *data)
 	}
 	
 	win->Lock();
-	win->fTextView->Insert("=====Finished====\n");
+	win->fTextView->Insert("===== ");
+	win->fTextView->Insert(B_TRANSLATE("Finished"));
+	win->fTextView->Insert(" =====\n");
 	win->Unlock();
 	win->Lock();
 	win->fApplyThread=-1;
