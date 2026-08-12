@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>ScriptureGuide – Handbuch</title>
+<style>
+body { font-family: sans-serif; line-height: 1.5; max-width: 46em;
+       margin: 2em auto; padding: 0 1em; color: #222; }
+h1 { font-size: 1.6em; margin-bottom: 0; }
+h2 { font-size: 1.2em; margin-top: 2em; border-bottom: 1px solid #ccc;
+     padding-bottom: .2em; }
+h3 { font-size: 1.05em; margin-top: 1.5em; }
+img { max-width: 100%; border: 1px solid #bbb; display: block;
+      margin: 1em 0; }
+img.plain { border: 0; }
+code, kbd { background: #f2f2f2; padding: 0 .25em; border-radius: 2px;
+            font-size: .95em; }
+kbd { border: 1px solid #ccc; }
+nav.toc { background: #f7f7f7; border: 1px solid #ddd; padding: .5em 1.5em;
+          margin: 1.5em 0; }
+nav.toc ul { margin: .5em 0; padding-left: 1.2em; }
+.langs { font-size: .9em; color: #666; margin-top: .3em; }
+.menu { background: #f7f7f7; border-left: 3px solid #ccc; padding: .5em 1em;
+        margin: 1em 0; }
+.menu dt { font-weight: bold; margin-top: .6em; }
+.menu dd { margin: 0 0 0 1.2em; }
+footer { margin-top: 3em; border-top: 1px solid #ccc; padding-top: 1em;
+         font-size: .9em; color: #666; }
+</style>
+</head>
+<body>
+
+<img class="plain" src="pics/logo1.png" alt="ScriptureGuide" width="150" height="80">
+<h1>ScriptureGuide – Handbuch</h1>
+<p class="langs"><a href="index.html">English</a> &middot; Deutsch</p>
+
+<nav class="toc">
+<ul>
+<li><a href="#reading">Der Lesebereich</a></li>
+<li><a href="#groups">Spaltengruppen</a></li>
+<li><a href="#toolbar">Die Werkzeugleiste</a></li>
+<li><a href="#notes">Eigene Notizen</a></li>
+<li><a href="#links">Querverweise und Strong-Nummern</a></li>
+<li><a href="#menus">Die Menüs</a></li>
+<li><a href="#find">Suchen</a></li>
+<li><a href="#locale">Anderssprachige Systeme</a></li>
+<li><a href="#install">Bibeln und Kommentare installieren</a></li>
+</ul>
+</nav>
+
+<h2 id="reading">Der Lesebereich</h2>
+
+<p>Der Lesebereich zeigt beliebig viele Übersetzungen, Kommentare und
+Notizspalten nebeneinander. Die Zeilen sind am Vers ausgerichtet: Derselbe
+Vers steht in jeder Spalte auf gleicher Höhe, ganz gleich, wie
+unterschiedlich die Übersetzungen umbrechen.</p>
+
+<img src="pics/reading.png" alt="Zwei Übersetzungen nebeneinander, Verse 5 bis 9 in beiden Spalten auf gleicher Höhe">
+
+<p>Jede Spalte hat einen eigenen Kopf: ein Auswahlfeld für jede
+installierte Bibel oder jeden Kommentar, ein <b>+</b>, das direkt dahinter
+eine neue Spalte einfügt, und ein <b>x</b>, das sie entfernt.</p>
+
+<p>Innerhalb einer Spalte markiert man Text wie gewohnt. Sobald die
+Markierung mehrere Spalten umfasst, rastet sie auf ganze Verse ein –
+Übersetzungen sind sich selten einig, wo ein Satz endet, geschweige denn ein
+Wort, und der Vers ist die einzige Einheit, die über alle hinweg
+zusammenpasst. Eine Markierung lässt sich in eine andere Spalte ziehen, als
+Textschnipsel auf den Schreibtisch oder in ein anderes Programm; zieht man
+eine Stellenangabe zurück in eine Spalte, wird dorthin gesprungen.</p>
+
+<p>Bleibt eine Spalte leer, fehlt das Buch oder Kapitel meist schlicht in
+diesem Modul – etwa Genesis in einem Neuen Testament oder ein Kommentar ohne
+Eintrag zu diesem Kapitel.</p>
+
+<h2 id="groups">Spaltengruppen</h2>
+
+<p>Spalten sind zu Gruppen verbunden, die gemeinsam scrollen und
+navigieren. Der kleine Knopf zwischen zwei Spaltenköpfen zeigt, ob sie
+verbunden (<b>=</b>) oder getrennt (<b>/</b>) sind; ein Klick ändert es:</p>
+
+<img src="pics/chains.png" alt="Spaltenköpfe mit = zwischen den ersten drei und / vor der letzten">
+
+<p>Hier bilden die ersten drei Spalten eine Gruppe, die letzte steht für
+sich – sie kann also bei einem ganz anderen Buch stehen, während die übrigen
+zusammenbleiben. Jede Gruppe behält ihr eigenes Kapitel, ihre eigene
+Scrollposition und ihre eigene Ausrichtung. Die Felder Buch, Kapitel und
+Vers bewegen immer die <em>aktive</em> Gruppe: die, in die zuletzt geklickt
+wurde, erkennbar an derselben Tönung, die auch die Felder tragen.</p>
+
+<h2 id="toolbar">Die Werkzeugleiste</h2>
+
+<img src="pics/toolbar.png" alt="Werkzeugleiste mit Pfeilen zurück und vorwärts, Feldern für Buch, Kapitel und Vers sowie Gehe zu / Suche">
+
+<p>Die Pfeile <b>zurück</b> und <b>vorwärts</b> führen durch die zuletzt
+besuchten Stellen, wie im Browser – einem Querverweis zu folgen bewegt die
+Gruppe, in der man liest, und so kommt man wieder zurück.</p>
+
+<p><b>Buch</b>, <b>Kapitel</b> und <b>Vers</b> bewegen die aktive
+Spaltengruppe; sie tragen dieselbe Tönung wie deren Spaltenköpfe, damit
+erkennbar ist, welche gemeint ist.</p>
+
+<p><b>Gehe zu / Suche</b> ist ein Feld für beides: Eine Stellenangabe wie
+<code>Johannes 3, 16</code> eingeben und <kbd>Eingabe</kbd> drücken springt
+direkt dorthin; alles andere öffnet das Suchfenster mit dieser Suche.
+<b>Notizen</b> fügt eine Notizspalte hinzu oder entfernt sie.</p>
+
+<h2 id="notes">Eigene Notizen</h2>
+
+<img src="pics/notes.png" alt="Notizspalte mit Versnummern am Rand, Notizen zu den Versen 5, 6, 7 und 9 und einem Querverweis als Link">
+
+<p>Eine Notizspalte wird direkt bearbeitet: Dort klicken, wo geschrieben
+werden soll, und der Cursor steht dort; markieren und kopieren geht über
+Verse hinweg, die Pfeiltasten laufen von einer Notiz in die nächste.
+<kbd>Eingabe</kbd> beginnt eine neue Zeile innerhalb derselben Notiz. Am
+linken Rand stehen die Versnummern, und die Zeile wächst beim Schreiben mit,
+sodass die Notiz neben ihrem Vers bleibt.</p>
+
+<p>Notizen speichern sich beim Schreiben – es gibt keinen Speicherbefehl.
+Sie liegen unter
+<code>/boot/home/config/settings/scriptureguide/notes</code>, angelegt beim
+ersten Start. Eine in eine Notiz getippte Stellenangabe wird zum Link, wie
+im Bild.</p>
+
+<p>Es sind mehrere Notizspalten möglich, in verschiedenen Gruppen, jede
+neben einer anderen Stelle.</p>
+
+<h2 id="links">Querverweise und Strong-Nummern</h2>
+
+<p>Stellenangaben in Kommentar- oder Notiztexten (<code>siehe Mt 16, 18</code>)
+werden als Link dargestellt; ein Klick bewegt die Gruppe, in der sie stehen.
+Mit <b>zurück</b> geht es wieder zur Ausgangsstelle.</p>
+
+<p>In Modulen, die sie enthalten, sind mit Strong-Nummern versehene Wörter
+unterstrichen und öffnen beim Anklicken ein Wörterbuchfenster:</p>
+
+<img src="pics/dictionary.png" alt="Das Wörterbuchfenster mit dem Eintrag zu einem griechischen Wort">
+
+<p>Dazu muss das passende Wörterbuch installiert sein –
+<code>StrongsGreek</code> fürs Neue, <code>StrongsHebrew</code> fürs Alte
+Testament. Beide stehen in der Buchverwaltung. Solange keines vorhanden ist,
+werden die Nummern als gewöhnlicher Text dargestellt statt als Links, die
+nirgendwohin führen könnten.</p>
+
+<h2 id="menus">Die Menüs</h2>
+
+<div class="menu">
+<dl>
+<dt>Programm</dt>
+<dd>Über; Buchverwaltung; Wörterbuch; Vergleich kopieren (als reiner Text,
+Tabulator-getrennt, Markdown oder HTML); Fenster duplizieren; Fenster
+schließen; Beenden.</dd>
+<dt>Navigation</dt>
+<dd>Zurück und Vorwärts; Vers finden; nächstes und vorheriges Buch; nächstes
+und vorheriges Kapitel.</dd>
+<dt>Einstellungen</dt>
+<dd>Versnummern anzeigen; Strong-Nummern anzeigen; Querverweise anzeigen;
+Schrift wählen.</dd>
+</dl>
+</div>
+
+<p>Zu den meisten Einträgen steht rechts das Tastenkürzel.
+<b>Vergleich kopieren</b> legt den Text aller offenen Spalten zum aktuellen
+Kapitel als Tabelle Vers für Vers in die Zwischenablage – fertig zum
+Einfügen in eine Tabellenkalkulation oder ein Dokument.</p>
+
+<h2 id="find">Suchen</h2>
+
+<p>Etwas, das keine Stellenangabe ist, in <b>Gehe zu / Suche</b> zu tippen
+öffnet das Suchfenster mit dieser Suche. Gesucht wird in den Übersetzungen,
+die gerade als Spalten offen sind – nicht in allem Installierten –, sodass
+immer das angeboten wird, was man tatsächlich liest.</p>
+
+<p>Die Treffer stehen links, darunter die umgebenden Verse des gewählten
+Treffers. Ein Doppelklick öffnet ihn in einem neuen Fenster. Die Suche lässt
+sich auf einen Buchbereich eingrenzen, auf Groß- und Kleinschreibung achten
+und auf eines der Wörter, eine genaue Wortfolge oder einen regulären
+Ausdruck einstellen. Bei regulären Ausdrücken trifft <code>P[^ ]+</code>
+jedes Wort, das mit „P“ beginnt; die anderswo üblichen Schrägstriche
+(<code>/so hier/</code>) werden hier nicht verwendet.</p>
+
+<h2 id="locale">Anderssprachige Systeme</h2>
+
+<p>ScriptureGuide folgt der Systemsprache und ist neben Englisch ins
+Deutsche, Spanische, Französische, Kroatische, Niederländische, Rumänische
+und Russische übersetzt. Auch Stellenangaben folgen der jeweiligen
+Schreibweise: Auf einem deutschen System wird <code>Johannes 3, 16</code>
+mit Komma sowohl angenommen als auch angezeigt statt <code>John 3:16</code>
+mit Doppelpunkt – im Feld „Gehe zu / Suche“, in den Suchergebnissen und in
+gezogenem Verweistext gleichermaßen.</p>
+
+<h2 id="install">Bibeln und Kommentare installieren</h2>
+
+<p>Texte werden mit der <b>Buchverwaltung</b> installiert, über Programm
+&rarr; Buchverwaltung (oder automatisch, wenn ScriptureGuide ohne installierte
+Texte gestartet wird).</p>
+
+<img src="pics/manager.png" alt="Die Buchverwaltung mit verfügbaren Modulen links und installierten rechts">
+
+<p>Links stehen die verfügbaren Module, rechts die installierten. Eines
+oder mehrere auswählen und mit den Pfeilen hinüberschieben: nach rechts
+installiert, zurück entfernt. Die Arbeit beginnt sofort beim Verschieben –
+vor dem Entfernen wird gefragt, weil dabei die heruntergeladenen Daten
+gelöscht werden. Der Fortschritt erscheint in der Zeile selbst und in der
+Fläche darunter, die beim Auswählen auch die Beschreibung eines Moduls
+zeigt. Jede Spalte lässt sich sortieren, auch <b>Typ</b> – nützlich, um
+unter mehreren hundert Bibeln die Wörterbücher zu finden.</p>
+
+<p>Die Buchverwaltung holt ihre Liste über unverschlüsseltes HTTP von
+crosswire.org. In manchen Ländern ist es gefährlich, religiöse Inhalte
+online abzurufen – bitte nur fortfahren, wenn das dort, wo Sie sind, sicher
+ist.</p>
+
+<h3>Von Hand installieren</h3>
+
+<ol>
+<li>Ein Modul bei
+<a href="http://www.crosswire.org/sword/modules">crosswire.org/sword/modules</a>
+wählen und den <b>Raw</b>-Download nehmen; die Windows-Fassungen
+funktionieren nicht.</li>
+<li>Die geladene Datei doppelklicken, um Expander zu öffnen.</li>
+<li>Als Ziel <code>/boot/home/config/settings/sword</code> eintragen und auf
+„Expand“ klicken.</li>
+<li>ScriptureGuide neu starten; der Text erscheint in den Spaltenmenüs.</li>
+</ol>
+
+<img src="pics/download.png" alt="Expander mit dem Zielverzeichnis der SWORD-Einstellungen">
+
+<h3>Griechische und hebräische Schriften</h3>
+
+<p>Altgriechische Module brauchen eine griechische Schrift;
+<a href="http://www.russellcottrell.com/greek/license/">Aristarcoj</a> wird
+unterstützt und nach der Installation automatisch gewählt. Sie nach
+<code>/boot/home/config/non-packaged/fonts/ttfonts/</code> legen, unter
+Einstellungen &rarr; Schriften auf „Erneut einlesen“ klicken und
+ScriptureGuide neu starten. Bitte die Lizenz der Schrift beachten.</p>
+
+<footer>
+ScriptureGuide ist freie Software unter der GPL v2. Quellcode, Veröffentlichungen
+und Fehlerverfolgung: <a href="https://github.com/Paradoxianer/ScriptureGuide">github.com/Paradoxianer/ScriptureGuide</a>
+</footer>
+
+</body>
+</html>

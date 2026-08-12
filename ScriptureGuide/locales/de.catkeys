@@ -39,7 +39,7 @@ Search Progress:	SearchWindow		Fortschritt Suche:
 Look up	DictionaryWindow		Nachschlagen
 Preview	FontPanel		Vorschau
 Find Phrase	SearchWindow		Suche Phrase
-No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		Für diese Nummern ist kein Strong-Wörterbuch installiert. Installiere das Modul %module% über „Programm › Book Manager“, um %number% nachzuschlagen.
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		Für diese Nummern ist kein Strong-Wörterbuch installiert. Installiere das Modul %module% über „Programm › Buchverwaltung“, um %number% nachzuschlagen.
 No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		Kein Eintrag für %number% im installierten Strong-Wörterbuch.
 Show Strong's Numbers	MainWindow		Strong-Nummern anzeigen
 Match Case	SearchWindow		Großschreibung beachten
