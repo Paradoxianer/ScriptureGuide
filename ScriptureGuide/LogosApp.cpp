@@ -256,33 +256,14 @@ status_t SGApp::StartupCheck(void)
 	} else
 		gDocsAvailable = false;
 	
-	// Ensure that the study notes exist
-	BString notespath(NOTESPATH);
-	entry.SetTo(notespath.String());
-	if (!entry.Exists())
-	{
-		// Notes folder has probably been blown away, so create a new folder
-		// and a new default notes file.
-		create_directory(notespath.String(),0777);
-		
-		notespath+="Notes.txt";
-		BFile file(notespath.String(), B_READ_WRITE | B_CREATE_FILE);
-		const char notes[] = "Scripture Guide Study Notes\n----------------------\n";
-		file.Write(notes, strlen(notes));
-		file.Unset();
-	} else
-	{
-		// folder exists, but does the notefile exist?
-		notespath+="Notes.txt";
-		entry.SetTo(notespath.String());
-		if (!entry.Exists())
-		{
-			BFile file(notespath.String(), B_READ_WRITE | B_CREATE_FILE);
-			const char notes[] = "Scripture Guide Study Notes\n----------------------\n";
-			file.Write(notes, strlen(notes));
-			file.Unset();
-		}
-	}
+	// Notes used to be one unstructured Notes.txt, created here and opened
+	// in an external editor. They are now a real SWORD module written by
+	// PersonalNotesModule, which creates its own storage on first use --
+	// under settings/ScriptureGuide/notes, not the lowercase path this
+	// used. Nothing has read Notes.txt since; it was only ever still being
+	// created. Existing files are left alone rather than deleted: they are
+	// the user's, and anyone who wrote in the old one should be able to
+	// find it.
 	
 	return B_OK;
 }

@@ -7,9 +7,8 @@
 //						Configuration Constants
 //-----------------------------------------------------------------------------
 
-// the help files, the website and the notes to be moved in a configuration file
+// the help files and the website to be moved in a configuration file
 #define HELPDIR "docs/index.html"
-#define NOTESPATH "/boot/home/config/settings/scriptureguide/notes/"
 
 // the currently detected fonts for greek and hebrew
 #define GREEK "Aristarcoj"
