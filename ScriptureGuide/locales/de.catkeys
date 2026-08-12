@@ -1,40 +1,62 @@
-1	German	application/x-vnd.Scripture-Guide	4272978631
+1	German	application/x-vnd.Scripture-Guide	3458641352
 Find Verse…	MainWindow		Vers finden…
-Program	MainWindow		Programm
-Font Name	FontPanel		Schrift
-About Scripture Guide…	MainWindow		Über Scripture Guide…
-Next Chapter	MainWindow		nächstes Kapitel
+Dictionary 	DictionaryWindow		Wörterbuch 
 Regular Expression	SearchWindow		Regulärer Ausdruck
 Commentaries	ParallelBibleView		Kommentare
 Choose Font…	MainWindow		Schrift…
+As HTML Table	MainWindow		Als HTML-Tabelle
+Back	MainWindow		Zurück
 Verse	MainWindow		Vers
+Notes	ExportFormats		Notizen
+Show Cross-References	MainWindow		Querverweise anzeigen
+Quit	MainWindow		Beenden
+Forward	MainWindow		Vorwärts
+Copy Comparison	MainWindow		Vergleich kopieren
+Look up: 	DictionaryWindow		Nachschlagen: 
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Suchergebnisse (nur sichtbar, wenn eine Suche mehr als einen Treffer liefert):
+As Plain Text	MainWindow		Als reinen Text
+Find	SearchWindow		Finde
+Book Manager…	MainWindow		Buchverwaltung…
+Duplicate This Window…	MainWindow		Fenster duplizieren
+Search in 	SearchWindow		Suche in
+Font Size: 	FontPanel		Schriftgröße
+Close This Window	MainWindow		Fenster schließen
+Show Verse Numbers	MainWindow		Zeige Versnummerierung
+Start in 	SearchWindow		Start in
+Find Words	SearchWindow		Suche Wörter
+As Tab-Separated	MainWindow		Als Tabulator-getrennt
+Next Book	MainWindow		nächstes Buch
+Verse	ExportFormats		Vers
+Go to / Search:	MainWindow		Gehe zu / Suche:
+Book:	MainWindow		Buch:
+Program	MainWindow		Programm
+About Scripture Guide…	MainWindow		Über Scripture Guide…
+Font Name	FontPanel		Schrift
+Next Chapter	MainWindow		nächstes Kapitel
+Dictionary…	MainWindow		Wörterbuch…
 Previous Book	MainWindow		vorheriges Buch
 Search Progress:	SearchWindow		Fortschritt Suche:
-Quit	MainWindow		Beenden
+Look up	DictionaryWindow		Nachschlagen
 Preview	FontPanel		Vorschau
 Find Phrase	SearchWindow		Suche Phrase
+No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		Für diese Nummern ist kein Strong-Wörterbuch installiert. Installiere das Modul %module% über „Programm › Book Manager“, um %number% nachzuschlagen.
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		Kein Eintrag für %number% im installierten Strong-Wörterbuch.
+Show Strong's Numbers	MainWindow		Strong-Nummern anzeigen
 Match Case	SearchWindow		Großschreibung beachten
 Chapter	MainWindow		Kapitel
 OK	FontPanel		OK
 Options	MainWindow		Einstellungen
+No matching entry found.	DictionaryWindow		Kein passender Eintrag gefunden.
 Search Results:	SearchWindow		Ergebniss der Suche:
 Notes	ParallelBibleView		Notizen
-Find	SearchWindow		Finde
 End in 	SearchWindow		End in
-Book Manager…	MainWindow		Buchverwaltung…
-Duplicate This Window…	MainWindow		Fenster duplizieren
-Search in 	SearchWindow		Suche in
+Dictionary	DictionaryWindow		Wörterbuch
+As Markdown Table	MainWindow		Als Markdown-Tabelle
+Entry:	DictionaryWindow		Eintrag:
 Notes	MainWindow		Notizen
-Start in 	SearchWindow		Start in
-Close This Window	MainWindow		Fenster schließen
-Font Size: 	FontPanel		Schriftgröße
-Show Verse Numbers	MainWindow		Zeige Versnummerierung
 No module selected.	BibleTextDocument		Kein Modul ausgewählt.
 Navigation	MainWindow		Navigation
-Find Words	SearchWindow		Suche Wörter
-Next Book	MainWindow		nächstes Buch
 Biblical Texts	ParallelBibleView		Bibeltexte
-Find: 	SearchWindow		Suche:
 Previous Chapter	MainWindow		vorheriges Kapitel
-Go to / Search:	MainWindow		Gehe zu / Suche:
-Book:	MainWindow		Buch:
+Find: 	SearchWindow		Suche:
+%d matching entries -- pick one below.	DictionaryWindow		%d passende Einträge – bitte unten auswählen.
