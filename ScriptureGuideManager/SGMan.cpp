@@ -330,7 +330,37 @@ void SGMApp::SetupPackageList(void)
 			if(msg.Unflatten(&file)==B_OK)
 			{
 				ConfigFile *conffile=(ConfigFile*)ConfigFile::Instantiate(&msg);
-				if(conffile)
+				if(conffile==NULL)
+					continue;
+
+				// This list is built from whatever files happen to be in
+				// package-info/, not from packages.txt, so a cached
+				// archive left over from an EARLIER package list is still
+				// picked up. When the two disagree about a module's
+				// spelling -- CrossWire renaming one, or the list having
+				// been generated differently at some point -- the same
+				// module appeared twice, the stale copy missing whatever
+				// fields have been added since it was written.
+				//
+				// Case-insensitive because that is exactly how the
+				// duplicates showed up in practice ("Rieger" and
+				// "rieger"), and because the .conf lookup a few lines up
+				// already treats the two spellings as the same module.
+				bool duplicate=false;
+				for(int32 j=0; j<fConfFileList.CountItems() && !duplicate; j++)
+				{
+					ConfigFile *existing=(ConfigFile*)fConfFileList.ItemAt(j);
+					if(existing!=NULL
+						&& existing->fZipFileName.ICompare(
+							conffile->fZipFileName)==0)
+					{
+						duplicate=true;
+					}
+				}
+
+				if(duplicate)
+					delete conffile;
+				else
 					fConfFileList.AddItem(conffile);
 			}
 		}
