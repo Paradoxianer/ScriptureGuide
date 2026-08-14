@@ -21,6 +21,7 @@ public:
 	void MessageReceived(BMessage *msg);
 private:
 	static int32 ApplyThread(void *data);
+	static int32 RefreshThread(void *data);
 	// Two lists rather than one with a status column: which side a module
 	// is on IS its state, so "what do I have" and "what could I get" are
 	// answerable at a glance instead of by reading a column. A row moves
@@ -35,6 +36,7 @@ private:
 	BButton *fRemoveButton;
 	
 	thread_id fApplyThread;
+	thread_id fRefreshThread;
 	BStringList fInstallList, fUninstallList;
 
 	// Moves every row selected in the source list across to the other
@@ -61,6 +63,17 @@ private:
 	void ShowSelectionInfo(BColumnListView *list);
 	// The row for a module, wherever it currently sits.
 	class BookRow* FindRow(const BString &zipFileName);
+	// Empties both lists and refills them from fConfFileList. Separate from
+	// the constructor because a refresh has to be able to do it again.
+	void PopulateLists(void);
+	// Fetches the module list from crosswire.org in the background and
+	// repopulates when it lands. The only way to obtain a list after
+	// declining the network warning at startup, which otherwise left a
+	// permanently empty window (reported).
+	void StartRefresh(void);
+	// Explains an empty Available list instead of leaving the window
+	// looking broken. Does nothing once there is anything to show.
+	void ShowEmptyListHint(void);
 };
 
 #endif

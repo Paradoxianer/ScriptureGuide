@@ -1,7 +1,9 @@
-1	Spanish	application/x-vnd.wgp.ScriptureGuideManager	668444746
+1	Spanish	application/x-vnd.wgp.ScriptureGuideManager	1829981264
 Removing %module%…	BookManager		Eliminando %module%…
 Quit	BookManager		Salir
+Could not start the download.	BookManager		No se pudo iniciar la descarga.
 Removing…	BookManager		Eliminando…
+Fetching the module list from crosswire.org...	BookManager		Obteniendo la lista de módulos de crosswire.org…
 Type	BookManager		Tipo
 Their downloaded data will be deleted.	BookManager		Se borrarán sus datos descargados.
 Downloading %module%…	BookManager		Descargando %module%…
@@ -9,7 +11,9 @@ Error: couldn't read the config file for %module% -- skipping its removal rather
 Book	BookManager		Libro
 Archive size:	BookManager		Tamaño del archivo:
 ScriptureGuide Book Manager	System name		Gestor de libros de ScriptureGuide
+Refresh module list	BookManager		Actualizar la lista de módulos
 Remove %count% modules?	BookManager		¿Eliminar %count% módulos?
+No modules are listed.\n\nThe list of available Bibles and commentaries is fetched from crosswire.org over the internet. If you declined that at startup, or the download did not succeed, the list stays empty.\n\nChoose Program → Refresh module list to fetch it now.	BookManager		No hay módulos en la lista.\n\nLa lista de Biblias y comentarios disponibles se obtiene de crosswire.org a través de internet. Si lo rechazó al iniciar, o la descarga no se completó, la lista permanece vacía.\n\nElija Programa → Actualizar la lista de módulos para obtenerla ahora.
 %count% modules selected	BookManager		%count% módulos seleccionados
 Done	BookManager		Listo
 Available	BookManager		Disponibles

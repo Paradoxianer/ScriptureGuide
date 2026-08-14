@@ -28,7 +28,9 @@ enum
 	M_INSTALL_SELECTION,
 	M_REMOVE_SELECTION,
 	M_SELECT_AVAILABLE,
-	M_SELECT_INSTALLED
+	M_SELECT_INSTALLED,
+	M_REFRESH_LIST,
+	M_REFRESH_DONE
 };
 
 
@@ -88,11 +90,20 @@ MainWindow::MainWindow(BRect frame)
  		B_NORMAL_WINDOW_FEEL, 0)
 {
 	fApplyThread=-1;
+	fRefreshThread=-1;
 	
 	// Set up menu
 	BMenuBar *mbar=new BMenuBar("menu_bar");
 	
 	BMenu *menu=new BMenu(B_TRANSLATE("Program"));
+	// Without this the menu bar held Quit and nothing else, so a window
+	// that came up with an empty list -- because the network warning was
+	// declined, or the fetch failed -- offered no way whatsoever to ask
+	// for the list again. Reported from the outside as the manager opening
+	// and "nothing happens".
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Refresh module list"),
+		new BMessage(M_REFRESH_LIST),'R',0));
+	menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Quit"),new BMessage(B_QUIT_REQUESTED),'Q',0));
 	mbar->AddItem(menu);
 	
@@ -101,25 +112,7 @@ MainWindow::MainWindow(BRect frame)
 	fAvailableList = MakeModuleList("availablelist", M_SELECT_AVAILABLE);
 	fInstalledList = MakeModuleList("installedlist", M_SELECT_INSTALLED);
 
-	for(int32 i=0; i<fConfFileList.CountItems(); i++)
-	{
-		ConfigFile *cfile=(ConfigFile*)fConfFileList.ItemAt(i);
-		if(cfile==NULL)
-			continue;
-
-		BookRow *row = new BookRow(cfile);
-		row->SetField(new BStringField(""),COLUMN_STATUS);
-		row->SetField(new BStringField(cfile->fDescription.String()),
-			COLUMN_BOOK);
-		row->SetField(new BStringField(cfile->fType.String()),COLUMN_TYPE);
-		row->SetField(new BStringField(cfile->fLanguage.String()),
-			COLUMN_LANGUAGE);
-
-		if(IsInstalled(cfile->fFileName.String()))
-			fInstalledList->AddRow(row);
-		else
-			fAvailableList->AddRow(row);
-	}
+	PopulateLists();
 	
 	// Add the box we use for descriptions
 	fTextView=new BTextView("descriptionview");
@@ -210,6 +203,105 @@ MainWindow::MainWindow(BRect frame)
 			.Add(fTextScrollView, 1.0f)
 		.End()
 	.End();
+
+	ShowEmptyListHint();
+}
+
+
+void
+MainWindow::PopulateLists(void)
+{
+	fAvailableList->Clear();
+	fInstalledList->Clear();
+
+	for(int32 i=0; i<fConfFileList.CountItems(); i++)
+	{
+		ConfigFile *cfile=(ConfigFile*)fConfFileList.ItemAt(i);
+		if(cfile==NULL)
+			continue;
+
+		BookRow *row = new BookRow(cfile);
+		row->SetField(new BStringField(""),COLUMN_STATUS);
+		row->SetField(new BStringField(cfile->fDescription.String()),
+			COLUMN_BOOK);
+		row->SetField(new BStringField(cfile->fType.String()),COLUMN_TYPE);
+		row->SetField(new BStringField(cfile->fLanguage.String()),
+			COLUMN_LANGUAGE);
+
+		if(IsInstalled(cfile->fFileName.String()))
+			fInstalledList->AddRow(row);
+		else
+			fAvailableList->AddRow(row);
+	}
+}
+
+
+void
+MainWindow::ShowEmptyListHint(void)
+{
+	if(fAvailableList->CountRows()>0 || fInstalledList->CountRows()>0)
+		return;
+
+	fTextView->SetText(B_TRANSLATE(
+		"No modules are listed.\n\n"
+		"The list of available Bibles and commentaries is fetched from "
+		"crosswire.org over the internet. If you declined that at startup, "
+		"or the download did not succeed, the list stays empty.\n\n"
+		"Choose Program \xE2\x86\x92 Refresh module list to fetch it now."));
+}
+
+
+void
+MainWindow::StartRefresh(void)
+{
+	if(fApplyThread!=-1 || fRefreshThread!=-1)
+		return;
+
+	// Asked here rather than only at startup, so declining once is not a
+	// permanent answer -- this menu item is exactly how someone changes
+	// their mind.
+	if(!ConfirmNetworkAccess())
+		return;
+
+	// Emptied BEFORE the thread starts, not after it finishes: every
+	// BookRow holds a ConfigFile* into fConfFileList, and SetupPackageList()
+	// deletes all of those on its way to refilling them. Leaving the rows
+	// up during the fetch would leave them pointing into freed memory for
+	// as long as it takes, with the window still clickable.
+	fAvailableList->Clear();
+	fInstalledList->Clear();
+	fInstallList.MakeEmpty();
+	fUninstallList.MakeEmpty();
+	UpdateButtons();
+
+	fTextView->SetText(B_TRANSLATE("Fetching the module list from crosswire.org..."));
+
+	// In a thread because the fetch is two downloads plus unpacking and
+	// parsing several hundred config files; on the window's own thread
+	// that is a multi-second freeze with the window not even redrawing.
+	fRefreshThread=spawn_thread(RefreshThread,"refreshthread",
+		B_NORMAL_PRIORITY,this);
+	if(fRefreshThread<B_OK)
+	{
+		fRefreshThread=-1;
+		fTextView->SetText(B_TRANSLATE("Could not start the download."));
+		return;
+	}
+	resume_thread(fRefreshThread);
+}
+
+
+int32
+MainWindow::RefreshThread(void *data)
+{
+	MainWindow *win=(MainWindow*)data;
+
+	SetupPackageList(true);
+
+	// The lists belong to the window's thread; touching them from here
+	// would be a race. Hand back and let MessageReceived() rebuild.
+	win->PostMessage(M_REFRESH_DONE);
+	return 0;
 }
 
 
@@ -278,6 +370,21 @@ void MainWindow::MessageReceived(BMessage *msg)
 			if(fApplyThread!=-1)
 				break;
 			MoveSelection(false);
+			break;
+		}
+		case M_REFRESH_LIST:
+		{
+			StartRefresh();
+			break;
+		}
+		case M_REFRESH_DONE:
+		{
+			fRefreshThread=-1;
+			PopulateLists();
+			UpdateButtons();
+			if(fAvailableList->CountRows()>0 || fInstalledList->CountRows()>0)
+				fTextView->SetText("");
+			ShowEmptyListHint();
 			break;
 		}
 		case M_MARK_MODULE:

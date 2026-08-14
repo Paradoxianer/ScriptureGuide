@@ -1,7 +1,9 @@
-1	Croatian	application/x-vnd.wgp.ScriptureGuideManager	668444746
+1	Croatian	application/x-vnd.wgp.ScriptureGuideManager	1829981264
 Removing %module%…	BookManager		Uklanjanje modula %module%…
 Quit	BookManager		Izlaz
+Could not start the download.	BookManager		Could not start the download.
 Removing…	BookManager		Uklanjanje…
+Fetching the module list from crosswire.org...	BookManager		Fetching the module list from crosswire.org...
 Type	BookManager		Vrsta
 Their downloaded data will be deleted.	BookManager		Njihovi preuzeti podaci bit će izbrisani.
 Downloading %module%…	BookManager		Preuzimanje modula %module%…
@@ -9,7 +11,9 @@ Error: couldn't read the config file for %module% -- skipping its removal rather
 Book	BookManager		Knjiga
 Archive size:	BookManager		Veličina arhive:
 ScriptureGuide Book Manager	System name		ScriptureGuide upravitelj knjiga
+Refresh module list	BookManager		Refresh module list
 Remove %count% modules?	BookManager		Ukloniti %count% modula?
+No modules are listed.\n\nThe list of available Bibles and commentaries is fetched from crosswire.org over the internet. If you declined that at startup, or the download did not succeed, the list stays empty.\n\nChoose Program → Refresh module list to fetch it now.	BookManager		No modules are listed.\n\nThe list of available Bibles and commentaries is fetched from crosswire.org over the internet. If you declined that at startup, or the download did not succeed, the list stays empty.\n\nChoose Program → Refresh module list to fetch it now.
 %count% modules selected	BookManager		Odabrano modula: %count%
 Done	BookManager		Gotovo
 Available	BookManager		Dostupno

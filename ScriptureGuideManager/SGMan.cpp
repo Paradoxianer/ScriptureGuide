@@ -25,8 +25,6 @@ public:
 	SGMApp(void);
 	~SGMApp(void);
 
-	void SetupPackageList(void);
-	bool ConfirmNetworkAccess(void);
 };
 
 SGMApp::SGMApp(void)
@@ -38,8 +36,11 @@ SGMApp::SGMApp(void)
 	// before any of that happens, not after; if the user declines, skip
 	// SetupPackageList() (and therefore every wget call in it) entirely
 	// and still open the window, just with an empty list.
+	// Only fills in what is missing -- startup must not throw away a
+	// usable cached list just because it is old. Program -> Refresh
+	// module list is the deliberate re-fetch.
 	if (ConfirmNetworkAccess())
-		SetupPackageList();
+		SetupPackageList(false);
 	// 600pt wide left the list showing only Status and Book, with Type and
 	// Language off the right edge behind a horizontal scrollbar -- the
 	// Type column added for issue #41 was invisible unless you went
@@ -55,7 +56,7 @@ SGMApp::SGMApp(void)
 #define SG_SKIP_WARNING_MARKER SG_SETTINGS_PATH "skip-network-warning"
 
 bool
-SGMApp::ConfirmNetworkAccess(void)
+ConfirmNetworkAccess(void)
 {
 	BEntry marker(SG_SKIP_WARNING_MARKER);
 	if (marker.Exists())
@@ -93,7 +94,7 @@ SGMApp::~SGMApp(void)
 
 #define EXEC(dir, cmd) system("cd " dir " && " cmd)
 
-void SGMApp::SetupPackageList(void)
+void SetupPackageList(bool force)
 {
 	// The package info is kept in a subfolder of the regular scripture guide settings
 	// The information for each package is kept in a flattened BMessage which has
@@ -101,16 +102,36 @@ void SGMApp::SetupPackageList(void)
 	// case. Inside this message is kept the necessary information for the user
 	// to be able to decide whether or not the module should be installed.
 	
+	// Refilled from scratch below. Without this a second call appends a
+	// whole duplicate list to the first -- harmless at startup, when this
+	// only ever ran once, but Refresh calls it again into the same globals.
+	for(int32 i=0; i<gFileNameList.CountItems(); i++)
+		delete (BString*)gFileNameList.ItemAt(i);
+	gFileNameList.MakeEmpty();
+	for(int32 i=0; i<gFileSizeList.CountItems(); i++)
+		delete (BString*)gFileSizeList.ItemAt(i);
+	gFileSizeList.MakeEmpty();
+	for(int32 i=0; i<fConfFileList.CountItems(); i++)
+		delete (ConfigFile*)fConfFileList.ItemAt(i);
+	fConfFileList.MakeEmpty();
+
+	// A forced refresh has to discard the cache, because every fetch below
+	// is guarded by "only if this file is missing" -- otherwise Refresh
+	// would re-read the very list the user is asking to replace. The path
+	// is a compile-time constant, not anything built from input.
+	if(force)
+		system("rm -rf " SG_PKGINFO_PATH);
+
 	BEntry entry(SG_SETTINGS_PATH);
 	BDirectory dir(SG_PKGINFO_PATH);
 	BFile file;
-	
+
 	if(entry.InitCheck()!=B_OK)
 	{
 		printf("Couldn't read package file\n");
 		return;
 	}
-	
+
 	if(!entry.Exists())
 		create_directory(SG_SETTINGS_PATH,0777);
 	

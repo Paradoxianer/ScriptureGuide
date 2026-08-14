@@ -1,7 +1,9 @@
-1	Dutch	application/x-vnd.wgp.ScriptureGuideManager	668444746
+1	Dutch	application/x-vnd.wgp.ScriptureGuideManager	1829981264
 Removing %module%…	BookManager		%module% wordt verwijderd…
 Quit	BookManager		Stoppen
+Could not start the download.	BookManager		Het downloaden kon niet worden gestart.
 Removing…	BookManager		Verwijderen…
+Fetching the module list from crosswire.org...	BookManager		De modulelijst wordt opgehaald van crosswire.org…
 Type	BookManager		Type
 Their downloaded data will be deleted.	BookManager		Hun gedownloade gegevens worden verwijderd.
 Downloading %module%…	BookManager		%module% wordt gedownload…
@@ -9,7 +11,9 @@ Error: couldn't read the config file for %module% -- skipping its removal rather
 Book	BookManager		Boek
 Archive size:	BookManager		Archiefgrootte:
 ScriptureGuide Book Manager	System name		ScriptureGuide Boekbeheer
+Refresh module list	BookManager		Modulelijst verversen
 Remove %count% modules?	BookManager		%count% modules verwijderen?
+No modules are listed.\n\nThe list of available Bibles and commentaries is fetched from crosswire.org over the internet. If you declined that at startup, or the download did not succeed, the list stays empty.\n\nChoose Program → Refresh module list to fetch it now.	BookManager		Er staan geen modules in de lijst.\n\nDe lijst met beschikbare bijbels en commentaren wordt via internet opgehaald van crosswire.org. Als u dat bij het opstarten hebt geweigerd, of het downloaden is mislukt, blijft de lijst leeg.\n\nKies Programma → Modulelijst verversen om de lijst nu op te halen.
 %count% modules selected	BookManager		%count% modules geselecteerd
 Done	BookManager		Klaar
 Available	BookManager		Beschikbaar

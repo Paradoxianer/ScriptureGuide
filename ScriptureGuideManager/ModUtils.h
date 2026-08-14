@@ -49,6 +49,16 @@ status_t InstallFromDisk(const char *path);
 
 status_t ReadConfigFile(const char *name, ConfigFile &cfile);
 
+// Both live in SGMan.cpp. Reachable from the window rather than private to
+// the application object because the module list has to be obtainable
+// AFTER startup: declining the network warning once used to leave an empty
+// window with no control anywhere that could ask again (reported).
+// SetupPackageList(true) discards the cached index and re-fetches, which is
+// what Program -> Refresh module list means; false only fills in what is
+// missing, which is what startup wants.
+bool ConfirmNetworkAccess(void);
+void SetupPackageList(bool force);
+
 //const char *TranslateLanguageName(const BString &string);
 
 #endif

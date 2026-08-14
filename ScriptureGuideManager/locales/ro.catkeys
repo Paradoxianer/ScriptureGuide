@@ -1,7 +1,9 @@
-1	Romanian	application/x-vnd.wgp.ScriptureGuideManager	668444746
+1	Romanian	application/x-vnd.wgp.ScriptureGuideManager	1829981264
 Removing %module%…	BookManager		Se elimină %module%…
 Quit	BookManager		Ieșire
+Could not start the download.	BookManager		Could not start the download.
 Removing…	BookManager		Se elimină…
+Fetching the module list from crosswire.org...	BookManager		Fetching the module list from crosswire.org...
 Type	BookManager		Tip
 Their downloaded data will be deleted.	BookManager		Datele lor descărcate vor fi șterse.
 Downloading %module%…	BookManager		Se descarcă %module%…
@@ -9,7 +11,9 @@ Error: couldn't read the config file for %module% -- skipping its removal rather
 Book	BookManager		Carte
 Archive size:	BookManager		Dimensiunea arhivei:
 ScriptureGuide Book Manager	System name		Administratorul de cărți ScriptureGuide
+Refresh module list	BookManager		Refresh module list
 Remove %count% modules?	BookManager		Elimini %count% module?
+No modules are listed.\n\nThe list of available Bibles and commentaries is fetched from crosswire.org over the internet. If you declined that at startup, or the download did not succeed, the list stays empty.\n\nChoose Program → Refresh module list to fetch it now.	BookManager		No modules are listed.\n\nThe list of available Bibles and commentaries is fetched from crosswire.org over the internet. If you declined that at startup, or the download did not succeed, the list stays empty.\n\nChoose Program → Refresh module list to fetch it now.
 %count% modules selected	BookManager		%count% module selectate
 Done	BookManager		Gata
 Available	BookManager		Disponibile
