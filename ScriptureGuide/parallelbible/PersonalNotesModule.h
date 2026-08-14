@@ -36,9 +36,11 @@ public:
 
 private:
 			status_t			_EnsureModuleExists();
+			void				_MigrateLegacyNotes();
 
 private:
 			BString				fPath;
+			BString				fLegacyPath;
 			BString				fVersification;
 			RawCom*				fModule;
 };

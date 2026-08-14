@@ -259,7 +259,7 @@ status_t SGApp::StartupCheck(void)
 	// Notes used to be one unstructured Notes.txt, created here and opened
 	// in an external editor. They are now a real SWORD module written by
 	// PersonalNotesModule, which creates its own storage on first use --
-	// under settings/ScriptureGuide/notes, not the lowercase path this
+	// under settings/scriptureguide/notes, beside the settings file this
 	// used. Nothing has read Notes.txt since; it was only ever still being
 	// created. Existing files are left alone rather than deleted: they are
 	// the user's, and anyone who wrote in the old one should be able to
