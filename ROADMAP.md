@@ -16,7 +16,7 @@ fits:
 
 | what | where |
 |---|---|
-| Notes | a SWORD module of their own (`PersonalNotesModule`) |
+| Notes | a SWORD module of their own (`PersonalNotesModule`) — moving, see [#45](https://github.com/Paradoxianer/ScriptureGuide/issues/45) |
 | Column layout | a `BMessage` in the settings file |
 | Navigation history | memory only, gone on quit |
 
@@ -85,6 +85,31 @@ second step, once it is clear people want it.
 Bookmarks, highlights, and verses that have notes, in a single window —
 HaikuArchives#29. Only worth building after 1 and 2, and cheap once they
 exist, because it is a view over the store rather than a new mechanism.
+
+## Alongside: notes into SWORD's Personal commentary — [#45](https://github.com/Paradoxianer/ScriptureGuide/issues/45)
+
+Came out of the 1.2.2 forum feedback, and belongs next to the storage
+question above rather than at the back of a queue: notes currently sit in
+a `RawCom` of our own, outside the SWORD module path and invisible to
+every other SWORD application. SWORD already has the place for this —
+the `Personal` commentary — and putting them there makes notes
+interchangeable with BibleTime and Xiphos, and makes the Personal
+commentary editable here, which is what was actually asked for.
+
+Decided: where a `Personal` module already has an entry for a verse, our
+note is **appended to it, verse by verse** — nothing is overwritten and
+nothing is discarded. The merge is per verse because that is the unit
+both sides already use.
+
+Open: the driver changes from `RawCom` to `RawFiles`, and a shared module
+has one versification rather than one per column. Also worth settling
+before step 1 above commits to a store, since "where does user data live"
+is the same question twice.
+
+One trap recorded in the issue, because it is easy to get wrong:
+`isWritable()` is not a usable test for "may the user edit this" — SWORD
+returns true for plain zText Bibles as well. `ModDrv=RawFiles` is the
+discriminator.
 
 ## After that
 
