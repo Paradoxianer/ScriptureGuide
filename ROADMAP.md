@@ -101,10 +101,17 @@ note is **appended to it, verse by verse** — nothing is overwritten and
 nothing is discarded. The merge is per verse because that is the unit
 both sides already use.
 
-Open: the driver changes from `RawCom` to `RawFiles`, and a shared module
-has one versification rather than one per column. Also worth settling
+Open: the driver changes from `RawCom` to `RawFiles`. Also worth settling
 before step 1 above commits to a store, since "where does user data live"
 is the same question twice.
+
+Precondition:
+[#46](https://github.com/Paradoxianer/ScriptureGuide/issues/46). Notes are
+stored under KJV verse keys whatever versification the column uses, and
+nothing converts between them — a note taken on "Ps 51,20" in a
+German-versified Bible is filed under Psalms 52:1. It stays invisible only
+because the same wrong key is built when writing and when reading. Sharing
+the module with BibleTime is precisely what ends that.
 
 One trap recorded in the issue, because it is easy to get wrong:
 `isWritable()` is not a usable test for "may the user edit this" — SWORD
