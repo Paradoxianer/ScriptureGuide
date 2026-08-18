@@ -502,6 +502,8 @@ private:
 				// fLastKnownKey for a chain with no Bible column of its
 				// own (a pure notes chain).
 				BString				_ChainKey(int32 anchorPosition) const;
+			// See the definition -- which canon this chain counts in.
+			const char*			_ChainVersification(int32 anchorPosition) const;
 				// Scrolls every column of the chain containing
 				// anchorPosition to vertical offset y, all at once
 				// (wrapped in fSuppressScrollPropagation so moving each

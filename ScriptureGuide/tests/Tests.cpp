@@ -781,14 +781,14 @@ TestMoveColumnPreservesEachColumnsOwnKey(SWMgr* manager, SWModule* moduleA,
 // truncated wherever its chapter is longer. German counting gives
 // Malachi 3 twenty-four verses against KJV's eighteen; six were simply
 // not rendered, with nothing to indicate anything was missing.
-static void
-TestChapterShowsEveryVerseOfItsVersification(SWMgr* manager)
+// Finds an installed Bible counting in something other than KJV, and the
+// first chapter where it holds more verses than KJV does -- the shape of
+// #46, wherever this happens to run. Books KJV does not have are skipped:
+// parsing "Judith 1:1" as KJV does not fail, it lands on Revelation 1:1.
+static bool
+FindChapterLongerThanKJV(SWMgr* manager, SWModule*& outModule,
+	BString& outChapterKey, int& outVerses, BString& outVersification)
 {
-	const char* name = "BibleTextDocument: renders every verse of the "
-		"module's own versification";
-
-	// Any installed Bible whose versification is not KJV will do; find
-	// the first chapter where it holds more verses than KJV does.
 	SWModule* module = NULL;
 	BString chapterKey;
 	int expected = 0;
@@ -824,7 +824,28 @@ TestChapterShowsEveryVerseOfItsVersification(SWMgr* manager)
 		}
 	}
 
-	if (module == NULL) {
+	if (module == NULL)
+		return false;
+
+	outModule = module;
+	outChapterKey = chapterKey;
+	outVerses = expected;
+	outVersification = module->getConfigEntry("Versification");
+	return true;
+}
+
+
+static void
+TestChapterShowsEveryVerseOfItsVersification(SWMgr* manager)
+{
+	const char* name = "BibleTextDocument: renders every verse of the "
+		"module's own versification";
+
+	SWModule* module = NULL;
+	BString chapterKey, versification;
+	int expected = 0;
+	if (!FindChapterLongerThanKJV(manager, module, chapterKey, expected,
+			versification)) {
 		Skip(name, "no module with a versification longer than KJV's");
 		return;
 	}
@@ -844,6 +865,51 @@ TestChapterShowsEveryVerseOfItsVersification(SWMgr* manager)
 	Check(rendered == expected, name);
 }
 
+
+// A notes column renders one row per verse so its rows line up with the
+// Bible beside it. Its own module is ours and counts in KJV, so in a
+// chapter that the Bible's versification makes longer the notes column
+// came up short and every row below the divergence sat against the wrong
+// verse. ParallelBibleView hands the chain's versification down for
+// exactly this (see _ChainVersification()).
+static void
+TestNotesColumnMatchesChainVersification(SWMgr* manager,
+	SWModule* notesModule)
+{
+	const char* name = "BibleTextDocument: a notes document follows the "
+		"chain's versification, not its own module's";
+	if (notesModule == NULL) {
+		Skip(name, "no notes module");
+		return;
+	}
+
+	SWModule* module = NULL;
+	BString chapterKey, versification;
+	int expected = 0;
+	if (!FindChapterLongerThanKJV(manager, module, chapterKey, expected,
+			versification)) {
+		Skip(name, "no module with a versification longer than KJV's");
+		return;
+	}
+
+	BibleTextDocument bible(module);
+	bible.SetSkipEmptyVerses(false);
+	bible.SetKey(chapterKey.String());
+
+	BibleTextDocument notes(notesModule);
+	notes.SetSkipEmptyVerses(false);
+	notes.SetVersification(versification.String());
+	notes.SetKey(chapterKey.String());
+
+	int32 bibleRows = bible.CountParagraphs();
+	int32 notesRows = notes.CountParagraphs();
+	if (bibleRows != notesRows) {
+		printf("      %s %s (%s): bible %d rows, notes %d\n",
+			module->getName(), chapterKey.String(), versification.String(),
+			(int)bibleRows, (int)notesRows);
+	}
+	Check(bibleRows == notesRows && notesRows == expected, name);
+}
 
 int
 main()
@@ -885,6 +951,7 @@ main()
 	TestNotesParagraphTerminatorProtectsVerseBoundary(notesModule);
 	TestSoftLineBreakKeepsOneParagraphPerVerse(notesModule);
 	TestSingleVerseRendersExactlyOneVerse(&notes);
+	TestNotesColumnMatchesChainVersification(&manager, notesModule);
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;

@@ -74,6 +74,14 @@ public:
 			SWModule*			Module() const
 									{ return fModule; }
 
+			// Counts this document's chapter in `versification` instead
+			// of the module's own. Exists for notes columns: the notes
+			// module is ours and counts in KJV, but the rows it renders
+			// have to line up with the Bible column beside it, which may
+			// count in German or Luther and give the chapter more verses
+			// (#46). NULL or empty restores the module's own.
+			void				SetVersification(const char* versification);
+
 			void				SetShowVerseNumbers(bool show);
 			bool				ShowVerseNumbers() const
 									{ return fShowVerseNumbers; }
@@ -236,6 +244,7 @@ private:
 
 private:
 			SWModule*			fModule;
+			BString				fVersification;
 
 			// This document's OWN current position, independent of
 			// fModule's own (shared, mutable) key state -- see the class

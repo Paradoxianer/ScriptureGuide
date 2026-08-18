@@ -69,14 +69,30 @@ SetVerseKeyLocale(VerseKey& key)
 void
 BibleTextDocument::_PrepareKey(VerseKey& key) const
 {
-	const char* versification = fModule != NULL
-		? fModule->getConfigEntry("Versification") : NULL;
+	// An override wins: a notes document has to count the way the Bible
+	// column beside it does, not the way its own module does.
+	const char* versification = !fVersification.IsEmpty()
+		? fVersification.String()
+		: (fModule != NULL ? fModule->getConfigEntry("Versification") : NULL);
 	// A module that declares none counts in KJV, which is what a fresh
 	// key already does; saying so explicitly keeps the answer in one
 	// place rather than resting on that default.
 	key.setVersificationSystem(versification != NULL
 		&& versification[0] != '\0' ? versification : "KJV");
 	SetVerseKeyLocale(key);
+}
+
+
+void
+BibleTextDocument::SetVersification(const char* versification)
+{
+	BString wanted(versification != NULL ? versification : "");
+	if (wanted == fVersification)
+		return;
+	fVersification = wanted;
+	// The verse count and every key built from here on change with it,
+	// so what is already laid out is stale.
+	_Rebuild();
 }
 
 
