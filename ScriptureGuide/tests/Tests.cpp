@@ -775,6 +775,76 @@ TestMoveColumnPreservesEachColumnsOwnKey(SWMgr* manager, SWModule* moduleA,
 }
 
 
+// A chapter must show every verse the module actually has. _Rebuild()
+// took its verse count from a default-constructed VerseKey, which is
+// always KJV -- so a module using another versification was silently
+// truncated wherever its chapter is longer. German counting gives
+// Malachi 3 twenty-four verses against KJV's eighteen; six were simply
+// not rendered, with nothing to indicate anything was missing.
+static void
+TestChapterShowsEveryVerseOfItsVersification(SWMgr* manager)
+{
+	const char* name = "BibleTextDocument: renders every verse of the "
+		"module's own versification";
+
+	// Any installed Bible whose versification is not KJV will do; find
+	// the first chapter where it holds more verses than KJV does.
+	SWModule* module = NULL;
+	BString chapterKey;
+	int expected = 0;
+	for (ModMap::iterator it = manager->Modules.begin();
+			it != manager->Modules.end() && module == NULL; ++it) {
+		SWModule* candidate = it->second;
+		if (strcmp(candidate->getType(), "Biblical Texts") != 0)
+			continue;
+		const char* v11n = candidate->getConfigEntry("Versification");
+		if (v11n == NULL || strcmp(v11n, "KJV") == 0)
+			continue;
+
+		VerseKey theirs;
+		theirs.setVersificationSystem(v11n);
+		for (theirs.setPosition(TOP); !theirs.popError();
+				theirs.setChapter(theirs.getChapter() + 1)) {
+			if (theirs.getChapter() > theirs.getChapterMax()) {
+				theirs.setBook(theirs.getBook() + 1);
+				if (theirs.popError())
+					break;
+				theirs.setChapter(1);
+			}
+			VerseKey asKjv;
+			asKjv.setText(theirs.getText());
+			if (strcmp(asKjv.getBookName(), theirs.getBookName()) != 0)
+				continue;			// a book KJV does not have
+			if (asKjv.getVerseMax() < theirs.getVerseMax()) {
+				module = candidate;
+				chapterKey = theirs.getText();
+				expected = theirs.getVerseMax();
+				break;
+			}
+		}
+	}
+
+	if (module == NULL) {
+		Skip(name, "no module with a versification longer than KJV's");
+		return;
+	}
+
+	BibleTextDocument document(module);
+	// Every verse gets a paragraph whether or not the module has text
+	// for it, so the count is the number of verses rendered rather than
+	// the number that happened to be non-empty.
+	document.SetSkipEmptyVerses(false);
+	document.SetKey(chapterKey.String());
+
+	int32 rendered = document.CountParagraphs();
+	if (rendered != expected) {
+		printf("      %s %s: rendered %d, module has %d\n",
+			module->getName(), chapterKey.String(), (int)rendered, expected);
+	}
+	Check(rendered == expected, name);
+}
+
+
 int
 main()
 {
@@ -796,6 +866,7 @@ main()
 	}
 
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
+	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestVerseAlignerIsIdempotent(moduleA, moduleB);
 	TestPersonalNotesRoundTrip();
 	TestTallNotesGrowRowWithoutCompounding(&manager, moduleA);

@@ -230,6 +230,9 @@ private:
 			void				_Rebuild();
 			void				_ApplyVerseSpacing();
 			void				_SetModuleKey(VerseKey& verseKey);
+			// Locale AND versification, so a key built here counts the
+			// way the module does -- see the definition (#46).
+			void				_PrepareKey(VerseKey& key) const;
 
 private:
 			SWModule*			fModule;
