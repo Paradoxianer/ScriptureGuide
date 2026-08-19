@@ -56,6 +56,16 @@ class ParallelHeaderView;
 // keystrokes that would split or merge a paragraph. See
 // BibleTextDocument::SetParagraphsEndWithNewline() for the document-side
 // half of the same guarantee.
+// One chain's band in the header: where it sits and what it says (see
+// ParallelBibleView::_ChainBands()).
+struct ChainBand {
+	float	left;
+	float	right;
+	BString	label;
+	bool	active;
+};
+
+
 struct NotesColumn {
 	BReference<BibleTextDocument>	document;
 	NotesDisplayView*				view;
@@ -717,6 +727,12 @@ private:
 				// chain open (nothing to visually distinguish it from).
 				// Called by ParallelHeaderView::Draw() (a friend) for its
 				// tinted-background cue.
+				// See the definitions -- the band row under the column
+				// headers, saying what each chain is showing.
+				void				_ChainHeaderRange(int32 anchorPosition,
+										float& left, float& right) const;
+				BString				_ChainBandLabel(int32 anchorPosition) const;
+				std::vector<ChainBand> _ChainBands() const;
 				void				_ActiveChainHeaderRange(float& left,
 										float& right) const;
 
@@ -842,6 +858,11 @@ private:
 	// the controls within it (still sized/positioned off kHeaderHeight
 	// alone, unchanged).
 	static	const float			kHeaderBottomGap;
+
+	// The band row under the column headers, one strip per chain saying
+	// what that chain is showing (#47). Public because the header view
+	// draws it and needs the height.
+	static	const float			kChainBandHeight;
 	static	const float			kRemoveButtonWidth;
 	static	const float			kInsertButtonWidth;
 	static	const float			kLinkButtonWidth;

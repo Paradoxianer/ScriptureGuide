@@ -65,6 +65,10 @@ const float ParallelBibleView::kMinColumnWidth = 150.0f;
 const float ParallelBibleView::kColumnSpacing = 20.0f;
 const float ParallelBibleView::kHeaderHeight = 24.0f;
 const float ParallelBibleView::kHeaderBottomGap = 2.0f;
+// The row under the column headers saying what each chain shows (#47).
+// Until now what a chain displayed was legible only for the ACTIVE one,
+// and only from the toolbar.
+const float ParallelBibleView::kChainBandHeight = 18.0f;
 const float ParallelBibleView::kRemoveButtonWidth = 20.0f;
 const float ParallelBibleView::kInsertButtonWidth = 20.0f;
 const float ParallelBibleView::kLinkButtonWidth = 16.0f;
@@ -1155,14 +1159,53 @@ public:
 			if (right > left) {
 				BRect bounds = Bounds();
 				SetHighColor(tint_color(ViewColor(), B_DARKEN_1_TINT));
-				FillRect(BRect(left, bounds.top, right, bounds.bottom));
+				FillRect(BRect(left, bounds.top, right,
+					bounds.bottom - ParallelBibleView::kChainBandHeight));
 			}
+
+			_DrawChainBands();
 		}
 
 		BRect bounds = Bounds();
 		SetHighColor(0, 0, 0);
 		StrokeLine(BPoint(bounds.left, bounds.bottom),
 			BPoint(bounds.right, bounds.bottom));
+	}
+
+	// The band row: one strip per chain, saying what that chain is
+	// showing. Drawn rather than built from controls because it has to
+	// follow chains splitting and joining, which happens often enough
+	// that rebuilding views for it would flicker (the same reason the
+	// header's own quick path avoids rebuilding its menu fields).
+	void _DrawChainBands()
+	{
+		const float bandHeight = ParallelBibleView::kChainBandHeight;
+		BRect bounds = Bounds();
+		float top = bounds.bottom - bandHeight;
+
+		std::vector<ChainBand> bands = fOwner->_ChainBands();
+		font_height fontHeight;
+		GetFontHeight(&fontHeight);
+		float baseline = top + fontHeight.ascent
+			+ (bandHeight - fontHeight.ascent - fontHeight.descent) / 2.0f;
+
+		for (size_t i = 0; i < bands.size(); i++) {
+			BRect band(bands[i].left, top, bands[i].right, bounds.bottom);
+			SetHighColor(tint_color(ViewColor(),
+				bands[i].active ? B_DARKEN_1_TINT : B_LIGHTEN_1_TINT));
+			FillRect(band);
+
+			if (bands[i].label.IsEmpty())
+				continue;
+
+			// Truncated to the chain's own width, so a long list label
+			// cannot bleed into the chain beside it.
+			BString label(bands[i].label);
+			TruncateString(&label, B_TRUNCATE_END,
+				band.Width() - 8.0f);
+			SetHighColor(ui_color(B_PANEL_TEXT_COLOR));
+			DrawString(label.String(), BPoint(band.left + 4.0f, baseline));
+		}
 	}
 
 	virtual ~ParallelHeaderView()
@@ -1265,9 +1308,11 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fHeaderView = new ParallelHeaderView("parallelHeader", B_WILL_DRAW, this);
 	fHeaderView->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	fHeaderView->SetExplicitMinSize(
-		BSize(B_SIZE_UNSET, kHeaderHeight + kHeaderBottomGap));
+		BSize(B_SIZE_UNSET,
+			kHeaderHeight + kChainBandHeight + kHeaderBottomGap));
 	fHeaderView->SetExplicitMaxSize(
-		BSize(B_SIZE_UNLIMITED, kHeaderHeight + kHeaderBottomGap));
+		BSize(B_SIZE_UNLIMITED,
+			kHeaderHeight + kChainBandHeight + kHeaderBottomGap));
 }
 
 
@@ -2306,6 +2351,95 @@ ParallelBibleView::_ActiveChainHeaderRange(float& left, float& right) const
 	// the divider at `end`.
 	left = start > 0 ? fColumnDividerX[start - 1] : 0.0f;
 	right = fColumnDividerX[end];
+}
+
+
+// The x span of the header cells belonging to the chain anchored at
+// `anchorPosition`, in the header view's own coordinates. Same geometry
+// _ActiveChainHeaderRange() uses, for any chain rather than the active
+// one, and without its "only when there is more than one" rule: the band
+// (see _ChainBands()) wants a span even when a single chain fills the
+// window.
+void
+ParallelBibleView::_ChainHeaderRange(int32 anchorPosition, float& left,
+	float& right) const
+{
+	left = 0.0f;
+	right = 0.0f;
+	if (anchorPosition < 0
+		|| (size_t)anchorPosition >= fColumnOrder.size()) {
+		return;
+	}
+
+	int32 start = _ChainStart(anchorPosition);
+	int32 end = _ChainEnd(anchorPosition);
+	if (end >= (int32)fColumnDividerX.size())
+		return;
+
+	left = start > 0 ? fColumnDividerX[start - 1] : 0.0f;
+	right = fColumnDividerX[end];
+}
+
+
+// What a chain is showing, in one line: its chapter, or its verse list.
+//
+// A list has no name yet -- named list files are still to come (#47) --
+// so it reads as its first reference, with an ellipsis when there are
+// more. That is already the useful half: it says which study you are in.
+BString
+ParallelBibleView::_ChainBandLabel(int32 anchorPosition) const
+{
+	BString list = _ChainVerseList(anchorPosition);
+	if (!list.IsEmpty()) {
+		BString first;
+		int32 lineBreak = list.FindFirst("\n");
+		if (lineBreak < 0)
+			first = list;
+		else
+			list.CopyInto(first, 0, lineBreak);
+		first.Trim();
+		if (lineBreak >= 0)
+			first << " \xe2\x80\xa6";
+		return first;
+	}
+
+	int32 end = _ChainEnd(anchorPosition);
+	for (int32 i = _ChainStart(anchorPosition); i <= end; i++) {
+		BibleTextDocument* document = NULL;
+		if (fColumnOrder[i] == COLUMN_BIBLE)
+			document = fDocuments[_BibleIndexForPosition(i)];
+		else if (fColumnOrder[i] == COLUMN_NOTES)
+			document = fNotesColumns[_NotesIndexForPosition(i)].document;
+		if (document == NULL || document->BookName() == NULL)
+			continue;
+
+		BString label(document->BookName());
+		label << " " << document->Chapter();
+		return label;
+	}
+	return BString();
+}
+
+
+// One entry per chain, left to right: where its band sits and what it
+// says. Everything the header view needs to draw the row, worked out
+// here because the chain arithmetic lives here.
+std::vector<ChainBand>
+ParallelBibleView::_ChainBands() const
+{
+	std::vector<ChainBand> bands;
+	int32 position = 0;
+	while ((size_t)position < fColumnOrder.size()) {
+		ChainBand band;
+		_ChainHeaderRange(position, band.left, band.right);
+		band.label = _ChainBandLabel(position);
+		band.active = fActivePosition >= 0
+			&& _ChainStart(fActivePosition) == _ChainStart(position);
+		if (band.right > band.left)
+			bands.push_back(band);
+		position = _ChainEnd(position) + 1;
+	}
+	return bands;
 }
 
 
