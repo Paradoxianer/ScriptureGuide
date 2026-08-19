@@ -965,6 +965,45 @@ TestOnlyRawFilesModulesAreEditable(SWMgr* manager)
 		(int)manager->Modules.size());
 }
 
+// Picking a writable module from a column's dropdown gives an editable
+// column on that module, not a read-only one -- the point of #45. And it
+// records which module, or a restart would turn someone's Personal
+// commentary back into a plain notes column without saying so.
+static void
+TestWritableModuleBecomesEditableColumn(SWMgr* manager)
+{
+	const char* name = "ParallelBibleView::AddColumn: a writable module "
+		"becomes an editable column that remembers which module";
+
+	SWModule* editable = NULL;
+	for (ModMap::iterator it = manager->Modules.begin();
+			it != manager->Modules.end(); ++it) {
+		if (IsEditableVerseModule(it->second)) {
+			editable = it->second;
+			break;
+		}
+	}
+	if (editable == NULL) {
+		Skip(name, "no writable module installed (try SWORD's Personal)");
+		return;
+	}
+
+	ParallelBibleView view("testEditableColumn", manager, 900.0f);
+	view.AddColumn(editable->getName());
+
+	std::vector<ParallelBibleView::ColumnDescription> layout
+		= view.ColumnLayout();
+	bool ok = layout.size() == 1
+		&& layout[0].isNotes
+		&& layout[0].moduleName == editable->getName();
+	if (!ok && layout.size() == 1) {
+		printf("      %s: isNotes=%d moduleName=\"%s\"\n",
+			editable->getName(), layout[0].isNotes ? 1 : 0,
+			layout[0].moduleName.String());
+	}
+	Check(ok, name);
+}
+
 int
 main()
 {
@@ -988,6 +1027,7 @@ main()
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestOnlyRawFilesModulesAreEditable(&manager);
+	TestWritableModuleBecomesEditableColumn(&manager);
 	TestVerseAlignerIsIdempotent(moduleA, moduleB);
 	TestPersonalNotesRoundTrip();
 	TestTallNotesGrowRowWithoutCompounding(&manager, moduleA);

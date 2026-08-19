@@ -709,7 +709,11 @@ void SGMainWindow::RestoreColumnLayout(void)
 		fParallelView->RemoveColumn(0);
 
 	for (int32 i = 0; i < count; i++) {
-		if (isNotes[i])
+		// A notes column that recorded a module name is an editable
+		// column on a module the user picked (see
+		// IsEditableVerseModule()); AddColumn() routes it back there by
+		// itself. Only our own notes module has no name to record.
+		if (isNotes[i] && moduleNames[i].IsEmpty())
 			// AddNotesColumn(), not SetNotesEnabled(true) -- the latter
 			// is a coarse "is there one anywhere yet" toggle (see the
 			// class comment on ParallelBibleView) that would silently

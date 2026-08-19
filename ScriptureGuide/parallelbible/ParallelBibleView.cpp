@@ -1305,6 +1305,10 @@ ParallelBibleView::~ParallelBibleView()
 	}
 
 	delete fNotes;
+	// The modules themselves belong to fManager; only the wrappers are
+	// ours.
+	for (size_t i = 0; i < fBorrowedNotes.size(); i++)
+		delete fBorrowedNotes[i];
 	// Stops any still-pending debounced realign (see NoteTextEdited())
 	// from being delivered to a half-destroyed view.
 	delete fNotesRealignRunner;
@@ -1719,21 +1723,16 @@ ParallelBibleView::InsertNotesColumn(int32 afterPosition)
 	if (afterPosition < 0 || (size_t)afterPosition >= fColumnOrder.size())
 		return B_BAD_INDEX;
 
-	if (fNotes == NULL) {
-		fNotes = new PersonalNotesModule();
-		status_t status = fNotes->Open();
-		if (status != B_OK) {
-			delete fNotes;
-			fNotes = NULL;
-			return status;
-		}
-	}
+	PersonalNotesModule* backend = _NotesBackendFor(NULL);
+	if (backend == NULL)
+		return B_ERROR;
 
 	// The new column joins afterPosition's own chain (see this method's
 	// own doc comment), so afterPosition's key is the right one to seed
 	// from, not the active chain's.
 	NotesColumn notes;
-	notes.document = _BuildNotesDocument(afterPosition);
+	notes.notes = backend;
+	notes.document = _BuildNotesDocument(afterPosition, backend);
 	notes.view = NULL;
 	int32 notesIndex = _NotesIndexForPosition(afterPosition + 1);
 	fNotesColumns.insert(fNotesColumns.begin() + notesIndex, notes);
@@ -2064,6 +2063,14 @@ ParallelBibleView::_ChainKey(int32 anchorPosition) const
 const char*
 ParallelBibleView::_ChainVersification(int32 anchorPosition) const
 {
+	// -1 is "the active chain" before there is one -- the very first
+	// column added to an empty view. _ChainStart()/_ChainEnd() hand that
+	// straight back, and the loop below would then read fColumnOrder[-1].
+	if (anchorPosition < 0
+		|| (size_t)anchorPosition >= fColumnOrder.size()) {
+		return NULL;
+	}
+
 	int32 end = _ChainEnd(anchorPosition);
 	for (int32 i = _ChainStart(anchorPosition); i <= end; i++) {
 		if (fColumnOrder[i] != COLUMN_BIBLE)
@@ -2402,6 +2409,16 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 	if (module == NULL)
 		return B_NAME_NOT_FOUND;
 
+	// A writable per-verse module -- SWORD's "Personal" commentary and
+	// anything else declaring ModDrv=RawFiles -- becomes an editable
+	// column rather than a read-only one. It sits under Commentaries in
+	// the dropdown like any other, because that is what it is; what
+	// changes is that picking it lets you write in it, which is the
+	// whole point of such a module and what BibleTime and Xiphos do with
+	// it. No separate menu entry is needed for that.
+	if (IsEditableVerseModule(module))
+		return _SetColumnToNotes(position, module);
+
 	SG_LOG("[SG] _SetColumnToBible(position=%d, module=%s) "
 		"module ptr=%p\n", (int)position, moduleName, (void*)module);
 
@@ -2493,26 +2510,29 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 }
 
 
-// Requires fNotes to already be open (every caller ensures that first).
+// Requires `backend` to already be open (every caller ensures that
+// first). Which module it wraps -- ours or one the user picked -- makes
+// no difference here.
 BReference<BibleTextDocument>
-ParallelBibleView::_BuildNotesDocument(int32 seedAnchorPosition)
+ParallelBibleView::_BuildNotesDocument(int32 seedAnchorPosition,
+	PersonalNotesModule* backend)
 {
 	// Seed with whatever seedAnchorPosition's own chain (the active one,
 	// if < 0) is currently showing -- same reasoning/anti-pattern-
 	// avoidance as _SetColumnToBible()'s identical seeding block, since
-	// PersonalNotesModule::Module() is a real SWModule (a RawCom*) and
-	// has the exact same shared-live-key hazard.
+	// PersonalNotesModule::Module() is a real SWModule and has the exact
+	// same shared-live-key hazard.
 	BString seedKey = seedAnchorPosition < 0 ? _ChainKey(fActivePosition)
 		: _ChainKey(seedAnchorPosition);
 	if (!seedKey.IsEmpty()) {
 		VerseKey verseKey;
 		SetVerseKeyLocale(verseKey);
 		verseKey.setText(seedKey.String());
-		fNotes->Module()->setKey(verseKey);
+		backend->Module()->setKey(verseKey);
 	}
 
 	BReference<BibleTextDocument> document(
-		new BibleTextDocument(fNotes->Module()), true);
+		new BibleTextDocument(backend->Module()), true);
 	// Same reason as in SetKey(): the notes module counts in KJV, but
 	// this column's rows have to match the Bible it will sit beside.
 	document->SetVersification(_ChainVersification(
@@ -2543,7 +2563,7 @@ ParallelBibleView::_BuildNotesDocument(int32 seedAnchorPosition)
 	// class comment on NotesSaveListener for why a rebuild never detaches
 	// it and never looks like a user edit.
 	document->AddListener(TextListenerRef(
-		new NotesSaveListener(document.Get(), fNotes, this), true));
+		new NotesSaveListener(document.Get(), backend, this), true));
 	return document;
 }
 
@@ -2587,26 +2607,91 @@ ParallelBibleView::_TearDownNotesColumnView(NotesColumn& notes)
 }
 
 
-// Makes the column at `position` a notes column, or appends a new one at
-// the end if position < 0. Any number of notes columns can exist at once
-// (see the class comment) -- all backed by the same shared fNotes,
-// opened the first time any notes column is created, closed once the
-// last one is gone (see RemoveColumn()).
-status_t
-ParallelBibleView::_SetColumnToNotes(int32 position)
+// What a column's header says, and which dropdown entry is ticked.
+//
+// An editable column backed by a module the user chose (see
+// _SetColumnToNotes()) names that module and ticks it under Commentaries,
+// exactly as a read-only column would: from the outside it IS that
+// module, only writable. Only our own notes module is called "Notes",
+// because it has no name of its own to show.
+void
+ParallelBibleView::_ColumnMenuLabels(size_t index, BString& label,
+	BString& markedModule, bool& markNotes) const
 {
-	if (fNotes == NULL) {
-		fNotes = new PersonalNotesModule();
-		status_t status = fNotes->Open();
-		if (status != B_OK) {
-			delete fNotes;
-			fNotes = NULL;
-			return status;
-		}
+	if (fColumnOrder[index] != COLUMN_NOTES) {
+		label = fModules[_BibleIndexForPosition((int32)index)]->getName();
+		markedModule = label;
+		markNotes = false;
+		return;
 	}
 
+	int32 notesIndex = _NotesIndexForPosition((int32)index);
+	PersonalNotesModule* backend = notesIndex >= 0
+		&& (size_t)notesIndex < fNotesColumns.size()
+		? fNotesColumns[notesIndex].notes : NULL;
+	if (backend != NULL && !backend->IsOwnModule()
+		&& backend->Module() != NULL) {
+		label = backend->Module()->getName();
+		markedModule = label;
+		markNotes = false;
+		return;
+	}
+
+	label = B_TRANSLATE("Notes");
+	markedModule = "";
+	markNotes = true;
+}
+
+
+// One backend per module, kept for the window's lifetime. Two columns
+// editing the same module must share one wrapper: two of them would mean
+// two SWModule positions over the same files, which is the same
+// shared-live-key hazard the documents already guard against.
+PersonalNotesModule*
+ParallelBibleView::_NotesBackendFor(SWModule* module)
+{
+	if (module == NULL) {
+		if (fNotes == NULL) {
+			fNotes = new PersonalNotesModule();
+			if (fNotes->Open() != B_OK) {
+				delete fNotes;
+				fNotes = NULL;
+			}
+		}
+		return fNotes;
+	}
+
+	for (size_t i = 0; i < fBorrowedNotes.size(); i++) {
+		if (fBorrowedNotes[i]->Module() == module)
+			return fBorrowedNotes[i];
+	}
+
+	PersonalNotesModule* backend = new PersonalNotesModule(module);
+	if (backend->Open() != B_OK) {
+		delete backend;
+		return NULL;
+	}
+	fBorrowedNotes.push_back(backend);
+	return backend;
+}
+
+
+// Makes the column at `position` an editable column, or appends a new one
+// at the end if position < 0. Any number can exist at once (see the class
+// comment). `module` NULL means our own notes module, opened the first
+// time any column needs it and closed once the last one is gone (see
+// RemoveColumn()); anything else is a writable module the user picked
+// from the dropdown, which the SWMgr owns and which we only edit.
+status_t
+ParallelBibleView::_SetColumnToNotes(int32 position, SWModule* module)
+{
+	PersonalNotesModule* backend = _NotesBackendFor(module);
+	if (backend == NULL)
+		return B_ERROR;
+
 	NotesColumn notes;
-	notes.document = _BuildNotesDocument(position);
+	notes.notes = backend;
+	notes.document = _BuildNotesDocument(position, backend);
 	notes.view = NULL;
 
 	if (position < 0) {
@@ -2752,6 +2837,16 @@ ParallelBibleView::ColumnLayout() const
 				const char* key = fNotesColumns[notesIndex].document->Key();
 				if (key != NULL)
 					desc.key = key;
+				// An editable column on a module the user chose records
+				// which one, or it would come back as a plain notes
+				// column after a restart and quietly stop being the
+				// Personal commentary it was.
+				PersonalNotesModule* backend
+					= fNotesColumns[notesIndex].notes;
+				if (backend != NULL && !backend->IsOwnModule()
+					&& backend->Module() != NULL) {
+					desc.moduleName = backend->Module()->getName();
+				}
 			}
 		} else {
 			desc.isNotes = false;
@@ -3165,19 +3260,19 @@ ParallelBibleView::_RebuildHeader()
 	// *other* field's tracking thread should still be active.
 	if (fHeaderFields.size() == fColumnOrder.size()) {
 		for (size_t i = 0; i < fColumnOrder.size(); i++) {
-			bool isNotes = (fColumnOrder[i] == COLUMN_NOTES);
-			const char* label = isNotes
-				? B_TRANSLATE("Notes")
-				: fModules[_BibleIndexForPosition((int32)i)]->getName();
+			BString label, markedModule;
+			bool markNotes = false;
+			_ColumnMenuLabels(i, label, markedModule, markNotes);
 
 			BMenuField* field = fHeaderFields[i];
 			BMenu* menu = field->Menu();
 			while (menu->CountItems() > 0)
 				delete menu->RemoveItem((int32)0);
-			_PopulateModuleMenu(menu, (int32)i, isNotes ? NULL : label,
-				isNotes);
+			_PopulateModuleMenu(menu, (int32)i,
+				markedModule.IsEmpty() ? NULL : markedModule.String(),
+				markNotes);
 			if (field->MenuItem() != NULL)
-				field->MenuItem()->SetLabel(label);
+				field->MenuItem()->SetLabel(label.String());
 		}
 		for (size_t i = 0; i < fLinkButtons.size(); i++) {
 			fLinkButtons[i]->SetLabel(fLinkedToNext[i]
@@ -3208,13 +3303,13 @@ ParallelBibleView::_RebuildHeader()
 	fLinkButtons.clear();
 
 	for (size_t i = 0; i < fColumnOrder.size(); i++) {
-		bool isNotes = (fColumnOrder[i] == COLUMN_NOTES);
-		const char* label = isNotes
-			? B_TRANSLATE("Notes")
-			: fModules[_BibleIndexForPosition((int32)i)]->getName();
+		BString label, markedModule;
+		bool markNotes = false;
+		_ColumnMenuLabels(i, label, markedModule, markNotes);
 
 		BPopUpMenu* menu = _BuildModuleMenu((int32)i,
-			isNotes ? NULL : label, isNotes);
+			markedModule.IsEmpty() ? NULL : markedModule.String(),
+			markNotes);
 		BMenuField* field = new BMenuField("columnHeader", NULL, menu);
 		field->SetDivider(0.0f);
 		// labelFromMarked (see _BuildModuleMenu()) only looks at the
