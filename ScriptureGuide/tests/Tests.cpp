@@ -911,6 +911,60 @@ TestNotesColumnMatchesChainVersification(SWMgr* manager,
 	Check(bibleRows == notesRows && notesRows == expected, name);
 }
 
+// The trap this exists to prevent: SWModule::isWritable() is true for
+// plain Bibles as well, so anything gating an edit mode on it would make
+// every Bible column editable. Asserted against whatever is actually
+// installed rather than against a fixed list.
+static void
+TestOnlyRawFilesModulesAreEditable(SWMgr* manager)
+{
+	int bibles = 0, editable = 0;
+	bool bibleSaidEditable = false;
+	bool writableBibleExists = false;
+
+	for (ModMap::iterator it = manager->Modules.begin();
+			it != manager->Modules.end(); ++it) {
+		SWModule* module = it->second;
+		bool isBible = strcmp(module->getType(), "Biblical Texts") == 0;
+		if (isBible) {
+			bibles++;
+			if (module->isWritable())
+				writableBibleExists = true;
+			if (IsEditableVerseModule(module))
+				bibleSaidEditable = true;
+		}
+		if (IsEditableVerseModule(module))
+			editable++;
+	}
+
+	if (bibles == 0) {
+		Skip("IsEditableVerseModule: no Bible is editable", "no Bibles");
+		return;
+	}
+	Check(!bibleSaidEditable, "IsEditableVerseModule: no Bible is editable");
+
+	// If nothing installed reports writable-but-not-editable, the check
+	// above passed without being tested -- say so rather than claim it.
+	if (!writableBibleExists) {
+		Skip("IsEditableVerseModule: rejects a Bible that claims writable",
+			"no installed Bible reports isWritable()");
+	} else {
+		Check(!bibleSaidEditable,
+			"IsEditableVerseModule: rejects a Bible that claims writable");
+	}
+
+	SWModule* personal = manager->getModule("Personal");
+	if (personal == NULL) {
+		Skip("IsEditableVerseModule: accepts SWORD's Personal commentary",
+			"Personal not installed");
+	} else {
+		Check(IsEditableVerseModule(personal),
+			"IsEditableVerseModule: accepts SWORD's Personal commentary");
+	}
+	printf("      %d editable of %d modules\n", editable,
+		(int)manager->Modules.size());
+}
+
 int
 main()
 {
@@ -933,6 +987,7 @@ main()
 
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
+	TestOnlyRawFilesModulesAreEditable(&manager);
 	TestVerseAlignerIsIdempotent(moduleA, moduleB);
 	TestPersonalNotesRoundTrip();
 	TestTallNotesGrowRowWithoutCompounding(&manager, moduleA);
