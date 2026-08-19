@@ -1251,16 +1251,21 @@ public:
 		BView::Draw(updateRect);
 
 		if (fOwner != NULL) {
+			// The band (_DrawChainBands()) is drawn first, along the TOP of
+			// the header -- what a chain shows is the more permanent fact
+			// about it and reads better leading than trailing, with the
+			// per-column module selection underneath.
+			_DrawChainBands();
+
 			float left, right;
 			fOwner->_ActiveChainHeaderRange(left, right);
 			if (right > left) {
 				BRect bounds = Bounds();
 				SetHighColor(tint_color(ViewColor(), B_DARKEN_1_TINT));
-				FillRect(BRect(left, bounds.top, right,
-					bounds.bottom - ParallelBibleView::kChainBandHeight));
+				FillRect(BRect(left,
+					bounds.top + ParallelBibleView::kChainBandHeight,
+					right, bounds.bottom));
 			}
-
-			_DrawChainBands();
 		}
 
 		BRect bounds = Bounds();
@@ -1278,7 +1283,10 @@ public:
 	{
 		const float bandHeight = ParallelBibleView::kChainBandHeight;
 		BRect bounds = Bounds();
-		float top = bounds.bottom - bandHeight;
+		// Along the TOP of the header now, not the bottom -- see Draw()'s
+		// own comment on why.
+		float top = bounds.top;
+		float bottom = top + bandHeight;
 
 		std::vector<ChainBand> bands = fOwner->_ChainBands();
 		font_height fontHeight;
@@ -1287,7 +1295,7 @@ public:
 			+ (bandHeight - fontHeight.ascent - fontHeight.descent) / 2.0f;
 
 		for (size_t i = 0; i < bands.size(); i++) {
-			BRect band(bands[i].left, top, bands[i].right, bounds.bottom);
+			BRect band(bands[i].left, top, bands[i].right, bottom);
 			SetHighColor(tint_color(ViewColor(),
 				bands[i].active ? B_DARKEN_1_TINT : B_LIGHTEN_1_TINT));
 			FillRect(band);
@@ -1296,12 +1304,18 @@ public:
 				continue;
 
 			// Truncated to the chain's own width, so a long list label
-			// cannot bleed into the chain beside it.
+			// cannot bleed into the chain beside it, then CENTERED over
+			// the chain's span -- this is the chain's own title, not a
+			// left-aligned field label, and reads that way better.
 			BString label(bands[i].label);
 			TruncateString(&label, B_TRUNCATE_END,
 				band.Width() - 8.0f);
 			SetHighColor(ui_color(B_PANEL_TEXT_COLOR));
-			DrawString(label.String(), BPoint(band.left + 4.0f, baseline));
+			float textWidth = StringWidth(label.String());
+			float x = band.left + (band.Width() - textWidth) / 2.0f;
+			if (x < band.left + 4.0f)
+				x = band.left + 4.0f;
+			DrawString(label.String(), BPoint(x, baseline));
 		}
 	}
 
@@ -1333,9 +1347,11 @@ public:
 		// the band is blank drawn background with no child view over
 		// it, exactly the condition that logic uses to recognize a
 		// reorder gesture, so without this a band click would silently
-		// start dragging the column that happens to be under it.
+		// start dragging the column that happens to be under it. Along
+		// the TOP of the header now, not the bottom -- see Draw()'s own
+		// comment on why.
 		BRect bounds = Bounds();
-		if (where.y >= bounds.bottom - ParallelBibleView::kChainBandHeight) {
+		if (where.y < bounds.top + ParallelBibleView::kChainBandHeight) {
 			int32 index = fOwner->_ColumnIndexForX(where.x);
 			if (index >= 0) {
 				BPoint screenPoint = where;
@@ -4019,16 +4035,19 @@ ParallelBibleView::_PositionColumns()
 			float fieldWidth = std::min(preferredWidth,
 				std::max(0.0f, width - reserved));
 
+			// y = kChainBandHeight, not 0 -- the band (_DrawChainBands())
+			// occupies the header's own top strip now, with the module-
+			// selection row underneath it (see Draw()'s own comment).
 			float cellX = x;
-			fHeaderFields[i]->MoveTo(cellX, 0.0f);
+			fHeaderFields[i]->MoveTo(cellX, kChainBandHeight);
 			fHeaderFields[i]->ResizeTo(fieldWidth, kHeaderHeight);
 			cellX += fieldWidth;
 
-			fInsertButtons[i]->MoveTo(cellX, 0.0f);
+			fInsertButtons[i]->MoveTo(cellX, kChainBandHeight);
 			fInsertButtons[i]->ResizeTo(kInsertButtonWidth, kHeaderHeight);
 			cellX += kInsertButtonWidth;
 
-			fRemoveButtons[i]->MoveTo(cellX, 0.0f);
+			fRemoveButtons[i]->MoveTo(cellX, kChainBandHeight);
 			fRemoveButtons[i]->ResizeTo(kRemoveButtonWidth, kHeaderHeight);
 		}
 
@@ -4094,7 +4113,7 @@ ParallelBibleView::_PositionColumns()
 		// column's own cell and the next one's.
 		if (i + 1 < fColumnOrder.size()) {
 			fLinkButtons[i]->MoveTo(fColumnDividerX.back()
-				- kLinkButtonWidth / 2.0f, 0.0f);
+				- kLinkButtonWidth / 2.0f, kChainBandHeight);
 			fLinkButtons[i]->ResizeTo(kLinkButtonWidth, kHeaderHeight);
 		}
 	}
