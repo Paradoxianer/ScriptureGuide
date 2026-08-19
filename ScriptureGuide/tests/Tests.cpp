@@ -16,6 +16,7 @@
 #include <stdio.h>
 
 #include <Application.h>
+#include <Entry.h>
 #include <String.h>
 
 #include <markupfiltmgr.h>
@@ -26,6 +27,7 @@
 #include "ParallelBibleView.h"
 #include "PersonalNotesModule.h"
 #include "VerseAligner.h"
+#include "VerseListFile.h"
 #include "constants.h"
 
 using namespace sword;
@@ -1188,6 +1190,60 @@ TestChainVerseListAppliesToItsChainOnly(SWMgr* manager, SWModule* moduleA,
 		"the chain to its chapter");
 }
 
+// Round-trip: create with a seed line, append a second, save, reload
+// from disk into a fresh instance, and check every field agrees --
+// attributes and body alike (#47).
+static void
+TestVerseListFileRoundTrips()
+{
+	const char* name = "VerseListFile: create/save/reload round-trips "
+		"name, description, versification and body";
+
+	VerseListFile list;
+	status_t status = list.CreateNew("__unit_test_list__",
+		"Genesis 1:1", "KJV");
+	if (status != B_OK) {
+		Skip(name, "could not create a list file (no settings "
+			"directory?)");
+		return;
+	}
+
+	list.SetDescription("temporary, created by the test suite");
+	BString extended(list.ReferenceText());
+	extended << "\nPsalms 1:1";
+	list.SetReferenceText(extended.String());
+	list.Save();
+
+	VerseListFile reloaded;
+	status = reloaded.SetTo(list.Path());
+
+	bool ok = status == B_OK
+		&& BString(reloaded.Name()) == "__unit_test_list__"
+		&& BString(reloaded.Description())
+			== "temporary, created by the test suite"
+		&& BString(reloaded.Versification()) == "KJV"
+		&& BString(reloaded.ReferenceText()) == extended
+		&& reloaded.EntryCount() == 2;
+
+	if (!ok) {
+		printf("      name=\"%s\" desc=\"%s\" v11n=\"%s\" count=%d\n",
+			reloaded.Name(), reloaded.Description(),
+			reloaded.Versification(), (int)reloaded.EntryCount());
+	}
+	Check(ok, name);
+
+	// A second file with the same display name gets a number rather
+	// than overwriting the first.
+	VerseListFile second;
+	status = second.CreateNew("__unit_test_list__", "Genesis 1:1", "KJV");
+	Check(status == B_OK && BString(second.Path()) != BString(list.Path()),
+		"VerseListFile: a name collision gets a numbered file, not an "
+		"overwrite");
+
+	BEntry(list.Path()).Remove();
+	BEntry(second.Path()).Remove();
+}
+
 int
 main()
 {
@@ -1223,6 +1279,7 @@ main()
 	TestRemoveMiddleColumnRelinksNeighbors(&manager, moduleA, moduleB);
 	TestSplitChainKeepsOtherChainUnaffected(&manager, moduleA, moduleB);
 	TestChainVerseListAppliesToItsChainOnly(&manager, moduleA, moduleB);
+	TestVerseListFileRoundTrips();
 	TestMoveColumnPreservesEachColumnsOwnKey(&manager, moduleA, moduleB);
 
 	PersonalNotesModule notes;

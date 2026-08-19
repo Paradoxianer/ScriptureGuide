@@ -43,6 +43,7 @@ SRCS = \
 	 \
 	 parallelbible/BibleTextDocument.cpp  \
 	 parallelbible/PersonalNotesModule.cpp  \
+	 parallelbible/VerseListFile.cpp  \
 	 parallelbible/VerseAligner.cpp  \
 	 parallelbible/ParallelBibleView.cpp  \
 	 \
