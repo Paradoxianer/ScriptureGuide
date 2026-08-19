@@ -2052,6 +2052,34 @@ ParallelBibleView::_ChainKey(int32 anchorPosition) const
 }
 
 
+// Which versification a chain counts in: that of the first Bible column
+// in it. Notes columns need this -- their own module counts in KJV, but
+// their rows have to line up with the Bible beside them, and a German or
+// Luther chapter can have more verses than KJV's (#46).
+//
+// A chain holding two Bibles that count differently has no single
+// answer; the first one wins. Those two columns already render different
+// numbers of paragraphs and so cannot align with each other either, which
+// is a separate problem and not one this papers over.
+const char*
+ParallelBibleView::_ChainVersification(int32 anchorPosition) const
+{
+	int32 end = _ChainEnd(anchorPosition);
+	for (int32 i = _ChainStart(anchorPosition); i <= end; i++) {
+		if (fColumnOrder[i] != COLUMN_BIBLE)
+			continue;
+		SWModule* module = fDocuments[_BibleIndexForPosition(i)]->Module();
+		if (module == NULL)
+			continue;
+		const char* versification = module->getConfigEntry("Versification");
+		if (versification != NULL && versification[0] != '\0')
+			return versification;
+		return "KJV";		// declares none, so it counts in KJV
+	}
+	return NULL;			// a chain with no Bible column at all
+}
+
+
 // The tallest laid-out content among a chain's columns -- what the chain
 // as a whole can scroll through, as opposed to what any one column can.
 // Every column in a chain gets its own copy of this, because they scroll
@@ -2485,6 +2513,10 @@ ParallelBibleView::_BuildNotesDocument(int32 seedAnchorPosition)
 
 	BReference<BibleTextDocument> document(
 		new BibleTextDocument(fNotes->Module()), true);
+	// Same reason as in SetKey(): the notes module counts in KJV, but
+	// this column's rows have to match the Bible it will sit beside.
+	document->SetVersification(_ChainVersification(
+		seedAnchorPosition < 0 ? fActivePosition : seedAnchorPosition));
 	// Never inline, regardless of the Bible/Commentary "Show Verse
 	// Numbers" toggle -- a notes column always renders its own numbers
 	// in NotesDisplayView's own gutter instead (see its class comment),
@@ -2644,6 +2676,9 @@ ParallelBibleView::SetKey(const char* key)
 		if (fColumnOrder[i] != COLUMN_NOTES)
 			continue;
 		NotesColumn& notes = fNotesColumns[_NotesIndexForPosition(i)];
+		// Before the key, not after: the verse count for this chapter
+		// depends on it (#46).
+		notes.document->SetVersification(_ChainVersification(i));
 		notes.document->SetKey(key);
 	}
 	bigtime_t perfAfterNotes = system_time();
