@@ -7,6 +7,8 @@
 
 #include <listkey.h>
 
+#include <ctype.h>
+
 #include <algorithm>
 #include <cstdio>
 
@@ -68,6 +70,44 @@ SetVerseKeyLocale(VerseKey& key)
 // was missing (#46). Lookup was never the problem -- SWModule::setKey()
 // maps a key into the module's own system by itself -- only the counting
 // and the arithmetic done on the key here.
+// One row of what _Rebuild() is about to lay out: either a section
+// heading introducing a verse list's next reference, or one verse.
+struct RenderStep {
+	bool		isHeading;
+	BString		title;		// heading only: what it reads
+	BString		linkKey;	// heading only: where clicking it goes
+	VerseKey	key;		// verse only
+
+	RenderStep() : isHeading(false) {}
+};
+
+
+// Turns the chapter/verse comma a German reader writes into the colon
+// SWORD parses. Only between two digits, so "1. Mose" keeps its own
+// full stop and a list of several references is untouched.
+//
+// Without this the failure is silent and enormous rather than an error:
+// "1. Mose 1, 1-1. Mose 1, 3" comes back as 86 verses spread over three
+// ranges that include the whole of Genesis 3.
+static void
+_NormalizeReferenceSeparators(BString& reference)
+{
+	for (int32 i = 1; i + 1 < reference.Length(); i++) {
+		if (reference.ByteAt(i) != ',')
+			continue;
+		if (!isdigit(reference.ByteAt(i - 1)))
+			continue;
+		int32 next = i + 1;
+		while (next < reference.Length() && reference.ByteAt(next) == ' ')
+			next++;
+		if (next >= reference.Length() || !isdigit(reference.ByteAt(next)))
+			continue;
+		reference.Remove(i, next - i);
+		reference.Insert(":", i);
+	}
+}
+
+
 void
 BibleTextDocument::_PrepareKey(VerseKey& key) const
 {
@@ -696,22 +736,75 @@ BibleTextDocument::_Rebuild()
 	// SWORD parses the list itself, in this module's versification (see
 	// _PrepareKey()) -- "Ge 1:1-2:1, Ps 1:1-1:10" comes back as the
 	// individual verses of those ranges, in the order written.
-	std::vector<VerseKey> sequence;
+	std::vector<RenderStep> sequence;
 	if (!fVerseListText.IsEmpty()) {
-		VerseKey parser;
-		_PrepareKey(parser);
-		ListKey list = parser.parseVerseList(fVerseListText.String(),
-			savedKeyText.String(), true);
-		for (list.setPosition(TOP); !list.popError(); list++) {
-			VerseKey element;
-			_PrepareKey(element);
-			element.setText(list.getText());
-			sequence.push_back(element);
+		// One reference per LINE, and the line is the section. That is
+		// not a stylistic choice: SWORD's list separator is the comma,
+		// and in German the comma already separates chapter from verse.
+		// Measured -- "1. Mose 1, 1-1. Mose 1, 3" parses as 86 verses
+		// across three invented ranges including all of Genesis 3, with
+		// no error of any kind. A newline cannot collide with anything.
+		BString remaining(fVerseListText);
+		while (remaining.Length() > 0) {
+			BString line;
+			int32 breakAt = remaining.FindFirst("\n");
+			if (breakAt < 0) {
+				line = remaining;
+				remaining = "";
+			} else {
+				remaining.CopyInto(line, 0, breakAt);
+				remaining.Remove(0, breakAt + 1);
+			}
+			line.Trim();
+			if (line.IsEmpty())
+				continue;
+
+			// And normalize the separator anyway, because someone
+			// hand-editing a list in German will write the comma they
+			// see everywhere else in this program.
+			_NormalizeReferenceSeparators(line);
+
+			VerseKey parser;
+			_PrepareKey(parser);
+			ListKey expanded = parser.parseVerseList(line.String(),
+				savedKeyText.String(), true);
+
+			std::vector<VerseKey> verses;
+			for (expanded.setPosition(TOP); !expanded.popError();
+					expanded++) {
+				VerseKey element;
+				_PrepareKey(element);
+				element.setText(expanded.getText());
+				verses.push_back(element);
+			}
+			if (verses.empty())
+				continue;
+
+			// The heading is a row of its own, not decoration attached
+			// to the verse below it. Every column of a chain renders the
+			// same sequence, so headings line up the way verses do --
+			// and VerseAligner can give one its own height instead of
+			// silently pushing everything below out of true (#47).
+			RenderStep heading;
+			heading.isHeading = true;
+			heading.title = expanded.getRangeText();
+			heading.linkKey = verses[0].getText();
+			sequence.push_back(heading);
+
+			for (size_t v = 0; v < verses.size(); v++) {
+				RenderStep row;
+				row.isHeading = false;
+				row.key = verses[v];
+				sequence.push_back(row);
+			}
 		}
 	} else {
 		for (int verse = firstVerse; verse <= verseCount; verse++) {
 			iterKey.setVerse(verse);
-			sequence.push_back(iterKey);
+			RenderStep row;
+			row.isHeading = false;
+			row.key = iterKey;
+			sequence.push_back(row);
 		}
 	}
 	fSequenceLength = (int32)sequence.size();
@@ -737,9 +830,40 @@ BibleTextDocument::_Rebuild()
 	int32 documentOffset = 0;
 
 	for (size_t step = 0; step < sequence.size(); step++) {
+		if (sequence[step].isHeading) {
+			ParagraphStyle headingStyle(fParagraphStyle);
+			Paragraph headingParagraph(headingStyle);
+
+			BString title(sequence[step].title);
+			// Styled and registered as a reference link, so clicking it
+			// navigates the same way a reference inside a commentary
+			// does (#28) -- which is how you get from a list back to
+			// reading the passage in its own chapter.
+			int32 linkStart = documentOffset;
+			headingParagraph.Append(TextSpan(title, fReferenceLinkStyle));
+
+			ReferenceLink link;
+			link.start = linkStart;
+			link.end = linkStart + title.Length();
+			link.key = sequence[step].linkKey;
+			fReferenceLinks.push_back(link);
+
+			if (fParagraphsEndWithNewline)
+				headingParagraph.Append(TextSpan("\n", fVerseTextStyle));
+
+			Append(headingParagraph);
+			// Verse 0: a heading is not a verse, and NotesSaveListener
+			// already skips anything that answers <= 0, so typing into
+			// one in a notes column cannot write itself over a note.
+			fParagraphVerse.push_back(0);
+			fParagraphStep.push_back((int32)step);
+			documentOffset += headingParagraph.Length();
+			continue;
+		}
+
 		// Same versification on both sides, so this is an exact
 		// repositioning rather than a mapping.
-		iterKey.positionFrom(sequence[step]);
+		iterKey.positionFrom(sequence[step].key);
 		int verse = iterKey.getVerse();
 		fModule->setKey(iterKey);
 

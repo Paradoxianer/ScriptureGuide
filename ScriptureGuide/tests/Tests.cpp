@@ -1032,18 +1032,22 @@ TestVerseListRendersItsReferencesInOrder(SWModule* module)
 	key.setText("Psalms 1:2");	second << "-" << key.getText();
 	key.setText("Matthew 1:1");	third = key.getText();
 
+	// One reference per line -- the format a list file uses, and the
+	// only one that cannot collide with the German comma between
+	// chapter and verse (see _NormalizeReferenceSeparators()).
 	BString listText;
-	listText << first << ", " << second << ", " << third;
+	listText << first << "\n" << second << "\n" << third;
 
 	BibleTextDocument document(module);
 	document.SetSkipEmptyVerses(false);
 	document.SetKey("Genesis 1:1");
 	document.SetVerseList(listText.String());
 
-	// Three verses of Genesis, two psalms, one of Matthew.
+	// A heading row per line, then that line's verses: three of
+	// Genesis, two psalms, one of Matthew. Headings answer verse 0.
 	int32 count = document.CountParagraphs();
-	int expected[] = { 1, 2, 3, 1, 2, 1 };
-	bool orderOk = count == 6;
+	int expected[] = { 0, 1, 2, 3, 0, 1, 2, 0, 1 };
+	bool orderOk = count == 9;
 	for (int32 i = 0; orderOk && i < count; i++)
 		orderOk = document.VerseForParagraphIndex(i) == expected[i];
 
@@ -1056,9 +1060,16 @@ TestVerseListRendersItsReferencesInOrder(SWModule* module)
 	}
 	Check(orderOk, name);
 
+	// Each heading is a reference link, so clicking one navigates to
+	// the passage the way a reference in a commentary does (#28).
+	BString linkKey;
+	Check(document.ReferenceLinkAt(0, linkKey) && !linkKey.IsEmpty(),
+		"BibleTextDocument::SetVerseList: a section heading is a "
+		"reference link");
+
 	// And an empty list goes back to being a chapter.
 	document.SetVerseList("");
-	Check(document.CountParagraphs() > 6,
+	Check(document.CountParagraphs() > 9,
 		"BibleTextDocument::SetVerseList: an empty list returns to the "
 		"chapter");
 }
@@ -1086,7 +1097,7 @@ TestStepsDistinguishRowsAVerseNumberCannot(SWModule* module)
 	BString listText;
 	key.setText("Genesis 1:1");	listText = key.getText();
 	key.setText("Genesis 1:2");	listText << "-" << key.getText();
-	key.setText("Psalms 1:1");	listText << ", " << key.getText();
+	key.setText("Psalms 1:1");	listText << "\n" << key.getText();
 	key.setText("Psalms 1:2");	listText << "-" << key.getText();
 
 	BibleTextDocument document(module);
@@ -1094,30 +1105,30 @@ TestStepsDistinguishRowsAVerseNumberCannot(SWModule* module)
 	document.SetKey("Genesis 1:1");
 	document.SetVerseList(listText.String());
 
-	// Four rows, two of them "verse 1" and two "verse 2".
-	bool fourRows = document.CountParagraphs() == 4
-		&& document.SequenceLength() == 4;
+	// Two headings and four verses; verse 1 occurs twice, verse 2 twice.
+	bool sixRows = document.CountParagraphs() == 6
+		&& document.SequenceLength() == 6;
 
 	// Each step finds its own row ...
 	bool stepsDistinct = true;
-	for (int32 step = 0; step < 4 && stepsDistinct; step++)
+	for (int32 step = 0; step < 6 && stepsDistinct; step++)
 		stepsDistinct = document.ParagraphIndexForStep(step) == step;
 
 	// ... while the verse number cannot: verse 1 is two different rows,
 	// and only one of them can be returned.
 	int32 firstVerseOne = document.ParagraphIndexForVerse(1);
-	bool verseIsAmbiguous = document.VerseForParagraphIndex(0) == 1
-		&& document.VerseForParagraphIndex(2) == 1
-		&& firstVerseOne == 0;
+	bool verseIsAmbiguous = document.VerseForParagraphIndex(1) == 1
+		&& document.VerseForParagraphIndex(4) == 1
+		&& firstVerseOne == 1;
 
-	if (!(fourRows && stepsDistinct && verseIsAmbiguous)) {
+	if (!(sixRows && stepsDistinct && verseIsAmbiguous)) {
 		printf("      rows=%d steps=%d verses:", (int)document.CountParagraphs(),
 			(int)document.SequenceLength());
 		for (int32 i = 0; i < document.CountParagraphs(); i++)
 			printf(" %d", document.VerseForParagraphIndex(i));
 		printf("\n");
 	}
-	Check(fourRows && stepsDistinct && verseIsAmbiguous, name);
+	Check(sixRows && stepsDistinct && verseIsAmbiguous, name);
 }
 
 // A verse list belongs to a chain, the module to the column: every
