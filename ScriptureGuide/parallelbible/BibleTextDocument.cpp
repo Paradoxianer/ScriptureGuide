@@ -89,6 +89,53 @@ struct RenderStep {
 // Without this the failure is silent and enormous rather than an error:
 // "1. Mose 1, 1-1. Mose 1, 3" comes back as 86 verses spread over three
 // ranges that include the whole of Genesis 3.
+// A section's heading, condensed the way someone studying actually
+// writes a range down -- "Psalm 1,1-2" rather than SWORD's own
+// getRangeText(), which always repeats "Psalmen 1:1-Psalmen 1:2" in
+// full and, measured, ignores locale entirely: it still reads with a
+// colon under a German locale, where the rest of this program (see
+// ParallelBibleView::_ReferenceFor()) uses a comma between chapter and
+// verse.
+//
+// first/last are the range's own endpoints, not reparsed from text --
+// _Rebuild() already has them as the first and last element of
+// `verses`, so this only ever compares numbers it was handed.
+static BString
+_CondensedRangeText(const VerseKey& first, const VerseKey& last)
+{
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+	const char* separator
+		= strcmp(language.Code(), "de") == 0 ? ", " : ":";
+
+	BString text(first.getBookName());
+	text << " " << first.getChapter() << separator << first.getVerse();
+
+	if (first.getBook() == last.getBook()
+		&& first.getChapter() == last.getChapter()
+		&& first.getVerse() == last.getVerse()) {
+		return text;			// a single verse
+	}
+
+	if (first.getBook() == last.getBook()
+		&& first.getChapter() == last.getChapter()) {
+		text << "-" << last.getVerse();		// same chapter: "1,1-2"
+		return text;
+	}
+
+	if (first.getBook() == last.getBook()) {
+		// same book, crosses a chapter: "1,1-2,1"
+		text << "-" << last.getChapter() << separator << last.getVerse();
+		return text;
+	}
+
+	// Different books: nothing to condense.
+	text << "-" << last.getBookName() << " " << last.getChapter()
+		<< separator << last.getVerse();
+	return text;
+}
+
+
 static void
 _NormalizeReferenceSeparators(BString& reference)
 {
@@ -787,7 +834,8 @@ BibleTextDocument::_Rebuild()
 			// silently pushing everything below out of true (#47).
 			RenderStep heading;
 			heading.isHeading = true;
-			heading.title = expanded.getRangeText();
+			heading.title
+				= _CondensedRangeText(verses.front(), verses.back());
 			heading.linkKey = verses[0].getText();
 			sequence.push_back(heading);
 
