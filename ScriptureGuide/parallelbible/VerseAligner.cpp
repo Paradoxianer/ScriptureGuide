@@ -24,7 +24,7 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 	// more padding on top of it every time this runs. Clear first.
 	for (size_t c = 0; c < columns.size(); c++) {
 		if (columns[c] != NULL)
-			columns[c]->SetVerseSpacing(std::map<int, float>());
+			columns[c]->SetRowSpacing(std::map<int32, float>());
 	}
 
 	// Deliberately AFTER the clear, not before it. A single column has
@@ -38,20 +38,20 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 	if (columns.size() < 2)
 		return;
 
-	int maxVerse = 0;
+	// Rows are identified by STEP -- position in what the chain asked
+	// each column to render -- not by verse number. In a chapter the two
+	// are the same thing less one; across a verse list (#47) they are
+	// not, because Genesis 1:1 and Psalms 1:1 are both verse 1. And not
+	// by paragraph index either: a Bible column leaves out verses its
+	// module has nothing for, so the same row sits at different paragraph
+	// indices in different columns.
+	int32 maxStep = 0;
 	for (size_t c = 0; c < columns.size(); c++) {
-		BibleTextDocument* document = columns[c];
-		if (document == NULL)
-			continue;
-		int32 count = document->CountParagraphs();
-		for (int32 i = 0; i < count; i++) {
-			int verse = document->VerseForParagraphIndex(i);
-			if (verse > maxVerse)
-				maxVerse = verse;
-		}
+		if (columns[c] != NULL && columns[c]->SequenceLength() > maxStep)
+			maxStep = columns[c]->SequenceLength();
 	}
 
-	std::vector<std::map<int, float> > spacing(columns.size());
+	std::vector<std::map<int32, float> > spacing(columns.size());
 
 	// Processed in groups, not one verse at a time: a linked commentary
 	// entry (see BibleTextDocument::IsLinkedToPrevious(), #10) puts its
@@ -66,10 +66,10 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 	// to the one before it; a normal, unlinked verse is its own
 	// group of one, so this reduces to the exact same per-verse
 	// alignment as before wherever nothing is linked at all.
-	int verse = 1;
-	while (verse <= maxVerse) {
-		int groupEnd = verse;
-		while (groupEnd + 1 <= maxVerse) {
+	int32 step = 0;
+	while (step < maxStep) {
+		int32 groupEnd = step;
+		while (groupEnd + 1 < maxStep) {
 			bool linked = false;
 			for (size_t c = 0; c < columns.size() && !linked; c++) {
 				if (columns[c] != NULL
@@ -98,8 +98,8 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 
 			float total = 0.0f;
 			int32 count = 0;
-			for (int v = verse; v <= groupEnd; v++) {
-				int32 index = document->ParagraphIndexForVerse(v);
+			for (int32 v = step; v <= groupEnd; v++) {
+				int32 index = document->ParagraphIndexForStep(v);
 				if (index < 0)
 					continue;
 
@@ -133,8 +133,8 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 			float perVerse = deficit / presentCount[c];
 			float assigned = 0.0f;
 			int32 remaining = presentCount[c];
-			for (int v = verse; v <= groupEnd; v++) {
-				int32 index = document->ParagraphIndexForVerse(v);
+			for (int32 v = step; v <= groupEnd; v++) {
+				int32 index = document->ParagraphIndexForStep(v);
 				if (index < 0)
 					continue;
 				remaining--;
@@ -145,11 +145,11 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 			}
 		}
 
-		verse = groupEnd + 1;
+		step = groupEnd + 1;
 	}
 
 	for (size_t c = 0; c < columns.size(); c++) {
 		if (columns[c] != NULL)
-			columns[c]->SetVerseSpacing(spacing[c]);
+			columns[c]->SetRowSpacing(spacing[c]);
 	}
 }

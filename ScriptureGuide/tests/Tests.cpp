@@ -73,7 +73,7 @@ TestBibleTextDocumentRebuildIsIdempotent(SWModule* module)
 
 	int32 firstCount = document.CountParagraphs();
 	for (int i = 0; i < 5; i++)
-		document.SetVerseSpacing(std::map<int, float>());
+		document.SetRowSpacing(std::map<int32, float>());
 
 	Check(firstCount > 0 && document.CountParagraphs() == firstCount, name);
 }
@@ -101,7 +101,7 @@ TestEmptyNotesDocumentRebuildIsIdempotent(SWModule* notesModule)
 
 	int32 firstCount = document.CountParagraphs();
 	for (int i = 0; i < 5; i++)
-		document.SetVerseSpacing(std::map<int, float>());
+		document.SetRowSpacing(std::map<int32, float>());
 	int32 afterCount = document.CountParagraphs();
 
 	Check(firstCount > 0 && afterCount == firstCount, name);
@@ -232,7 +232,7 @@ TestListenerSurvivesRepeatedRebuilds(SWModule* notesModule)
 	document.AddListener(listener);
 
 	for (int i = 0; i < 5; i++)
-		document.SetVerseSpacing(std::map<int, float>());
+		document.SetRowSpacing(std::map<int32, float>());
 
 	// Reaching this line at all (no crash) is most of the point; the
 	// "did we actually exercise the out-of-bounds case" flag just confirms
@@ -1063,6 +1063,63 @@ TestVerseListRendersItsReferencesInOrder(SWModule* module)
 		"chapter");
 }
 
+// Why rows are addressed by step rather than by verse number. In a list
+// crossing a book, several rows are "verse 1"; asking for verse 1 can
+// only ever answer with one of them, while each step answers with its
+// own row. VerseAligner writes its padding per row, so keying that by
+// verse number would land one section's padding on another section's
+// verse.
+static void
+TestStepsDistinguishRowsAVerseNumberCannot(SWModule* module)
+{
+	const char* name = "BibleTextDocument: steps address rows a verse "
+		"number cannot tell apart";
+	if (module == NULL) {
+		Skip(name, "no Bible module");
+		return;
+	}
+
+	const char* v11n = module->getConfigEntry("Versification");
+	VerseKey key;
+	key.setVersificationSystem(v11n != NULL ? v11n : "KJV");
+
+	BString listText;
+	key.setText("Genesis 1:1");	listText = key.getText();
+	key.setText("Genesis 1:2");	listText << "-" << key.getText();
+	key.setText("Psalms 1:1");	listText << ", " << key.getText();
+	key.setText("Psalms 1:2");	listText << "-" << key.getText();
+
+	BibleTextDocument document(module);
+	document.SetSkipEmptyVerses(false);
+	document.SetKey("Genesis 1:1");
+	document.SetVerseList(listText.String());
+
+	// Four rows, two of them "verse 1" and two "verse 2".
+	bool fourRows = document.CountParagraphs() == 4
+		&& document.SequenceLength() == 4;
+
+	// Each step finds its own row ...
+	bool stepsDistinct = true;
+	for (int32 step = 0; step < 4 && stepsDistinct; step++)
+		stepsDistinct = document.ParagraphIndexForStep(step) == step;
+
+	// ... while the verse number cannot: verse 1 is two different rows,
+	// and only one of them can be returned.
+	int32 firstVerseOne = document.ParagraphIndexForVerse(1);
+	bool verseIsAmbiguous = document.VerseForParagraphIndex(0) == 1
+		&& document.VerseForParagraphIndex(2) == 1
+		&& firstVerseOne == 0;
+
+	if (!(fourRows && stepsDistinct && verseIsAmbiguous)) {
+		printf("      rows=%d steps=%d verses:", (int)document.CountParagraphs(),
+			(int)document.SequenceLength());
+		for (int32 i = 0; i < document.CountParagraphs(); i++)
+			printf(" %d", document.VerseForParagraphIndex(i));
+		printf("\n");
+	}
+	Check(fourRows && stepsDistinct && verseIsAmbiguous, name);
+}
+
 int
 main()
 {
@@ -1086,6 +1143,7 @@ main()
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestVerseListRendersItsReferencesInOrder(moduleA);
+	TestStepsDistinguishRowsAVerseNumberCannot(moduleA);
 	TestOnlyRawFilesModulesAreEditable(&manager);
 	TestWritableModuleBecomesEditableColumn(&manager);
 	TestVerseAlignerIsIdempotent(moduleA, moduleB);

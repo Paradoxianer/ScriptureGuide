@@ -191,16 +191,32 @@ public:
 			int32				ParagraphIndexForVerse(int verse) const;
 			int					VerseForParagraphIndex(int32 index) const;
 
-			// True if this verse's paragraph is a continuation of the
-			// same linked commentary entry as the verse before it (see
-			// #10's linked-entry fix in _Rebuild()) -- i.e. this verse
-			// has no real text of its own here, just a share of an
-			// entry that actually covers a whole range starting at some
-			// earlier verse. VerseAligner (#10) uses this to align a
-			// whole linked span as one group instead of forcing all of
-			// that span's height onto the one verse where the real text
-			// landed. False for a verse not in this document at all.
-			bool				IsLinkedToPrevious(int verse) const;
+			// Where a paragraph sits in what this document was asked to
+			// render -- verse N of a chapter is step N-1, and step N of a
+			// verse list is its Nth reference (#47).
+			//
+			// This, not the verse number, is what identifies a ROW across
+			// the columns of a chain. Verse numbers repeat once a list
+			// crosses a book, and paragraph indices differ between
+			// columns because Bible columns skip verses a module has
+			// nothing for while notes columns keep every one. The step is
+			// the only coordinate all columns of a chain agree on, and in
+			// an ordinary chapter it is simply the verse number less one.
+			int32				SequenceLength() const
+									{ return fSequenceLength; }
+			int32				StepForParagraphIndex(int32 index) const;
+			int32				ParagraphIndexForStep(int32 step) const;
+
+			// True if the paragraph at this STEP is a continuation of the
+			// same linked commentary entry as the step before it (see
+			// #10's linked-entry fix in _Rebuild()) -- i.e. it has no
+			// real text of its own here, just a share of an entry that
+			// actually covers a whole range starting earlier.
+			// VerseAligner (#10) uses this to align a whole linked span
+			// as one group instead of forcing all of that span's height
+			// onto the one row where the real text landed. False for a
+			// step not in this document at all.
+			bool				IsLinkedToPrevious(int32 step) const;
 
 			// Text offset range covering verses startVerse..endVerse
 			// (inclusive) -- for a TextDocumentView::SetSelection() call
@@ -244,13 +260,15 @@ public:
 			// dominant cost in a chapter switch (profiling: ~90% of a
 			// switch's time was inside VerseAligner::Align(), almost all
 			// of it redundant _Rebuild() calls).
-			void				SetVerseSpacing(
-									const std::map<int, float>& spacing);
+			// Keyed by STEP, not by verse number -- see
+			// SequenceLength() for why that distinction matters.
+			void				SetRowSpacing(
+									const std::map<int32, float>& spacing);
 
 private:
 			BFont				_EffectiveFont(const BFont& baseFont) const;
 			void				_Rebuild();
-			void				_ApplyVerseSpacing();
+			void				_ApplyRowSpacing();
 			void				_SetModuleKey(VerseKey& verseKey);
 			// Locale AND versification, so a key built here counts the
 			// way the module does -- see the definition (#46).
@@ -296,12 +314,21 @@ private:
 			bool				fResolvableStrongsGreek;
 			bool				fResolvableStrongsHebrew;
 
-			// paragraph index -> verse number, rebuilt in _Rebuild()
+			// paragraph index -> verse number, rebuilt in _Rebuild().
+			// For display and for addressing a note; NOT for identifying
+			// a row across columns -- see SequenceLength().
 			std::vector<int>	fParagraphVerse;
 
-			// verse number -> IsLinkedToPrevious(), rebuilt alongside
+			// paragraph index -> step, rebuilt alongside it.
+			std::vector<int32>	fParagraphStep;
+
+			// How many steps _Rebuild() was asked to render, whether or
+			// not each produced a paragraph.
+			int32				fSequenceLength;
+
+			// step -> IsLinkedToPrevious(), rebuilt alongside
 			// fParagraphVerse in _Rebuild().
-			std::map<int, bool>	fLinkedToPrevious;
+			std::map<int32, bool>	fLinkedToPrevious;
 
 			// Document-wide [start, end) offset ranges for every
 			// reference link found across the whole chapter, rebuilt
@@ -323,8 +350,8 @@ private:
 			};
 			std::vector<StrongsLink>	fStrongsLinks;
 
-			// verse number -> extra SpacingBottom, set by VerseAligner
-			std::map<int, float> fVerseSpacingBottom;
+			// step -> extra SpacingBottom, set by VerseAligner
+			std::map<int32, float> fRowSpacingBottom;
 };
 
 #endif // BIBLE_TEXT_DOCUMENT_H

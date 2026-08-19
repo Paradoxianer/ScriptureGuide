@@ -119,6 +119,7 @@ BibleTextDocument::BibleTextDocument(SWModule* module, int singleVerse)
 	fShowStrongsNumbers(true),
 	fShowCrossReferences(true),
 	fSingleVerse(singleVerse),
+	fSequenceLength(0),
 	fParagraphsEndWithNewline(false),
 	fResolvableStrongsGreek(true),
 	fResolvableStrongsHebrew(true)
@@ -476,10 +477,34 @@ BibleTextDocument::VerseForParagraphIndex(int32 index) const
 }
 
 
-bool
-BibleTextDocument::IsLinkedToPrevious(int verse) const
+int32
+BibleTextDocument::StepForParagraphIndex(int32 index) const
 {
-	std::map<int, bool>::const_iterator it = fLinkedToPrevious.find(verse);
+	if (index < 0 || (size_t)index >= fParagraphStep.size())
+		return -1;
+	return fParagraphStep[index];
+}
+
+
+// -1 when this document rendered nothing for that step: a Bible column
+// skips verses its module has no text for (see SetSkipEmptyVerses()),
+// which is exactly why a paragraph index cannot stand in for a step.
+int32
+BibleTextDocument::ParagraphIndexForStep(int32 step) const
+{
+	for (size_t i = 0; i < fParagraphStep.size(); i++) {
+		if (fParagraphStep[i] == step)
+			return (int32)i;
+	}
+	return -1;
+}
+
+
+bool
+BibleTextDocument::IsLinkedToPrevious(int32 step) const
+{
+	std::map<int32, bool>::const_iterator it
+		= fLinkedToPrevious.find(step);
 	if (it == fLinkedToPrevious.end())
 		return false;
 	return it->second;
@@ -541,10 +566,10 @@ BibleTextDocument::StrongsNumberAt(int32 documentOffset,
 
 
 void
-BibleTextDocument::SetVerseSpacing(const std::map<int, float>& spacing)
+BibleTextDocument::SetRowSpacing(const std::map<int32, float>& spacing)
 {
-	fVerseSpacingBottom = spacing;
-	_ApplyVerseSpacing();
+	fRowSpacingBottom = spacing;
+	_ApplyRowSpacing();
 }
 
 
@@ -555,15 +580,15 @@ BibleTextDocument::SetVerseSpacing(const std::map<int, float>& spacing)
 // rebuild has populated it, so no bounds/staleness check beyond
 // CountParagraphs() itself is needed.
 void
-BibleTextDocument::_ApplyVerseSpacing()
+BibleTextDocument::_ApplyRowSpacing()
 {
 	int32 count = CountParagraphs();
 	for (int32 i = 0; i < count; i++) {
 		float spacingBottom = 0.0f;
 		if ((size_t)i < fParagraphVerse.size()) {
 			std::map<int, float>::const_iterator found
-				= fVerseSpacingBottom.find(fParagraphVerse[i]);
-			if (found != fVerseSpacingBottom.end())
+				= fRowSpacingBottom.find(fParagraphStep[i]);
+			if (found != fRowSpacingBottom.end())
 				spacingBottom = found->second;
 		}
 
@@ -602,6 +627,7 @@ BibleTextDocument::_Rebuild()
 	TextDocument::operator=(TextDocument());
 	fParagraphVerse.clear();
 	fLinkedToPrevious.clear();
+	fParagraphStep.clear();
 	fReferenceLinks.clear();
 	fStrongsLinks.clear();
 
@@ -688,6 +714,7 @@ BibleTextDocument::_Rebuild()
 			sequence.push_back(iterKey);
 		}
 	}
+	fSequenceLength = (int32)sequence.size();
 
 	// Commentary modules commonly link one entry across a whole verse
 	// range (e.g. a single comment discussing verses 13-20) rather than
@@ -768,9 +795,9 @@ BibleTextDocument::_Rebuild()
 		}
 
 		ParagraphStyle style(fParagraphStyle);
-		std::map<int, float>::const_iterator spacing
-			= fVerseSpacingBottom.find(verse);
-		if (spacing != fVerseSpacingBottom.end())
+		std::map<int32, float>::const_iterator spacing
+			= fRowSpacingBottom.find((int32)step);
+		if (spacing != fRowSpacingBottom.end())
 			style.SetSpacingBottom(spacing->second);
 
 		Paragraph paragraph(style);
@@ -899,7 +926,8 @@ BibleTextDocument::_Rebuild()
 
 		Append(paragraph);
 		fParagraphVerse.push_back(verse);
-		fLinkedToPrevious[verse] = linkedToPrevious;
+		fParagraphStep.push_back((int32)step);
+		fLinkedToPrevious[(int32)step] = linkedToPrevious;
 		documentOffset += paragraph.Length();
 
 		if (!linkedToPrevious) {
