@@ -29,7 +29,9 @@
 #include <Screen.h>
 #include <ScrollBar.h>
 #include <ScrollView.h>
+#include <LayoutBuilder.h>
 #include <StringView.h>
+#include <TextControl.h>
 #include <TextView.h>
 #include <Window.h>
 
@@ -37,6 +39,7 @@
 
 #include "ParagraphLayout.h"
 #include "SGDebug.h"
+#include "VerseListFile.h"
 #include "SwordBackend.h"
 #include "VerseAligner.h"
 #include "constants.h"
@@ -1130,6 +1133,100 @@ private:
 // ~ParallelBibleView() otherwise -- so fHeaderView there is nulled out
 // no matter which side's destructor runs first, and the other side's
 // `delete` (on an already-null pointer) is always a safe no-op.
+// A minimal name prompt for creating a verse list from the band's "New
+// list..." menu item (#47), in the same fire-and-forget-secondary-window
+// idiom SGDictionaryWindow already uses: a BMessenger back to the owner,
+// no synchronous blocking, closes itself once done.
+//
+// The file is created and written immediately on confirm -- there is no
+// "empty draft" state to represent, which sidesteps the same question
+// VerseListFile::CreateNew() already sidesteps for the same reason (see
+// its own comment): a list with nothing in it yet is indistinguishable
+// from no list at all the moment anything tries to render it, so this
+// window's whole job is making sure that never happens. It seeds the new
+// file with the chain's own current reference, which is what the user
+// was looking at when they asked for a new list in the first place.
+class NewVerseListWindow : public BWindow {
+public:
+	NewVerseListWindow(BMessenger target, int32 anchorPosition,
+		const char* seedReference, const char* versification)
+		:
+		BWindow(BRect(0, 0, 280, 0), B_TRANSLATE("New Verse List"),
+			B_TITLED_WINDOW, B_ASYNCHRONOUS_CONTROLS | B_NOT_ZOOMABLE
+				| B_AUTO_UPDATE_SIZE_LIMITS),
+		fTarget(target),
+		fAnchorPosition(anchorPosition),
+		fSeedReference(seedReference),
+		fVersification(versification)
+	{
+		fNameField = new BTextControl("listName", B_TRANSLATE("Name:"),
+			"", new BMessage(kMsgCreate));
+
+		BButton* cancel = new BButton("cancel", B_TRANSLATE("Cancel"),
+			new BMessage(B_QUIT_REQUESTED));
+		BButton* create = new BButton("create", B_TRANSLATE("Create"),
+			new BMessage(kMsgCreate));
+		create->MakeDefault(true);
+
+		BLayoutBuilder::Group<>(this, B_VERTICAL)
+			.SetInsets(B_USE_DEFAULT_SPACING)
+			.Add(fNameField)
+			.AddGroup(B_HORIZONTAL, B_USE_SMALL_SPACING)
+				.AddGlue()
+				.Add(cancel)
+				.Add(create)
+			.End()
+		.End();
+
+		cancel->SetTarget(this);
+		create->SetTarget(this);
+		fNameField->SetTarget(this);
+		fNameField->MakeFocus(true);
+
+		CenterOnScreen();
+	}
+
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->what != kMsgCreate) {
+			BWindow::MessageReceived(message);
+			return;
+		}
+
+		BString name(fNameField->Text());
+		name.Trim();
+		if (name.IsEmpty()) {
+			// Nothing worth doing with a blank name -- leave the window
+			// open rather than silently creating "Untitled list" behind
+			// the user's back (see VerseListFile::_SanitizeFileName()'s
+			// own fallback, which exists for a DIFFERENT case: a name
+			// that survives Trim() but sanitizes to nothing, e.g. "/").
+			fNameField->MakeFocus(true);
+			return;
+		}
+
+		VerseListFile list;
+		if (list.CreateNew(name.String(), fSeedReference.String(),
+				fVersification.String()) == B_OK) {
+			BMessage applied(PARALLEL_SELECT_VERSE_LIST);
+			applied.AddInt32("index", fAnchorPosition);
+			applied.AddString("path", list.Path());
+			fTarget.SendMessage(&applied);
+		}
+		PostMessage(B_QUIT_REQUESTED);
+	}
+
+private:
+	enum { kMsgCreate = 'nlcr' };
+
+	BMessenger		fTarget;
+	int32			fAnchorPosition;
+	BString			fSeedReference;
+	BString			fVersification;
+	BTextControl*	fNameField;
+};
+
+
 class ParallelHeaderView : public BView {
 public:
 	ParallelHeaderView(const char* name, uint32 flags,
@@ -1227,6 +1324,24 @@ public:
 	{
 		if (fOwner == NULL) {
 			BView::MouseDown(where);
+			return;
+		}
+
+		// The band row (_DrawChainBands()) has its own click handling --
+		// a popup listing that chain's verse lists -- and has to claim
+		// this BEFORE the reorder-drag logic below gets a look at it:
+		// the band is blank drawn background with no child view over
+		// it, exactly the condition that logic uses to recognize a
+		// reorder gesture, so without this a band click would silently
+		// start dragging the column that happens to be under it.
+		BRect bounds = Bounds();
+		if (where.y >= bounds.bottom - ParallelBibleView::kChainBandHeight) {
+			int32 index = fOwner->_ColumnIndexForX(where.x);
+			if (index >= 0) {
+				BPoint screenPoint = where;
+				ConvertToScreen(&screenPoint);
+				fOwner->_ShowChainBandMenu(index, screenPoint);
+			}
 			return;
 		}
 
@@ -1664,6 +1779,40 @@ ParallelBibleView::MessageReceived(BMessage* message)
 				BPoint where = fInsertButtons[index]->Frame().LeftBottom();
 				fHeaderView->ConvertToScreen(&where);
 				menu->Go(where, true, true, true);
+			}
+			break;
+		}
+
+		case PARALLEL_SELECT_VERSE_LIST:
+		{
+			int32 index;
+			BString path;
+			if (message->FindInt32("index", &index) == B_OK
+				&& message->FindString("path", &path) == B_OK) {
+				_ApplyVerseListFile(index, path.String());
+			}
+			break;
+		}
+
+		case PARALLEL_NEW_VERSE_LIST:
+		{
+			int32 index;
+			if (message->FindInt32("index", &index) == B_OK)
+				_OpenNewListPrompt(index);
+			break;
+		}
+
+		case PARALLEL_BACK_TO_CHAPTER:
+		{
+			int32 index;
+			if (message->FindInt32("index", &index) == B_OK) {
+				// Same reasoning as _ApplyVerseListFile(): makes that
+				// chain active (matching every other chain interaction)
+				// and, regardless of whether it already was, makes sure
+				// the toolbar's now-meaningful Book/Chapter/Verse fields
+				// get re-enabled.
+				_SetActiveColumn(index);
+				SetColumnVerseList(index, "");
 			}
 			break;
 		}
@@ -2283,17 +2432,39 @@ ParallelBibleView::_SetActiveColumn(int32 position)
 {
 	if (position < 0 || (size_t)position >= fColumnOrder.size())
 		return;
-	if (fActivePosition == position)
+	if (fActivePosition == position) {
+		// Already active -- nothing for the header tint to update, but
+		// the caller may still need the toolbar resynced (see
+		// _NotifyActiveChainStateChanged()): applying a verse list to
+		// the chain that was already active doesn't change WHICH chain
+		// is active, only what it shows, and that is exactly the case
+		// this early return must not swallow silently.
+		_NotifyActiveChainStateChanged();
 		return;
+	}
 	fActivePosition = position;
 	if (fHeaderView != NULL)
 		fHeaderView->Invalidate();
 
-	// Lets the owning window sync its own book/chapter/verse toolbar
-	// fields to this chain's own current key (see ActiveColumn()/
-	// ChainKey()) -- posted rather than called directly so this class
-	// stays unaware of what kind of window embeds it, same reasoning as
-	// SG_BIBLE elsewhere in this file.
+	_NotifyActiveChainStateChanged();
+}
+
+
+// Lets the owning window resync its book/chapter/verse toolbar fields to
+// the active chain's current state -- posted rather than called
+// directly so this class stays unaware of what kind of window embeds
+// it, same reasoning as SG_BIBLE elsewhere in this file. Called from
+// _SetActiveColumn() whenever which chain is active changes, AND
+// separately whenever a verse list is applied to or cleared from a
+// chain that was ALREADY active (_SetActiveColumn() alone would no-op
+// in that case, per its own early return above, leaving the toolbar
+// showing a stale chapter for a chain that has since switched to a
+// list -- confirmed live: applying a list to the active chain left
+// Book/Chapter/Verse standing at the chapter that chain had shown a
+// moment before).
+void
+ParallelBibleView::_NotifyActiveChainStateChanged()
+{
 	BWindow* window = Window();
 	if (window != NULL)
 		window->PostMessage(PARALLEL_ACTIVE_COLUMN_CHANGED);
@@ -2440,6 +2611,102 @@ ParallelBibleView::_ChainBands() const
 		position = _ChainEnd(position) + 1;
 	}
 	return bands;
+}
+
+
+// Builds and shows the band's popup: every verse list on disk, "New
+// list...", and -- once the chain is actually on one -- "Back to
+// chapter". Fire-and-forget, same idiom as PARALLEL_INSERT_COLUMN_MENU's
+// own popup: not owned by any BMenuField, so it cleans itself up.
+void
+ParallelBibleView::_ShowChainBandMenu(int32 anchorPosition,
+	BPoint screenPoint)
+{
+	BPopUpMenu* menu = new BPopUpMenu("chainBand", false, false);
+
+	// Read fresh every time rather than cached anywhere -- files can
+	// appear or vanish here from Tracker at any moment (see
+	// VerseListFile::ListPaths()'s own comment).
+	std::vector<BString> paths = VerseListFile::ListPaths();
+	std::vector<std::pair<BString, BString> > entries;	// name, path
+	for (size_t i = 0; i < paths.size(); i++) {
+		VerseListFile probe;
+		if (probe.SetTo(paths[i].String()) == B_OK)
+			entries.push_back(std::make_pair(BString(probe.Name()), paths[i]));
+	}
+	// By display name, the way Tracker's own Name column would read --
+	// not by path, which is alphabetized by filename instead and would
+	// disagree with it whenever sanitizing a name changed its case.
+	std::sort(entries.begin(), entries.end());
+
+	for (size_t i = 0; i < entries.size(); i++) {
+		BMessage* select = new BMessage(PARALLEL_SELECT_VERSE_LIST);
+		select->AddInt32("index", anchorPosition);
+		select->AddString("path", entries[i].second);
+		menu->AddItem(new BMenuItem(entries[i].first.String(), select));
+	}
+
+	if (!entries.empty())
+		menu->AddSeparatorItem();
+
+	BMessage* newList = new BMessage(PARALLEL_NEW_VERSE_LIST);
+	newList->AddInt32("index", anchorPosition);
+	menu->AddItem(new BMenuItem(B_TRANSLATE("New list" B_UTF8_ELLIPSIS),
+		newList));
+
+	if (!_ChainVerseList(anchorPosition).IsEmpty()) {
+		BMessage* backToChapter = new BMessage(PARALLEL_BACK_TO_CHAPTER);
+		backToChapter->AddInt32("index", anchorPosition);
+		menu->AddItem(new BMenuItem(B_TRANSLATE("Back to chapter"),
+			backToChapter));
+	}
+
+	menu->SetTargetForItems(this);
+	menu->SetAsyncAutoDestruct(true);
+	menu->Go(screenPoint, true, true, true);
+}
+
+
+// Loads `path` and applies it to the chain anchored at `anchorPosition`.
+// Also makes that chain active, matching every other way of interacting
+// with a chain (a click in a Bible column, focusing a note field, the
+// header's own MouseDown()) -- the chain the user just picked a list for
+// is the one the toolbar should now mean.
+void
+ParallelBibleView::_ApplyVerseListFile(int32 anchorPosition,
+	const char* path)
+{
+	VerseListFile list;
+	if (list.SetTo(path) != B_OK) {
+		// Deleted or moved between building the menu and choosing an
+		// item in it -- Tracker can do this at any moment. Nothing was
+		// applied yet, so there is nothing to roll back; doing nothing
+		// is the correct response, not an error dialog over a file the
+		// user may have deleted on purpose.
+		return;
+	}
+	_SetActiveColumn(anchorPosition);
+	SetColumnVerseList(anchorPosition, list.ReferenceText());
+}
+
+
+// Opens the name prompt (NewVerseListWindow), seeded with the chain's
+// own current reference and versification -- what the user was looking
+// at when they asked for a new list, and the same reasoning
+// VerseListFile::CreateNew() itself already relies on to avoid ever
+// representing a list as empty.
+void
+ParallelBibleView::_OpenNewListPrompt(int32 anchorPosition)
+{
+	BString seedKey = _ChainKey(anchorPosition);
+	if (seedKey.IsEmpty())
+		return;
+
+	const char* versification = _ChainVersification(anchorPosition);
+	NewVerseListWindow* window = new NewVerseListWindow(BMessenger(this),
+		anchorPosition, seedKey.String(),
+		versification != NULL ? versification : "");
+	window->Show();
 }
 
 

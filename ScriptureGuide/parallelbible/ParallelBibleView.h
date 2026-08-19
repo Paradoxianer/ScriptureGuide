@@ -457,6 +457,10 @@ public:
 				// comment. Only changes bookkeeping and repaints the
 				// header's tint; never touches any column's key/scroll.
 				void				_SetActiveColumn(int32 position);
+				// See the definition -- separated out so a verse list
+				// change on an already-active chain can trigger the same
+				// toolbar resync _SetActiveColumn() triggers on its own.
+				void				_NotifyActiveChainStateChanged();
 				// A follower column (no attached vertical BScrollBar, see
 				// the class comment) re-dispatches an unhandled
 				// B_MOUSE_WHEEL_CHANGED straight to its chain's driving
@@ -733,6 +737,20 @@ private:
 										float& left, float& right) const;
 				BString				_ChainBandLabel(int32 anchorPosition) const;
 				std::vector<ChainBand> _ChainBands() const;
+
+				// The band's own click handling -- a popup listing the
+				// verse lists on disk, "New list...", and "Back to
+				// chapter" -- for the chain anchored at `anchorPosition`
+				// (not necessarily the active one: clicking a chain's
+				// band acts on THAT chain). See the definitions.
+				void				_ShowChainBandMenu(
+										int32 anchorPosition,
+										BPoint screenPoint);
+				void				_ApplyVerseListFile(
+										int32 anchorPosition,
+										const char* path);
+				void				_OpenNewListPrompt(
+										int32 anchorPosition);
 				void				_ActiveChainHeaderRange(float& left,
 										float& right) const;
 

@@ -693,6 +693,16 @@ void SGMainWindow::RestoreVerseLists(void)
 		if (!lists[i].IsEmpty())
 			fParallelView->SetColumnVerseList((int32)i, lists[i].String());
 	}
+
+	// SetColumnVerseList() alone does not touch which chain is active or
+	// notify this window (RestoreColumnLayout()'s own AddColumn() calls
+	// already settled that earlier) -- so if a restored list landed on
+	// the chain that is already active, Book/Chapter/Verse would come up
+	// enabled and showing a stale chapter, the same bug fixed live for
+	// the band's own "New list"/selecting a list. Same fix, startup
+	// side: resync explicitly rather than relying on a notification
+	// nothing here posts.
+	SyncToolbarToActiveChain();
 }
 
 
@@ -1487,6 +1497,22 @@ SGMainWindow::SyncToolbarToActiveChain(void)
 
 	int32 active = fParallelView->ActiveColumn();
 	if (active < 0)
+		return;
+
+	// A chain on a verse list has no single book/chapter/verse to show
+	// (#47) -- and BibleTextDocument::SetKey() deliberately treats
+	// naming one as leaving list mode, so pushing whatever these fields
+	// last held back into the chain (which typing in them, or Next/Prev
+	// Chapter, ultimately does) would silently exit the list. Disabled
+	// instead, like any control that does not currently apply; a
+	// section heading is the way back. Confirmed live as a real bug,
+	// not a hypothetical: applying a list left these fields showing the
+	// chain's previous chapter, unchanged and still editable.
+	bool onList = !fParallelView->ChainVerseList().IsEmpty();
+	fBookMenu->SetEnabled(!onList);
+	fChapterBox->SetEnabled(!onList);
+	fVerseBox->SetEnabled(!onList);
+	if (onList)
 		return;
 
 	BString key = fParallelView->ChainKey(active);

@@ -78,6 +78,13 @@ const uint32 PARALLEL_ADD_COLUMN_MENU	= 'PVam';
 const uint32 PARALLEL_REMOVE_COLUMN	= 'PVrc';
 const uint32 PARALLEL_REORDER_COLUMN	= 'PVro';
 const uint32 PARALLEL_TOGGLE_LINK		= 'PVtl';
+
+// Clicking a chain's band (see ParallelBibleView::_ChainBands(), #47) --
+// what it shows is a list of that chain's available verse lists, "New
+// list...", and "Back to chapter" once it is on one.
+const uint32 PARALLEL_SELECT_VERSE_LIST	= 'PVsl';
+const uint32 PARALLEL_NEW_VERSE_LIST	= 'PVnl';
+const uint32 PARALLEL_BACK_TO_CHAPTER	= 'PVbc';
 const uint32 PARALLEL_INSERT_COLUMN_MENU	= 'PVic';
 const uint32 PARALLEL_INSERT_MODULE	= 'PVim';
 const uint32 PARALLEL_INSERT_NOTES		= 'PVin';
