@@ -2791,6 +2791,82 @@ ParallelBibleView::SetKey(const char* key)
 }
 
 
+// Points the active chain at a verse list instead of a chapter (#47).
+// The list belongs to the chain, the module to the column -- exactly the
+// split that already holds for a chapter -- so every column in the chain
+// renders the same references, each in its own translation or commentary,
+// still aligned row for row.
+//
+// An empty list puts the chain back on the chapter its columns were last
+// told about.
+status_t
+ParallelBibleView::SetChainVerseList(const char* listText)
+{
+	return SetColumnVerseList(fActivePosition, listText);
+}
+
+
+// Same thing for a named column's chain rather than the active one --
+// what restoring a saved layout needs, since it has to set each chain's
+// list before any of them is the active one.
+status_t
+ParallelBibleView::SetColumnVerseList(int32 position, const char* listText)
+{
+	if (position < 0 || (size_t)position >= fColumnOrder.size())
+		return B_BAD_INDEX;
+
+	int32 start = _ChainStart(position);
+	int32 end = _ChainEnd(position);
+
+	for (int32 i = start; i <= end; i++) {
+		if (fColumnOrder[i] == COLUMN_BIBLE) {
+			int32 bibleIndex = _BibleIndexForPosition(i);
+			fDocuments[bibleIndex]->SetVerseList(listText);
+			// Same reason as in SetKey(): the document is rebuilt under
+			// the selection, whose offsets meant the old contents.
+			fTextViews[bibleIndex]->SetSelection(0, 0);
+		} else if (fColumnOrder[i] == COLUMN_NOTES) {
+			NotesColumn& notes
+				= fNotesColumns[_NotesIndexForPosition(i)];
+			// Before the list, not after: how many rows each reference
+			// yields depends on it (#46).
+			notes.document->SetVersification(_ChainVersification(i));
+			notes.document->SetVerseList(listText);
+		}
+	}
+
+	_Realign();
+	_ScrollChainTo(position, 0.0f);
+	return B_OK;
+}
+
+
+// What the chain anchored at `anchorPosition` is showing, or an empty
+// string when it is showing an ordinary chapter. Read from the first
+// column that has a document, the same way _ChainKey() reads the chapter.
+BString
+ParallelBibleView::_ChainVerseList(int32 anchorPosition) const
+{
+	if (anchorPosition < 0
+		|| (size_t)anchorPosition >= fColumnOrder.size()) {
+		return BString();
+	}
+
+	int32 end = _ChainEnd(anchorPosition);
+	for (int32 i = _ChainStart(anchorPosition); i <= end; i++) {
+		if (fColumnOrder[i] == COLUMN_BIBLE) {
+			return BString(fDocuments[_BibleIndexForPosition(i)]
+				->VerseList());
+		}
+		if (fColumnOrder[i] == COLUMN_NOTES) {
+			return BString(fNotesColumns[_NotesIndexForPosition(i)]
+				.document->VerseList());
+		}
+	}
+	return BString();
+}
+
+
 void
 ParallelBibleView::HighlightVerse(int startVerse, int endVerse)
 {
@@ -2837,6 +2913,8 @@ ParallelBibleView::ColumnLayout() const
 				const char* key = fNotesColumns[notesIndex].document->Key();
 				if (key != NULL)
 					desc.key = key;
+				desc.verseList
+					= fNotesColumns[notesIndex].document->VerseList();
 				// An editable column on a module the user chose records
 				// which one, or it would come back as a plain notes
 				// column after a restart and quietly stop being the
@@ -2856,6 +2934,7 @@ ParallelBibleView::ColumnLayout() const
 				const char* key = fDocuments[bibleIndex]->Key();
 				if (key != NULL)
 					desc.key = key;
+				desc.verseList = fDocuments[bibleIndex]->VerseList();
 			}
 		}
 		desc.linkedToNext = i < fLinkedToNext.size() ? fLinkedToNext[i]

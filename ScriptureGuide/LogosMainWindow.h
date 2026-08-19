@@ -75,6 +75,8 @@ private:
 	void LoadPrefsForModule(void);
 	void SavePrefsForModule(void);
 	void RestoreColumnLayout(void);
+	// After the position restore, not inside the layout restore -- see
+	void RestoreVerseLists(void);
 	bool NeedsLineBreaks(void);
 
 	void SetModule(const TextType &module, const int32 &index);

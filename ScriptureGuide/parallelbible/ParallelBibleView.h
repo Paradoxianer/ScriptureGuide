@@ -284,6 +284,18 @@ public:
 				// _SetActiveColumn()) currently belongs to -- not
 				// necessarily every open column. See the class comment.
 				status_t			SetKey(const char* key);
+				// Points the active chain at a verse list rather than a
+				// chapter (#47) -- see the definition. Empty text
+				// returns it to its chapter.
+				status_t			SetChainVerseList(const char* listText);
+				// The same for the chain containing `position` -- what
+				// restoring a saved layout needs, before anything is
+				// the active chain.
+				status_t			SetColumnVerseList(int32 position,
+										const char* listText);
+				BString				ChainVerseList() const
+										{ return _ChainVerseList(
+											fActivePosition); }
 				status_t			NextChapter();
 				status_t			PrevChapter();
 
@@ -370,6 +382,11 @@ public:
 					BString	moduleName;
 					bool	linkedToNext;
 					BString	key;
+					// Non-empty when this column is showing a verse list
+					// rather than a chapter (#47). The key stays filled
+					// in either way, so leaving the list returns to a
+					// sensible chapter.
+					BString	verseList;
 				};
 				std::vector<ColumnDescription> ColumnLayout() const;
 
@@ -507,6 +524,8 @@ private:
 				// fLastKnownKey for a chain with no Bible column of its
 				// own (a pure notes chain).
 				BString				_ChainKey(int32 anchorPosition) const;
+				// Empty when the chain shows a chapter -- see the definition.
+				BString				_ChainVerseList(int32 anchorPosition) const;
 			// See the definition -- which canon this chain counts in.
 			const char*			_ChainVersification(int32 anchorPosition) const;
 				// Scrolls every column of the chain containing

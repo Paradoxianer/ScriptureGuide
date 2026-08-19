@@ -227,6 +227,10 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 		SetVerse(fCurrentVerse);
 	}
 
+	// Last, for the reason given on the definition: the position restore
+	// just above would otherwise undo it.
+	RestoreVerseLists();
+
 	// Everything above is "where the window opens", not navigation the
 	// user performed -- see fRestoringHistory's initializer.
 	fRestoringHistory = false;
@@ -649,14 +653,46 @@ void SGMainWindow::SavePrefsForModule(void)
 	preferences.RemoveName("columnIsNotes");
 	preferences.RemoveName("columnModule");
 	preferences.RemoveName("columnLinkedToNext");
+	preferences.RemoveName("columnVerseList");
 	std::vector<ParallelBibleView::ColumnDescription> columns
 		= fParallelView->ColumnLayout();
 	for (size_t i = 0; i < columns.size(); i++) {
 		preferences.AddBool("columnIsNotes", columns[i].isNotes);
 		preferences.AddString("columnModule", columns[i].moduleName);
 		preferences.AddBool("columnLinkedToNext", columns[i].linkedToNext);
+		preferences.AddString("columnVerseList", columns[i].verseList);
 	}
 	prefsLock.Unlock();
+}
+
+
+// Separate from RestoreColumnLayout(), and called after it rather than
+// inside it, because the constructor restores the saved book/chapter
+// between the two -- and naming a chapter deliberately leaves list mode
+// (see BibleTextDocument::SetKey()). Applied inside the layout restore,
+// a saved verse list was put in place and then immediately thrown away
+// again by the position restore, with nothing to show for it.
+void SGMainWindow::RestoreVerseLists(void)
+{
+	prefsLock.Lock();
+	type_code type = B_ANY_TYPE;
+	int32 count = 0;
+	std::vector<BString> lists;
+	if (preferences.GetInfo("columnVerseList", &type, &count) == B_OK) {
+		for (int32 i = 0; i < count; i++) {
+			BString list;
+			// Absent for anything saved before verse lists existed,
+			// which simply means "this column shows a chapter".
+			preferences.FindString("columnVerseList", i, &list);
+			lists.push_back(list);
+		}
+	}
+	prefsLock.Unlock();
+
+	for (size_t i = 0; i < lists.size(); i++) {
+		if (!lists[i].IsEmpty())
+			fParallelView->SetColumnVerseList((int32)i, lists[i].String());
+	}
 }
 
 
@@ -729,6 +765,7 @@ void SGMainWindow::RestoreColumnLayout(void)
 	// -- restore whichever gaps the saved layout actually had broken.
 	for (int32 i = 0; i + 1 < count; i++)
 		fParallelView->SetColumnLinked(i, linkedToNext[i]);
+
 }
 
 

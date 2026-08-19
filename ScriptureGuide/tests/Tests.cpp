@@ -1120,6 +1120,63 @@ TestStepsDistinguishRowsAVerseNumberCannot(SWModule* module)
 	Check(fourRows && stepsDistinct && verseIsAmbiguous, name);
 }
 
+// A verse list belongs to a chain, the module to the column: every
+// column of the chain shows the same references, each in its own text,
+// and a chain that was split off keeps its chapter (#47).
+static void
+TestChainVerseListAppliesToItsChainOnly(SWMgr* manager, SWModule* moduleA,
+	SWModule* moduleB)
+{
+	const char* name = "ParallelBibleView::SetColumnVerseList: the list "
+		"belongs to its chain and leaves the other one alone";
+	if (manager == NULL || moduleA == NULL || moduleB == NULL) {
+		Skip(name, "need two distinct Bible modules installed");
+		return;
+	}
+
+	const char* v11n = moduleA->getConfigEntry("Versification");
+	VerseKey key;
+	key.setVersificationSystem(v11n != NULL ? v11n : "KJV");
+	BString listText;
+	key.setText("Genesis 1:1");	listText = key.getText();
+	key.setText("Genesis 1:2");	listText << "-" << key.getText();
+	key.setText("Psalms 1:1");	listText << ", " << key.getText();
+
+	ParallelBibleView view("testChainList", manager, 900.0f);
+	view.AddColumn(moduleA->getName());
+	view.AddColumn(moduleB->getName());
+	view.AddColumn(moduleA->getName());
+	// Break the chain before the last column, so there are two chains.
+	view.SetColumnLinked(1, false);
+
+	view.SetColumnVerseList(0, listText.String());
+
+	std::vector<ParallelBibleView::ColumnDescription> layout
+		= view.ColumnLayout();
+	bool ok = layout.size() == 3
+		// Both columns of the first chain took the list ...
+		&& layout[0].verseList == listText
+		&& layout[1].verseList == listText
+		// ... and the chain beyond the break did not.
+		&& layout[2].verseList.IsEmpty();
+
+	if (!ok && layout.size() == 3) {
+		for (size_t i = 0; i < 3; i++) {
+			printf("      column %d: \"%s\"\n", (int)i,
+				layout[i].verseList.String());
+		}
+	}
+	Check(ok, name);
+
+	// And an empty list returns the chain to its chapter.
+	view.SetColumnVerseList(0, "");
+	layout = view.ColumnLayout();
+	Check(layout.size() == 3 && layout[0].verseList.IsEmpty()
+			&& layout[1].verseList.IsEmpty(),
+		"ParallelBibleView::SetColumnVerseList: an empty list returns "
+		"the chain to its chapter");
+}
+
 int
 main()
 {
@@ -1154,6 +1211,7 @@ main()
 	TestDisconnectingColumnClearsStaleSpacing(&manager, moduleA, moduleB);
 	TestRemoveMiddleColumnRelinksNeighbors(&manager, moduleA, moduleB);
 	TestSplitChainKeepsOtherChainUnaffected(&manager, moduleA, moduleB);
+	TestChainVerseListAppliesToItsChainOnly(&manager, moduleA, moduleB);
 	TestMoveColumnPreservesEachColumnsOwnKey(&manager, moduleA, moduleB);
 
 	PersonalNotesModule notes;
