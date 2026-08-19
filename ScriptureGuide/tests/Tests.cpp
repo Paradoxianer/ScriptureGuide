@@ -17,6 +17,7 @@
 
 #include <Application.h>
 #include <Entry.h>
+#include <File.h>
 #include <String.h>
 
 #include <markupfiltmgr.h>
@@ -1244,6 +1245,85 @@ TestVerseListFileRoundTrips()
 	BEntry(second.Path()).Remove();
 }
 
+// The point of moving name/description/versification into the file's
+// own content: strip the attributes -- simulating a zip, an email
+// attachment, or a copy to a non-BFS filesystem, every one of which
+// drops BFS attributes but never the bytes of the file itself -- and
+// everything must still read back correctly from the body alone.
+static void
+TestVerseListFileSurvivesLosingItsAttributes()
+{
+	const char* name = "VerseListFile: name/description/versification "
+		"survive the file's attributes being stripped";
+
+	VerseListFile list;
+	status_t status = list.CreateNew("__unit_test_portable__",
+		"Genesis 1:1", "German");
+	if (status != B_OK) {
+		Skip(name, "could not create a list file");
+		return;
+	}
+	list.SetDescription("would vanish if this only lived in an attribute");
+	list.Save();
+
+	// Read the file back as a stream of bytes, the way an email
+	// attachment or a zip extraction would deliver it, and write those
+	// SAME bytes into a fresh file that never had attributes at all.
+	BFile source(list.Path(), B_READ_ONLY);
+	off_t size = 0;
+	source.GetSize(&size);
+	char* buffer = new char[size];
+	source.Read(buffer, size);
+	source.Unset();
+
+	BString strippedPath(list.Path());
+	strippedPath << ".stripped";
+	BFile stripped(strippedPath.String(),
+		B_READ_WRITE | B_CREATE_FILE | B_ERASE_FILE);
+	stripped.Write(buffer, size);
+	stripped.Unset();
+	delete[] buffer;
+	// No WriteAttrString() call at all above -- this file has content
+	// only, exactly like one that arrived from outside BFS.
+
+	VerseListFile reloaded;
+	status = reloaded.SetTo(strippedPath.String());
+
+	bool ok = status == B_OK
+		&& BString(reloaded.Name()) == "__unit_test_portable__"
+		&& BString(reloaded.Description())
+			== "would vanish if this only lived in an attribute"
+		&& BString(reloaded.Versification()) == "German"
+		&& reloaded.EntryCount() == 1;
+
+	if (!ok) {
+		printf("      name=\"%s\" desc=\"%s\" v11n=\"%s\" count=%d\n",
+			reloaded.Name(), reloaded.Description(),
+			reloaded.Versification(), (int)reloaded.EntryCount());
+	}
+	Check(ok, name);
+
+	// And a file with no header at all -- the plain, hand-typed case --
+	// still works, with sensible fallbacks rather than an error.
+	BString barePath(list.Path());
+	barePath << ".bare";
+	BFile bare(barePath.String(), B_READ_WRITE | B_CREATE_FILE | B_ERASE_FILE);
+	BString bareText("Genesis 1:1\nPsalms 1:1");
+	bare.Write(bareText.String(), bareText.Length());
+	bare.Unset();
+
+	VerseListFile bareList;
+	status = bareList.SetTo(barePath.String());
+	Check(status == B_OK && bareList.EntryCount() == 2
+			&& !BString(bareList.Name()).IsEmpty(),
+		"VerseListFile: a header-less file is still a valid list, "
+		"named after itself");
+
+	BEntry(list.Path()).Remove();
+	BEntry(strippedPath.String()).Remove();
+	BEntry(barePath.String()).Remove();
+}
+
 int
 main()
 {
@@ -1280,6 +1360,7 @@ main()
 	TestSplitChainKeepsOtherChainUnaffected(&manager, moduleA, moduleB);
 	TestChainVerseListAppliesToItsChainOnly(&manager, moduleA, moduleB);
 	TestVerseListFileRoundTrips();
+	TestVerseListFileSurvivesLosingItsAttributes();
 	TestMoveColumnPreservesEachColumnsOwnKey(&manager, moduleA, moduleB);
 
 	PersonalNotesModule notes;

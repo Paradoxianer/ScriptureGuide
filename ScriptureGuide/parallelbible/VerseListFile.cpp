@@ -115,6 +115,67 @@ VerseListFile::ListPaths()
 }
 
 
+// The three recognized header lines. Matched by prefix, order-
+// independent, and optional -- a file with none of these is still a
+// valid list, exactly the plain "one reference per line" file this
+// class always accepted.
+static const char* kHeaderName = "# Name: ";
+static const char* kHeaderDescription = "# Description: ";
+static const char* kHeaderVersification = "# Versification: ";
+
+
+// Splits raw file content into header fields and reference-only text.
+// Shared between SetTo() (parsing) and nothing else -- Save() has its
+// own, much simpler composer, since round-tripping through the same
+// function in both directions would mean tolerating on read whatever
+// quirks a human editing the file by hand introduces, which is the
+// point, but writing should always produce the one clean canonical
+// form rather than preserving those quirks.
+void
+VerseListFile::_ParseBody(const BString& body, BString& name,
+	BString& description, BString& versification, BString& referenceText)
+{
+	name = "";
+	description = "";
+	versification = "";
+	referenceText = "";
+
+	int32 lineStart = 0;
+	while (lineStart <= body.Length()) {
+		int32 lineEnd = body.FindFirst("\n", lineStart);
+		if (lineEnd < 0)
+			lineEnd = body.Length();
+
+		BString line;
+		body.CopyInto(line, lineStart, lineEnd - lineStart);
+
+		if (line.StartsWith(kHeaderName))
+			name = line.String() + strlen(kHeaderName);
+		else if (line.StartsWith(kHeaderDescription))
+			description = line.String() + strlen(kHeaderDescription);
+		else if (line.StartsWith(kHeaderVersification))
+			versification = line.String() + strlen(kHeaderVersification);
+		else {
+			BString trimmed(line);
+			trimmed.Trim();
+			// Blank lines and anything else starting with "#" (room for
+			// a comment a human adds by hand, or a header line this
+			// version doesn't recognize) are skipped rather than turned
+			// into a reference SWORD would then fail to parse.
+			if (!trimmed.IsEmpty() && trimmed.ByteAt(0) != '#') {
+				if (!referenceText.IsEmpty())
+					referenceText << "\n";
+				referenceText << line;
+			}
+		}
+
+		if (lineEnd >= body.Length())
+			break;
+		lineStart = lineEnd + 1;
+	}
+}
+
+
 status_t
 VerseListFile::SetTo(const char* path)
 {
@@ -125,26 +186,47 @@ VerseListFile::SetTo(const char* path)
 
 	fPath = path;
 
-	if (file.ReadAttrString(kAttrName, &fName) != B_OK)
-		fName = "";
-	if (file.ReadAttrString(kAttrDescription, &fDescription) != B_OK)
-		fDescription = "";
-	if (file.ReadAttrString(kAttrVersification, &fVersification) != B_OK)
-		fVersification = "";
-
 	off_t size = 0;
 	file.GetSize(&size);
-	fReferenceText = "";
+	BString body;
 	if (size > 0) {
 		char* buffer = new(std::nothrow) char[size + 1];
 		if (buffer != NULL) {
 			ssize_t bytesRead = file.Read(buffer, size);
 			if (bytesRead > 0) {
 				buffer[bytesRead] = '\0';
-				fReferenceText = buffer;
+				body = buffer;
 			}
 			delete[] buffer;
 		}
+	}
+
+	_ParseBody(body, fName, fDescription, fVersification, fReferenceText);
+
+	// The header lines are the source of truth; an attribute is only
+	// consulted for whatever the content left blank -- a file that
+	// arrived from somewhere its attributes did not survive, or one
+	// written by hand with no header at all.
+	BString attrValue;
+	if (fName.IsEmpty() && file.ReadAttrString(kAttrName, &attrValue) == B_OK)
+		fName = attrValue;
+	if (fDescription.IsEmpty()
+		&& file.ReadAttrString(kAttrDescription, &attrValue) == B_OK) {
+		fDescription = attrValue;
+	}
+	if (fVersification.IsEmpty()
+		&& file.ReadAttrString(kAttrVersification, &attrValue) == B_OK) {
+		fVersification = attrValue;
+	}
+
+	// Still nothing: fall back to the filename itself, which -- unlike
+	// an attribute -- is exactly as portable as the file is.
+	if (fName.IsEmpty()) {
+		BPath p(path);
+		fName = p.Leaf();
+		int32 dot = fName.FindLast(".sgvl");
+		if (dot >= 0)
+			fName.Truncate(dot);
 	}
 
 	return B_OK;
@@ -274,8 +356,30 @@ VerseListFile::Save()
 	if (status != B_OK)
 		return status;
 
-	file.Write(fReferenceText.String(), fReferenceText.Length());
+	// The header, then the references -- the canonical form _ParseBody()
+	// reads back exactly. Name is always written, even when it matches
+	// the filename, so the file remains self-describing on its own once
+	// separated from that filename (renamed, pasted elsewhere, quoted in
+	// a forum post). Description only when there is one, so a plain list
+	// stays a plain list instead of growing a blank line. Versification
+	// always written, defaulting to KJV when unset -- exactly the
+	// convention BibleTextDocument::_PrepareKey() already uses for a
+	// module that declares none, so an unlabeled list means the same
+	// thing here that it would mean anywhere else in this program.
+	BString body;
+	body << "# Name: " << fName << "\n";
+	if (!fDescription.IsEmpty())
+		body << "# Description: " << fDescription << "\n";
+	body << "# Versification: "
+		<< (fVersification.IsEmpty() ? "KJV" : fVersification) << "\n";
+	if (!fReferenceText.IsEmpty())
+		body << fReferenceText;
 
+	file.Write(body.String(), body.Length());
+
+	// Written after the content, and only as a cache for Tracker's
+	// benefit -- SetTo() never trusts these over what it just parsed
+	// from the body above.
 	file.WriteAttrString(kAttrName, &fName);
 	file.WriteAttrString(kAttrDescription, &fDescription);
 	file.WriteAttrString(kAttrVersification, &fVersification);

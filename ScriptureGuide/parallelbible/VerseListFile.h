@@ -13,9 +13,31 @@
 
 // A named, ordered collection of references, kept as one plain-text file
 // under settings/scriptureguide/lists/ (#47) -- a reading plan, a lesson,
-// a topical study. One reference per line, in the form
-// BibleTextDocument::SetVerseList() already parses; the file body IS the
-// list text, nothing to translate between the two.
+// a topical study.
+//
+// Name, description and versification live in the file's own content, as
+// three optional "# Name: ...", "# Description: ...", "# Versification:
+// ..." lines before the references, NOT only as BFS attributes. BFS
+// attributes do not survive a zip, an email attachment, a copy to a
+// non-BFS filesystem or a paste into a forum post -- every one of which
+// is an ordinary way to share a study plan -- so a file whose metadata
+// lived only there would arrive elsewhere as a bare, uncounted list of
+// references with no explanation and, worse, no recorded versification:
+// exactly the silent misreading #46 exists to prevent, reopened for
+// every list anyone shares.
+//
+// Attributes are still written on Save(), as a cache: they are what lets
+// a folder of many lists show Tracker columns without opening and
+// parsing every file. SetTo() always reads the content first and treats
+// it as authoritative; an attribute is consulted only where the content
+// says nothing (a file with no header at all -- which is deliberately
+// still a valid, minimal list, exactly the plain "one reference per
+// line" file described below).
+//
+// One reference per line otherwise, in the form
+// BibleTextDocument::SetVerseList() already parses. ReferenceText()
+// returns only those lines -- the header, if any, is stripped out, so
+// nothing downstream has to learn to recognize it.
 //
 // Deliberately a file, not a SWORD module: every SWORD module answers
 // "what text belongs to this key", and a verse list is the inverse -- a
@@ -92,6 +114,14 @@ public:
 
 private:
 			BString				_SanitizeFileName(const char* name) const;
+			// Splits raw file content into header fields and reference-
+			// only text -- see the definition for the header format and
+			// why parsing and composing are deliberately not the same
+			// function.
+			static void			_ParseBody(const BString& body,
+									BString& name, BString& description,
+									BString& versification,
+									BString& referenceText);
 
 private:
 			BString				fPath;
