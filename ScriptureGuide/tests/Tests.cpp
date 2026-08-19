@@ -1004,6 +1004,65 @@ TestWritableModuleBecomesEditableColumn(SWMgr* manager)
 	Check(ok, name);
 }
 
+// A verse list renders the references it names, in the order it names
+// them, crossing books -- the foundation of #47. A chapter becomes the
+// special case "every verse of this chapter".
+//
+// The list text is built from the module's own keys rather than written
+// out as "Ge 1:1-1:3", so it parses whatever locale the test runs under:
+// book names are localized, and a German system does not know "Ge".
+static void
+TestVerseListRendersItsReferencesInOrder(SWModule* module)
+{
+	const char* name = "BibleTextDocument::SetVerseList: renders the "
+		"listed references, in order, across books";
+	if (module == NULL) {
+		Skip(name, "no Bible module");
+		return;
+	}
+
+	const char* v11n = module->getConfigEntry("Versification");
+	VerseKey key;
+	key.setVersificationSystem(v11n != NULL ? v11n : "KJV");
+
+	BString first, second, third;
+	key.setText("Genesis 1:1");	first = key.getText();
+	key.setText("Genesis 1:3");	first << "-" << key.getText();
+	key.setText("Psalms 1:1");	second = key.getText();
+	key.setText("Psalms 1:2");	second << "-" << key.getText();
+	key.setText("Matthew 1:1");	third = key.getText();
+
+	BString listText;
+	listText << first << ", " << second << ", " << third;
+
+	BibleTextDocument document(module);
+	document.SetSkipEmptyVerses(false);
+	document.SetKey("Genesis 1:1");
+	document.SetVerseList(listText.String());
+
+	// Three verses of Genesis, two psalms, one of Matthew.
+	int32 count = document.CountParagraphs();
+	int expected[] = { 1, 2, 3, 1, 2, 1 };
+	bool orderOk = count == 6;
+	for (int32 i = 0; orderOk && i < count; i++)
+		orderOk = document.VerseForParagraphIndex(i) == expected[i];
+
+	if (!orderOk) {
+		printf("      \"%s\" -> %d paragraphs:", listText.String(),
+			(int)count);
+		for (int32 i = 0; i < count && i < 12; i++)
+			printf(" %d", document.VerseForParagraphIndex(i));
+		printf("\n");
+	}
+	Check(orderOk, name);
+
+	// And an empty list goes back to being a chapter.
+	document.SetVerseList("");
+	Check(document.CountParagraphs() > 6,
+		"BibleTextDocument::SetVerseList: an empty list returns to the "
+		"chapter");
+}
+
 int
 main()
 {
@@ -1026,6 +1085,7 @@ main()
 
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
+	TestVerseListRendersItsReferencesInOrder(moduleA);
 	TestOnlyRawFilesModulesAreEditable(&manager);
 	TestWritableModuleBecomesEditableColumn(&manager);
 	TestVerseAlignerIsIdempotent(moduleA, moduleB);

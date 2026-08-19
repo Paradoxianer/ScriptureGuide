@@ -82,6 +82,20 @@ public:
 			// (#46). NULL or empty restores the module's own.
 			void				SetVersification(const char* versification);
 
+			// Renders an arbitrary, ordered sequence of references
+			// instead of one chapter -- "Ge 1:1-2:1, Ps 1:1-1:10", the
+			// form SWORD itself parses and people already write by hand
+			// (#47). Ranges are expanded and kept in the order given,
+			// crossing books freely. Empty text goes back to rendering
+			// the chapter SetKey() named.
+			//
+			// Parsed in this document's versification, so a list written
+			// against a German-counted Bible means the verses it says
+			// (see _PrepareKey() and #46).
+			void				SetVerseList(const char* listText);
+			const char*			VerseList() const
+									{ return fVerseListText.String(); }
+
 			void				SetShowVerseNumbers(bool show);
 			bool				ShowVerseNumbers() const
 									{ return fShowVerseNumbers; }
@@ -245,6 +259,8 @@ private:
 private:
 			SWModule*			fModule;
 			BString				fVersification;
+			// Empty for an ordinary chapter -- see SetVerseList().
+			BString				fVerseListText;
 
 			// This document's OWN current position, independent of
 			// fModule's own (shared, mutable) key state -- see the class

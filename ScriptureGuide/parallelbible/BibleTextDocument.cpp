@@ -5,6 +5,8 @@
 
 #include "BibleTextDocument.h"
 
+#include <listkey.h>
+
 #include <algorithm>
 #include <cstdio>
 
@@ -80,6 +82,17 @@ BibleTextDocument::_PrepareKey(VerseKey& key) const
 	key.setVersificationSystem(versification != NULL
 		&& versification[0] != '\0' ? versification : "KJV");
 	SetVerseKeyLocale(key);
+}
+
+
+void
+BibleTextDocument::SetVerseList(const char* listText)
+{
+	BString wanted(listText != NULL ? listText : "");
+	if (wanted == fVerseListText)
+		return;
+	fVerseListText = wanted;
+	_Rebuild();
 }
 
 
@@ -240,6 +253,12 @@ BibleTextDocument::SetKey(const char* key)
 	// afterward -- which is exactly what ParallelBibleView::SetKey() uses
 	// to scroll straight to the requested verse.
 	_SetModuleKey(verseKey);
+
+	// Naming a chapter leaves list mode. That is how you get out of a
+	// verse list -- clicking one of its section headings navigates here
+	// (#47) -- and it keeps "what does this document show" answerable by
+	// one thing rather than two that could disagree.
+	fVerseListText = "";
 
 	_Rebuild();
 	return B_OK;
@@ -641,6 +660,35 @@ BibleTextDocument::_Rebuild()
 		verseCount = fSingleVerse;
 	}
 
+	// What this document renders, as an explicit sequence of keys rather
+	// than a run of verse numbers: a chapter is now just the sequence
+	// "every verse of this chapter", and a verse list (#47) is any other
+	// sequence, freely crossing books. Built up front so everything below
+	// stays one loop over one sequence instead of growing a second copy
+	// for the list case.
+	//
+	// SWORD parses the list itself, in this module's versification (see
+	// _PrepareKey()) -- "Ge 1:1-2:1, Ps 1:1-1:10" comes back as the
+	// individual verses of those ranges, in the order written.
+	std::vector<VerseKey> sequence;
+	if (!fVerseListText.IsEmpty()) {
+		VerseKey parser;
+		_PrepareKey(parser);
+		ListKey list = parser.parseVerseList(fVerseListText.String(),
+			savedKeyText.String(), true);
+		for (list.setPosition(TOP); !list.popError(); list++) {
+			VerseKey element;
+			_PrepareKey(element);
+			element.setText(list.getText());
+			sequence.push_back(element);
+		}
+	} else {
+		for (int verse = firstVerse; verse <= verseCount; verse++) {
+			iterKey.setVerse(verse);
+			sequence.push_back(iterKey);
+		}
+	}
+
 	// Commentary modules commonly link one entry across a whole verse
 	// range (e.g. a single comment discussing verses 13-20) rather than
 	// storing separate text per verse; renderText() then returns the
@@ -661,8 +709,11 @@ BibleTextDocument::_Rebuild()
 	// document-wide one.
 	int32 documentOffset = 0;
 
-	for (int verse = firstVerse; verse <= verseCount; verse++) {
-		iterKey.setVerse(verse);
+	for (size_t step = 0; step < sequence.size(); step++) {
+		// Same versification on both sides, so this is an exact
+		// repositioning rather than a mapping.
+		iterKey.positionFrom(sequence[step]);
+		int verse = iterKey.getVerse();
 		fModule->setKey(iterKey);
 
 		bool linkedToPrevious = havePreviousEntry
@@ -860,6 +911,6 @@ BibleTextDocument::_Rebuild()
 	_SetModuleKey(savedKey);
 
 	SG_LOG("[SG-PERF] BibleTextDocument::_Rebuild this=%p "
-		"verses=%d elapsed=%.2fms\n", (void*)this, verseCount,
+		"verses=%d elapsed=%.2fms\n", (void*)this, (int)sequence.size(),
 		(system_time() - rebuildStart) / 1000.0);
 }
