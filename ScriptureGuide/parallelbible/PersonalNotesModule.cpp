@@ -5,6 +5,8 @@
 
 #include "PersonalNotesModule.h"
 
+#include <string.h>
+
 #include <Directory.h>
 #include <Entry.h>
 #include <FindDirectory.h>
@@ -31,10 +33,21 @@ SetVerseKeyLocale(VerseKey& key)
 }
 
 
+bool
+IsEditableVerseModule(SWModule* module)
+{
+	if (module == NULL || !module->isWritable())
+		return false;
+	const char* driver = module->getConfigEntry("ModDrv");
+	return driver != NULL && strcmp(driver, "RawFiles") == 0;
+}
+
+
 PersonalNotesModule::PersonalNotesModule(const char* versification)
 	:
 	fVersification(versification),
-	fModule(NULL)
+	fModule(NULL),
+	fOwnsModule(true)
 {
 	BPath path;
 	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path, true) == B_OK) {
@@ -56,15 +69,30 @@ PersonalNotesModule::PersonalNotesModule(const char* versification)
 }
 
 
+// Borrows a module the SWMgr owns. No path, so Open() has nothing to
+// create and nothing to migrate, and the destructor must not delete it.
+PersonalNotesModule::PersonalNotesModule(SWModule* module)
+	:
+	fModule(module),
+	fOwnsModule(false)
+{
+}
+
+
 PersonalNotesModule::~PersonalNotesModule()
 {
-	delete fModule;
+	if (fOwnsModule)
+		delete fModule;
 }
 
 
 status_t
 PersonalNotesModule::Open()
 {
+	// A borrowed module arrived open; there is nothing here to build.
+	if (!fOwnsModule)
+		return fModule != NULL ? B_OK : B_NO_INIT;
+
 	if (fPath.IsEmpty())
 		return B_ERROR;
 

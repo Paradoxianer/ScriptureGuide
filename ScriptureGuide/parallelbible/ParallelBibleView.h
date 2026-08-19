@@ -59,6 +59,11 @@ class ParallelHeaderView;
 struct NotesColumn {
 	BReference<BibleTextDocument>	document;
 	NotesDisplayView*				view;
+	// Which writable module this column edits. Not owned -- see
+	// ParallelBibleView::_NotesBackendFor(), which keeps one backend per
+	// module so two columns on the same one cannot end up with two
+	// wrappers writing the same files.
+	PersonalNotesModule*			notes;
 };
 
 
@@ -636,7 +641,20 @@ private:
 				float				_NotesSplitDividerX() const;
 				status_t			_SetColumnToBible(int32 position,
 										const char* moduleName);
-				status_t			_SetColumnToNotes(int32 position);
+				// `module` NULL means our own notes module; anything else
+				// is a writable module the user picked from the dropdown
+				// (see IsEditableVerseModule()), edited in place.
+				status_t			_SetColumnToNotes(int32 position,
+										SWModule* module = NULL);
+				// One backend per module, created on first use. NULL
+				// asks for our own notes module.
+				PersonalNotesModule* _NotesBackendFor(SWModule* module);
+				// Header label and which dropdown entry is ticked -- see
+				// the definition; an editable column names its module.
+				void				_ColumnMenuLabels(size_t index,
+										BString& label,
+										BString& markedModule,
+										bool& markNotes) const;
 				// Builds a fresh notes column's whole-chapter, editable
 				// display document -- wraps fNotes->Module() (see the
 				// class comment), seeds it with seedAnchorPosition's own
@@ -646,7 +664,8 @@ private:
 				// which position's chain the new column should seed
 				// from/join. Requires fNotes to already be open.
 				BReference<BibleTextDocument> _BuildNotesDocument(
-										int32 seedAnchorPosition);
+										int32 seedAnchorPosition,
+										PersonalNotesModule* backend);
 				// Detaches and deletes notes.view, if any -- cascades to
 				// its active overlay editor child, if any (see ~BView())
 				// -- and its wrapping BScrollView, leaving notes.view
@@ -731,6 +750,11 @@ private:
 				// class comment. Opened when the first notes column
 				// anywhere is created, closed when the last one is removed.
 				PersonalNotesModule*	fNotes;
+				// Backends for writable modules the SWMgr owns (SWORD's
+				// "Personal" commentary and anything else declaring
+				// ModDrv=RawFiles). Owned here, one per module; the
+				// modules themselves belong to fManager.
+				std::vector<PersonalNotesModule*>	fBorrowedNotes;
 
 				// One entry per COLUMN_NOTES slot in fColumnOrder, same
 				// left-to-right order.
