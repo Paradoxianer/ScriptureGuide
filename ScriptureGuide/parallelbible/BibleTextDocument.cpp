@@ -57,6 +57,29 @@ SetVerseKeyLocale(VerseKey& key)
 	key.setLocale(language.Code());
 }
 
+// Prepares a key to speak the module's language AND to count in its
+// versification. A default-constructed VerseKey is always KJV, and
+// without the second half a chapter was measured with KJV's verse
+// numbers whatever the module actually used: German counting gives
+// Malachi 3 twenty-four verses against KJV's eighteen, and the last six
+// were simply never rendered, with nothing on screen to suggest anything
+// was missing (#46). Lookup was never the problem -- SWModule::setKey()
+// maps a key into the module's own system by itself -- only the counting
+// and the arithmetic done on the key here.
+void
+BibleTextDocument::_PrepareKey(VerseKey& key) const
+{
+	const char* versification = fModule != NULL
+		? fModule->getConfigEntry("Versification") : NULL;
+	// A module that declares none counts in KJV, which is what a fresh
+	// key already does; saying so explicitly keeps the answer in one
+	// place rather than resting on that default.
+	key.setVersificationSystem(versification != NULL
+		&& versification[0] != '\0' ? versification : "KJV");
+	SetVerseKeyLocale(key);
+}
+
+
 
 BibleTextDocument::BibleTextDocument(SWModule* module, int singleVerse)
 	:
@@ -126,7 +149,7 @@ BibleTextDocument::BookName() const
 {
 	if (fModule == NULL)
 		return NULL;
-	SetVerseKeyLocale(fDisplayKey);
+	_PrepareKey(fDisplayKey);
 	fDisplayKey.setText(fKeyText.String());
 	return fDisplayKey.getBookName();
 }
@@ -137,7 +160,7 @@ BibleTextDocument::Chapter() const
 {
 	if (fModule == NULL)
 		return 0;
-	SetVerseKeyLocale(fDisplayKey);
+	_PrepareKey(fDisplayKey);
 	fDisplayKey.setText(fKeyText.String());
 	return fDisplayKey.getChapter();
 }
@@ -148,7 +171,7 @@ BibleTextDocument::Verse() const
 {
 	if (fModule == NULL)
 		return 0;
-	SetVerseKeyLocale(fDisplayKey);
+	_PrepareKey(fDisplayKey);
 	fDisplayKey.setText(fKeyText.String());
 	return fDisplayKey.getVerse();
 }
@@ -167,6 +190,9 @@ void
 BibleTextDocument::_SetModuleKey(VerseKey& verseKey)
 {
 	fModule->setKey(verseKey);
+	// Locale only: this is the module's OWN key, which already counts in
+	// the module's versification by definition, and re-setting the system
+	// on a live key can move it.
 	SetVerseKeyLocale(*(VerseKey*)fModule->getKey());
 	fKeyText = fModule->getKeyText();
 }
@@ -188,7 +214,7 @@ BibleTextDocument::SetKey(const char* key)
 	// John" 1:1 instead. Locale has to be set before either parse, not
 	// just the second one.
 	VerseKey verseKey;
-	SetVerseKeyLocale(verseKey);
+	_PrepareKey(verseKey);
 	verseKey.setText(fKeyText.String());
 	verseKey.setText(key);
 	// Deliberately not forcing verse 1 here, unlike SetChapter()/Next/
@@ -211,7 +237,7 @@ BibleTextDocument::SetChapter(const char* book, int chapter)
 		return B_NO_INIT;
 
 	VerseKey verseKey;
-	SetVerseKeyLocale(verseKey);
+	_PrepareKey(verseKey);
 	verseKey.setText(fKeyText.String());
 	if (book != NULL)
 		verseKey.setBookName(book);
@@ -231,7 +257,7 @@ BibleTextDocument::NextChapter()
 		return B_NO_INIT;
 
 	VerseKey verseKey;
-	SetVerseKeyLocale(verseKey);
+	_PrepareKey(verseKey);
 	verseKey.setText(fKeyText.String());
 	verseKey.setChapter(verseKey.getChapter() + 1);
 	verseKey.setVerse(1);
@@ -249,7 +275,7 @@ BibleTextDocument::PrevChapter()
 		return B_NO_INIT;
 
 	VerseKey verseKey;
-	SetVerseKeyLocale(verseKey);
+	_PrepareKey(verseKey);
 	verseKey.setText(fKeyText.String());
 	verseKey.setChapter(verseKey.getChapter() - 1);
 	verseKey.setVerse(1);
@@ -582,11 +608,11 @@ BibleTextDocument::_Rebuild()
 		(void*)fModule, fKeyText.String(), fModule->getKeyText());
 	BString savedKeyText(fKeyText);
 	VerseKey savedKey;
-	SetVerseKeyLocale(savedKey);
+	_PrepareKey(savedKey);
 	savedKey.setText(savedKeyText.String());
 
 	VerseKey iterKey;
-	SetVerseKeyLocale(iterKey);
+	_PrepareKey(iterKey);
 	iterKey.setText(savedKeyText.String());
 	int verseCount = iterKey.getVerseMax();
 
