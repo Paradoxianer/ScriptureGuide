@@ -941,6 +941,27 @@ private:
 		// on whichever chain is active at the time it actually runs.
 		fOwner->_SetActiveColumn(fPosition);
 
+		// If this chain is showing a verse list, the drop means "add
+		// this to my list" and navigating would throw the list away
+		// (#52). Every "key" the message carries, not just the one
+		// parsed above: a multi-select drag out of the search window
+		// delivers one per selected result, while the text/plain
+		// fallback path only ever yields the first line.
+		std::vector<BString> keys;
+		const char* key;
+		for (int32 i = 0; message->FindString("key", i, &key) == B_OK; i++)
+			keys.push_back(BString(key));
+		if (keys.empty())
+			keys.push_back(reference);
+
+		const char* sourceVersification = NULL;
+		message->FindString("scriptureguide:versification",
+			&sourceVersification);
+		if (fOwner->AppendDroppedReferences(fPosition, keys,
+				sourceVersification)) {
+			return true;
+		}
+
 		// Post to the window rather than call fOwner->SetKey() directly
 		// -- SetKey() only updates this view's own columns. SGMainWindow
 		// keeps separate book-menu/chapter/verse UI state in sync with
@@ -3272,6 +3293,91 @@ ParallelBibleView::_ApplyVerseListFile(int32 anchorPosition,
 }
 
 
+// A reference dropped onto a chain that is already showing a verse list
+// means "put this in my list" -- not "leave the list and go read that
+// chapter", which is what every drop used to do and which threw away the
+// study the user was assembling (#52).
+//
+// Returns false for a chain that is NOT on a file-backed list, leaving
+// the caller to navigate as before: that is still the right answer for a
+// chain reading a chapter, and a chain showing raw list text with no
+// file behind it has nowhere to append to.
+bool
+ParallelBibleView::AppendDroppedReferences(int32 position,
+	const std::vector<BString>& keys, const char* sourceVersification)
+{
+	BString path = _ChainVerseListPath(position);
+	if (path.IsEmpty() || keys.empty())
+		return false;
+
+	// Absent for a drop from outside the app (a Tracker clipping, a text
+	// selection from another program) -- nothing out there declares a
+	// versification. The chain being dropped onto is the best available
+	// guess and the one the user was looking at when they dropped.
+	BString source(sourceVersification != NULL ? sourceVersification : "");
+	if (source.IsEmpty()) {
+		const char* chainVersification = _ChainVersification(position);
+		source = chainVersification != NULL ? chainVersification : "KJV";
+	}
+
+	bool appendedAny = false;
+	for (size_t i = 0; i < keys.size(); i++) {
+		const char* key = keys[i].String();
+
+		// Parsed in the SOURCE's own counting, not with the plain
+		// BookFromKey()/ChapterFromKey()/VerseFromKey() helpers, which
+		// build a default (KJV) VerseKey. Reading a German reference
+		// with KJV counting silently relocates it before any conversion
+		// gets the chance to be correct: measured live, German "Psalmen
+		// 51:20" came out as "Psalmen 52, 1", because KJV's Psalm 51
+		// ends at verse 19 and the surplus rolls into the next psalm
+		// (#46).
+		VerseKey parsed;
+		SetVerseKeyLocale(parsed);
+		parsed.setVersificationSystem(source.String());
+		parsed.setText(key);
+		if (parsed.popError() != '\0')
+			continue;
+
+		BString bookName(parsed.getBookName());
+		int chapter = parsed.getChapter();
+		int verse = parsed.getVerse();
+		if (bookName.IsEmpty() || chapter <= 0 || verse <= 0)
+			continue;
+
+		// One verse, start and end the same -- deliberately NOT
+		// UpperVerseFromKey(), which reports the upper bound of the
+		// KEY's range rather than the end of a verse span. An
+		// unqualified key like "Daniel 6:1" carries a bound covering
+		// the whole chapter (and, for "Psalms 91:11", running past its
+		// end into the next), so using it turned each single dropped
+		// result into a sweeping range. Measured live: those two became
+		// "Daniel 6, 1-21" and "Psalmen 91, 11-Psalmen 92, 5".
+		//
+		// Everything that drops here names one verse: a search result,
+		// a cross-reference link, and a clipping normalized through
+		// ParseVerseReference().
+
+		// One line per dropped reference, which is what a multi-select
+		// drag out of the search window delivers -- each result is its
+		// own find and stays its own entry rather than being collapsed
+		// into a range that would silently include everything between
+		// them.
+		if (_AppendToVerseListFile(path.String(), bookName.String(),
+				chapter, verse, verse, source.String()) == B_OK) {
+			appendedAny = true;
+		}
+	}
+
+	// True even if every append failed: the chain IS on a list, so
+	// navigating away from it is still the wrong response to the drop.
+	// A failure here means the file went away underneath us, which
+	// _AppendToVerseListFile() already handles by doing nothing.
+	(void)appendedAny;
+	return true;
+}
+
+
 void
 ParallelBibleView::_ShowAddToListMenu(const char* bookName, int chapter,
 	int startVerse, int endVerse, const char* sourceVersification,
@@ -3970,6 +4076,14 @@ ParallelBibleView::SetKey(const char* key)
 		notes.document->SetKey(key);
 	}
 	bigtime_t perfAfterNotes = system_time();
+
+	// Naming a chapter leaves list mode (see BibleTextDocument::SetKey()),
+	// so a chain that had a description strip no longer has anything to
+	// describe. Found live: following a section heading out of a list
+	// left the strip stranded above a chain that was reading an ordinary
+	// chapter again. Before _Realign(), which measures against a chain
+	// viewport this changes the height of.
+	_RebuildChainDescriptionViews();
 
 	_Realign();
 	bigtime_t perfAfterRealign = system_time();

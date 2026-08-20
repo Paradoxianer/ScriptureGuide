@@ -1429,6 +1429,79 @@ TestChainDescriptionBelongsToItsOwnChain(SWMgr* manager, SWModule* moduleA,
 }
 
 
+// A reference dropped onto a chain that is showing a verse list is
+// added to that list rather than navigating the chain away from it
+// (#52) -- and, critically, it is parsed in the SOURCE's counting and
+// written in the LIST's, which are not the same thing.
+//
+// Both halves of that were live bugs during development, both invisible
+// in the code and obvious the moment a real drop ran: parsing with the
+// default (KJV) VerseKey turned German "Psalmen 51:20" into "Psalmen 52,
+// 1", because KJV's Psalm 51 ends at 19 and the surplus rolls into the
+// next psalm; and using UpperVerseFromKey() as the end verse turned a
+// single dropped result into a sweeping range ("Daniel 6, 1-21").
+static void
+TestDroppedReferenceGoesIntoTheListNotTheChain(SWMgr* manager,
+	SWModule* moduleA)
+{
+	const char* name = "ParallelBibleView::AppendDroppedReferences: a "
+		"drop onto a chain showing a list is added to the list, in the "
+		"list's own versification";
+	if (manager == NULL || moduleA == NULL) {
+		Skip(name, "need a Bible module installed");
+		return;
+	}
+
+	VerseListFile file;
+	if (file.CreateNew("Droptest", "Genesis 1:1", "KJV") != B_OK) {
+		Skip(name, "could not create a list file");
+		return;
+	}
+
+	ParallelBibleView view("testDrop", manager, 900.0f);
+	view.AddColumn(moduleA->getName());
+
+	// A chain reading a chapter has nothing to append to, so a drop
+	// there has to stay navigation -- that is what the false return
+	// tells the caller.
+	std::vector<BString> keys;
+	keys.push_back(BString("Daniel 6:1"));
+	bool refusedOnChapter
+		= !view.AppendDroppedReferences(0, keys, "KJV");
+
+	view.SetColumnVerseListFile(0, file.Path());
+
+	// German counting in, KJV list out: "Psalmen 51:20" is KJV Psalm
+	// 51:19 (German gives that psalm two more verses than KJV, and the
+	// last KJV verse absorbs both).
+	std::vector<BString> german;
+	german.push_back(BString("Psalmen 51:20"));
+	bool tookIt = view.AppendDroppedReferences(0, german, "German");
+
+	VerseListFile reloaded;
+	reloaded.SetTo(file.Path());
+	BString body(reloaded.ReferenceText());
+
+	// Locale-independent: the verse NUMBER is what the conversion
+	// changes, and hardcoding an English book name here is exactly the
+	// assumption that broke an earlier test under the VM's German
+	// locale.
+	bool convertedTo19 = body.FindFirst("51") >= 0
+		&& body.FindFirst("19") >= 0;
+	// The bug this replaced would have written a range or Psalm 52.
+	bool noRunaway = body.FindFirst("52") < 0 && body.FindFirst("-") < 0;
+
+	if (!(refusedOnChapter && tookIt && convertedTo19 && noRunaway)) {
+		printf("      chapter chain refused: %s; list chain took it: "
+			"%s; body:\n%s\n", refusedOnChapter ? "yes" : "no",
+			tookIt ? "yes" : "no", body.String());
+	}
+	Check(refusedOnChapter && tookIt && convertedTo19 && noRunaway, name);
+
+	BEntry(file.Path()).Remove();
+}
+
+
 // The exact conversion "Add to list" depends on to avoid reopening #46:
 // a reference read in one column's counting has to be written into a
 // list in the TARGET list's own counting, not left as displayed.
@@ -1587,6 +1660,7 @@ main()
 	TestChainVerseListAppliesToItsChainOnly(&manager, moduleA, moduleB);
 	TestVerseListFileAppliesItsNameToTheChain(&manager, moduleA);
 	TestChainDescriptionBelongsToItsOwnChain(&manager, moduleA, moduleB);
+	TestDroppedReferenceGoesIntoTheListNotTheChain(&manager, moduleA);
 	TestFormatVerseRangeInConvertsAcrossVersifications();
 	TestVerseListFileRemovesOneLine();
 	TestListLineForParagraphIndexMatchesSourceLines(moduleA);

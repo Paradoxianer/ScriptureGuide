@@ -371,6 +371,21 @@ public:
 				// column it was read from (#46). Public and static:
 				// touches no instance, and a headless regression test
 				// can check the conversion directly.
+				// Appends every reference in `keys` to the verse list
+				// the chain containing `position` is showing, and
+				// returns true. False when that chain is NOT showing a
+				// file-backed list, which is the caller's cue to treat
+				// the drop as navigation instead (see
+				// BibleColumnView::_HandleReferenceDrop(), #52).
+				//
+				// `sourceVersification` is the counting the keys were
+				// read in; it may be NULL for a drop from outside the
+				// app, in which case the target chain's own counting is
+				// assumed -- the best available guess, and the one the
+				// user was looking at.
+				bool				AppendDroppedReferences(int32 position,
+										const std::vector<BString>& keys,
+										const char* sourceVersification);
 				static BString		FormatVerseRangeIn(
 										const char* bookName, int chapter,
 										int startVerse, int endVerse,

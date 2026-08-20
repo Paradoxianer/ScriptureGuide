@@ -172,6 +172,22 @@ SGSearchWindow::_ApplyModuleSelection(int32 selectIndex)
 	curModule = fModuleNames[selectIndex];
 	fCurrentModule = myBible->FindModule(curModule.String());
 
+	// Results dragged out of this list carry the counting they were
+	// found in, so a drop can reposition them into its own (#46) --
+	// set here rather than per search, since it is the module choice
+	// that determines it, and it is fixed for as long as that choice
+	// stands.
+	if (searchResults != NULL && fCurrentModule != NULL) {
+		sword::SWModule* module = fCurrentModule->GetModule();
+		const char* versification = module != NULL
+			? module->getConfigEntry("Versification") : NULL;
+		// A module declaring none counts in KJV -- SWORD's own default,
+		// the same fallback _ChainVersification() makes.
+		searchResults->SetSourceVersification(
+			versification != NULL && versification[0] != '\0'
+				? versification : "KJV");
+	}
+
 	BString title("Find in ");
 	title << fCurrentModule->FullName();
 	SetTitle(title.String());
