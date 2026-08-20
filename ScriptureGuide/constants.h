@@ -96,6 +96,12 @@ const uint32 PARALLEL_ADD_TO_NEW_VERSE_LIST	= 'PVan';
 // Right-click on a section heading (#47) -- removes that one line from
 // the list it belongs to.
 const uint32 PARALLEL_REMOVE_FROM_VERSE_LIST	= 'PVrl';
+
+// Fires (debounced -- see ParallelBibleView::_ChainDescriptionEdited())
+// after typing pauses in a chain's description strip; carries which
+// chain ("chainAnchor") so its own list file gets the save, not
+// whichever one happened to be edited last if two were mid-edit at once.
+const uint32 PARALLEL_CHAIN_DESCRIPTION_CHANGED = 'PVdc';
 const uint32 PARALLEL_INSERT_COLUMN_MENU	= 'PVic';
 const uint32 PARALLEL_INSERT_MODULE	= 'PVim';
 const uint32 PARALLEL_INSERT_NOTES		= 'PVin';

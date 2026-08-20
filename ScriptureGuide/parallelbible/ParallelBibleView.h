@@ -27,6 +27,7 @@ class BMenuField;
 class BMessageRunner;
 class BPopUpMenu;
 class BScrollView;
+class BTextView;
 class BibleColumnView;
 class NotesDisplayView;
 class ParallelHeaderView;
@@ -346,6 +347,15 @@ public:
 										int32 anchorPosition) const
 										{ return _ChainBandLabel(
 											anchorPosition); }
+				// Public wrapper around _ChainDescriptionTop() -- how far
+				// this chain's columns start below the top of the view,
+				// which is the whole observable effect of a description
+				// strip. Exists so a headless test can check that a
+				// chain on a list gives up room for one and a chain on a
+				// chapter gives up none, without a window to look at.
+				float				ChainDescriptionTop(int32 position) const
+										{ return _ChainDescriptionTop(
+											position); }
 				// Public wrapper around _RowHeight() -- exists so headless
 				// regression tests can check a chain's own aligned row
 				// heights without a shown window.
@@ -516,6 +526,14 @@ public:
 				// re-measures every verse of every column in the chain
 				// and is far too expensive to run per keystroke.
 				void				NoteTextEdited();
+				// Reports that the user has just typed in a chain's
+				// description strip. Called by ChainDescriptionView
+				// (unrelated class, not a friend -- same reasoning as
+				// NoteTextEdited() above), and like it only ARMS a
+				// debounce timer: the write-back reopens and rewrites
+				// the whole list file, which is right once typing pauses
+				// and wasteful per keystroke.
+				void				ChainDescriptionEdited(int32 chainAnchor);
 				// Reports that this column's queued resize has landed and
 				// its layout has re-measured at the real width -- the
 				// first moment its chain's true content height can be
@@ -591,6 +609,13 @@ private:
 				BString				_ChainKey(int32 anchorPosition) const;
 				// Empty when the chain shows a chapter -- see the definition.
 				BString				_ChainVerseList(int32 anchorPosition) const;
+				// The list FILE the chain is showing, empty when it is
+				// on a chapter or on raw list text with no file behind
+				// it. Read the same way _ChainBandLabel() reads the
+				// name: from the first column of the chain that has a
+				// document.
+				BString				_ChainVerseListPath(
+										int32 anchorPosition) const;
 			// See the definition -- which canon this chain counts in.
 			const char*			_ChainVersification(int32 anchorPosition) const;
 				// Scrolls every column of the chain containing
@@ -631,6 +656,19 @@ private:
 				// (see _ScrollChainTo()).
 				float				_ChainContentHeight(
 										int32 anchorPosition);
+				// How far down this column's chain starts, i.e. the
+				// height of its description strip or 0 when it has none.
+				// Every piece of vertical geometry a chain has is
+				// measured against this rather than against the top of
+				// the view, so that two chains -- one with a strip, one
+				// without -- both scroll correctly (see
+				// _ChainViewportHeight()).
+				float				_ChainDescriptionTop(int32 position) const;
+				// This view's height minus whatever _ChainDescriptionTop()
+				// takes off this chain: the height its columns actually
+				// get, and so the height its scrollbar's range and
+				// proportion have to be computed from.
+				float				_ChainViewportHeight(int32 position) const;
 				// Furthest that chain can scroll down -- zero when its
 				// content fits the viewport.
 				float				_MaxChainScroll(int32 anchorPosition);
@@ -789,6 +827,31 @@ private:
 				BString				_ChainBandLabel(int32 anchorPosition) const;
 				std::vector<ChainBand> _ChainBands() const;
 
+				// Brings the description strips in line with what the
+				// chains are currently showing: one per chain on a
+				// file-backed list, none anywhere else. A no-op when
+				// nothing changed, so the frequent callers (every
+				// SetColumnVerseList()) don't destroy and rebuild a view
+				// the user may be typing into.
+				void				_RebuildChainDescriptionViews();
+				// Flushes every pending save, then destroys all strips.
+				void				_TearDownChainDescriptionViews();
+				// Places each strip across its own chain's full x-span,
+				// using the same per-column offsets _PositionColumns()
+				// just computed for the columns underneath it.
+				void				_PositionChainDescriptionViews(
+										const std::vector<float>& columnLeft,
+										const std::vector<float>& columnWidth);
+				// Writes one strip's current text back into its list
+				// file. Fired by the debounce timer, and also run
+				// directly by _TearDownChainDescriptionViews() so a
+				// strip that goes away mid-edit still saves.
+				void				_SaveChainDescription(int32 index);
+				// Index into the parallel fDescription* vectors for the
+				// chain containing `position`, or -1 if it has no strip.
+				int32				_DescriptionIndexForChain(
+										int32 position) const;
+
 				// Every verse list on disk, name/path, sorted by name --
 				// see the definition. Static: touches no member, shared
 				// by the band's popup and the "Add to list" context menu.
@@ -854,6 +917,28 @@ private:
 				// fColumnOrder.size() - 1) -- the link/unlink toggle
 				// button centered on that gap's divider line.
 				std::vector<BButton*>	fLinkButtons;
+
+				// A chain's description strip (#47), directly editable,
+				// above its own columns -- ONE PER CHAIN THAT CURRENTLY
+				// SHOWS A FILE-BACKED LIST, not one per column and not
+				// one for every chain: a chain reading an ordinary
+				// chapter has no entry here at all, and neither does one
+				// showing raw list text with no file behind it (there
+				// would be nowhere to save the description to).
+				// fDescriptionChainAnchors[i] is that entry's chain (its
+				// _ChainStart() position) and fDescriptionPaths[i] the
+				// list file it writes back to; all five vectors are
+				// parallel -- see _RebuildChainDescriptionViews().
+				std::vector<int32>		fDescriptionChainAnchors;
+				std::vector<BString>	fDescriptionPaths;
+				std::vector<BTextView*>	fDescriptionViews;
+				std::vector<BScrollView*>	fDescriptionScrollViews;
+				// One debounce timer PER description view, not shared --
+				// two chains' descriptions edited in quick succession
+				// must not let the second edit's timer silently discard
+				// the first chain's still-pending save. Parallel to the
+				// vectors above; NULL where nothing is pending.
+				std::vector<BMessageRunner*>	fDescriptionSaveRunners;
 
 				// One per gap between adjacent columns (size ==
 				// fColumnOrder.size() - 1, empty when there are 0 or 1
@@ -960,6 +1045,21 @@ private:
 	// what that chain is showing (#47). Public because the header view
 	// draws it and needs the height.
 	static	const float			kChainBandHeight;
+	// The description strip of a chain that is showing a verse list
+	// (#47). It lives in the CONTENT area, not in the header: it spans
+	// its own chain's columns and pushes exactly those columns (and
+	// their scrollbar) down by this much, leaving every other chain
+	// untouched at the top -- see _ChainDescriptionTop(). Putting it in
+	// the header instead would have grown the header for every chain at
+	// once, leaving a dead strip over any chain that has no list.
+	//
+	// Sitting outside the scrolled columns also means it stays put while
+	// the chain scrolls, which is what a description of the whole list
+	// should do. Overflow scrolls inside its own BScrollView rather than
+	// growing the strip, so this height is fixed.
+	static	const float			kChainDescriptionHeight;
+	// Gap between the strip and the columns below it.
+	static	const float			kChainDescriptionGap;
 	static	const float			kRemoveButtonWidth;
 	static	const float			kInsertButtonWidth;
 	static	const float			kLinkButtonWidth;

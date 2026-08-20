@@ -138,6 +138,13 @@ const float ParallelBibleView::kHeaderBottomGap = 2.0f;
 // Until now what a chain displayed was legible only for the ACTIVE one,
 // and only from the toolbar.
 const float ParallelBibleView::kChainBandHeight = 18.0f;
+// Enough for a couple of lines of prose -- overflow scrolls within its
+// own BScrollView rather than growing further, so this never changes
+// per instance, only whether it applies to a given chain at all.
+const float ParallelBibleView::kChainDescriptionHeight = 44.0f;
+// Gap between a description strip and the columns it sits above, so the
+// strip reads as belonging to them rather than as a first row of them.
+const float ParallelBibleView::kChainDescriptionGap = 3.0f;
 const float ParallelBibleView::kRemoveButtonWidth = 20.0f;
 const float ParallelBibleView::kInsertButtonWidth = 20.0f;
 const float ParallelBibleView::kLinkButtonWidth = 16.0f;
@@ -153,6 +160,14 @@ const float ParallelBibleView::kNoteGutterWidth = 20.0f;
 // paragraph in the document (see TextDocumentLayout's LayoutTextListener);
 // only a pause shorter than one keystroke interval still coalesces.
 static const bigtime_t kNotesRealignDelay = 120000; // 0.12s
+
+// How long typing has to pause before a chain's description is written
+// back into its list file (see ChainDescriptionEdited()). Much longer
+// than the notes realign above, and deliberately so: that one only
+// re-measures in memory, this one reopens, rewrites and re-saves the
+// whole file. Half a second is well below the point where an interrupted
+// session could lose a sentence, and well above per-keystroke.
+static const bigtime_t kChainDescriptionSaveDelay = 500000; // 0.5s
 
 // Line-step for a chain's shared vertical scrollbar, matching the value
 // TextDocumentView uses for its own (kVerticalScrollBarStep there).
@@ -242,6 +257,77 @@ private:
 	BibleTextDocument*		fDocument;
 	PersonalNotesModule*	fNotes;
 	ParallelBibleView*		fOwner;
+};
+
+
+// The editable strip above a chain that is showing a verse list (#47),
+// holding that list's own description -- what the collection is FOR,
+// which the band above it has no room to say (it shows only the name).
+//
+// BTextView has no "the text changed" notification of any kind: no
+// message, no listener, no hook other than the two protected virtuals it
+// funnels every modification through. Both are overridden here for that
+// reason alone -- InsertText() and DeleteText() between them cover
+// typing, pasting, deleting, dragging text in or out, and undo, which a
+// KeyDown() override would not.
+//
+// fSuppressEdit exists because SetText() goes through InsertText() too:
+// without it, merely filling the strip in from the file would arm a
+// timer to write that same text straight back out again.
+class ChainDescriptionView : public BTextView {
+public:
+	ChainDescriptionView(const char* name, ParallelBibleView* owner,
+		int32 chainAnchor)
+		:
+		BTextView(name),
+		fOwner(owner),
+		fChainAnchor(chainAnchor),
+		fSuppressEdit(false)
+	{
+		SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+		SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+		SetWordWrap(true);
+		SetStylable(false);
+		SetInsets(3.0f, 2.0f, 3.0f, 2.0f);
+	}
+
+	// Fills the strip in from the file without that counting as an edit.
+	void SetTextQuietly(const char* text)
+	{
+		fSuppressEdit = true;
+		SetText(text != NULL ? text : "");
+		fSuppressEdit = false;
+	}
+
+	int32 ChainAnchor() const
+		{ return fChainAnchor; }
+
+protected:
+	virtual void InsertText(const char* text, int32 length, int32 offset,
+		const text_run_array* runs)
+	{
+		BTextView::InsertText(text, length, offset, runs);
+		_ReportEdit();
+	}
+
+	virtual void DeleteText(int32 fromOffset, int32 toOffset)
+	{
+		BTextView::DeleteText(fromOffset, toOffset);
+		_ReportEdit();
+	}
+
+private:
+	void _ReportEdit()
+	{
+		if (fSuppressEdit || fOwner == NULL)
+			return;
+		fOwner->ChainDescriptionEdited(fChainAnchor);
+	}
+
+private:
+	ParallelBibleView*	fOwner;
+	int32				fChainAnchor;
+	bool				fSuppressEdit;
 };
 
 
@@ -1613,6 +1699,11 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 // delete a scroller's remaining children.
 ParallelBibleView::~ParallelBibleView()
 {
+	// First, so a description still being typed when the window closes
+	// is written out rather than lost -- _TearDownChainDescriptionViews()
+	// flushes every pending debounce timer before destroying anything.
+	_TearDownChainDescriptionViews();
+
 	for (size_t i = 0; i < fTextViews.size(); i++) {
 		BView* view = fTextViews[i];
 		BScrollView* scroller = dynamic_cast<BScrollView*>(view->Parent());
@@ -1929,6 +2020,22 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			delete fNotesRealignRunner;
 			fNotesRealignRunner = NULL;
 			_Realign();
+			break;
+		}
+
+		case PARALLEL_CHAIN_DESCRIPTION_CHANGED:
+		{
+			// The debounce timer armed by ChainDescriptionEdited() has
+			// expired -- typing has paused, so write this chain's
+			// description back into its list file. The chain comes from
+			// the message rather than from whatever is active now: the
+			// user can perfectly well click into another chain while a
+			// save is still pending, and it is the typed-in chain's file
+			// that has to receive it.
+			int32 chainAnchor;
+			if (message->FindInt32("chainAnchor", &chainAnchor) != B_OK)
+				break;
+			_SaveChainDescription(_DescriptionIndexForChain(chainAnchor));
 			break;
 		}
 
@@ -2539,8 +2646,8 @@ float
 ParallelBibleView::_MaxChainScroll(int32 anchorPosition)
 {
 	return std::max(0.0f,
-		_ChainContentHeight(anchorPosition) - std::max(0.0f,
-			Bounds().Height()));
+		_ChainContentHeight(anchorPosition)
+			- _ChainViewportHeight(anchorPosition));
 }
 
 
@@ -2567,7 +2674,9 @@ ParallelBibleView::_UpdateChainScrollBar(int32 anchorPosition)
 	if (bar == NULL)
 		return;
 
-	float viewportHeight = std::max(0.0f, Bounds().Height());
+	// This chain's own viewport, not the whole view's: a chain showing a
+	// verse list gives the top of itself up to its description strip.
+	float viewportHeight = _ChainViewportHeight(anchorPosition);
 	float contentHeight = _ChainContentHeight(anchorPosition);
 	long maxRange = (long)ceilf(contentHeight) - (long)viewportHeight;
 
@@ -2862,6 +2971,230 @@ ParallelBibleView::_ChainBands() const
 }
 
 
+// The list file the chain anchored at `anchorPosition` is showing, read
+// the same way _ChainBandLabel() reads its name: from the first column
+// of the chain that has a document with an origin recorded. Empty for a
+// chain on a chapter, and also for one showing raw list text that never
+// came from a file (a saved layout from before origin tracking, say) --
+// there is nothing to write a description back into in that case, which
+// is exactly why _RebuildChainDescriptionViews() gives it no strip.
+BString
+ParallelBibleView::_ChainVerseListPath(int32 anchorPosition) const
+{
+	if (anchorPosition < 0
+		|| (size_t)anchorPosition >= fColumnOrder.size()) {
+		return BString();
+	}
+	if (_ChainVerseList(anchorPosition).IsEmpty())
+		return BString();
+
+	int32 end = _ChainEnd(anchorPosition);
+	for (int32 i = _ChainStart(anchorPosition); i <= end; i++) {
+		BibleTextDocument* document = NULL;
+		if (fColumnOrder[i] == COLUMN_BIBLE)
+			document = fDocuments[_BibleIndexForPosition(i)];
+		else if (fColumnOrder[i] == COLUMN_NOTES)
+			document = fNotesColumns[_NotesIndexForPosition(i)].document;
+		if (document != NULL && document->VerseListPath()[0] != '\0')
+			return BString(document->VerseListPath());
+	}
+	return BString();
+}
+
+
+int32
+ParallelBibleView::_DescriptionIndexForChain(int32 position) const
+{
+	if (position < 0 || (size_t)position >= fColumnOrder.size())
+		return -1;
+	int32 start = _ChainStart(position);
+	for (size_t i = 0; i < fDescriptionChainAnchors.size(); i++) {
+		if (fDescriptionChainAnchors[i] == start)
+			return (int32)i;
+	}
+	return -1;
+}
+
+
+// How far down this chain's columns start. This is THE piece that makes
+// the strip a per-chain thing rather than a per-window one: a chain with
+// a description gives up this much off the top, a chain without it
+// starts at 0, and the two sit side by side in the same view.
+float
+ParallelBibleView::_ChainDescriptionTop(int32 position) const
+{
+	if (_DescriptionIndexForChain(position) < 0)
+		return 0.0f;
+	return kChainDescriptionHeight + kChainDescriptionGap;
+}
+
+
+// A chain's columns are shorter than the view by exactly what its strip
+// takes, so everything derived from "the viewport" has to be too --
+// otherwise its scrollbar reports a range and proportion for a viewport
+// taller than the columns really are, and the bottom of the chain
+// becomes unreachable.
+float
+ParallelBibleView::_ChainViewportHeight(int32 position) const
+{
+	return std::max(0.0f,
+		std::max(0.0f, Bounds().Height()) - _ChainDescriptionTop(position));
+}
+
+
+// Writes strip `index` back into its list file. Reloads the file first
+// rather than keeping a VerseListFile around per strip: the references
+// themselves can have changed underneath us since the strip was built
+// (adding or removing an entry rewrites the same file, as can Tracker),
+// and only the description is ours to overwrite.
+void
+ParallelBibleView::_SaveChainDescription(int32 index)
+{
+	if (index < 0 || (size_t)index >= fDescriptionViews.size())
+		return;
+
+	delete fDescriptionSaveRunners[index];
+	fDescriptionSaveRunners[index] = NULL;
+
+	BTextView* view = fDescriptionViews[index];
+	if (view == NULL || fDescriptionPaths[index].IsEmpty())
+		return;
+
+	VerseListFile file;
+	if (file.SetTo(fDescriptionPaths[index].String()) != B_OK) {
+		// Deleted or moved while it was being described -- same response
+		// as everywhere else this can happen (see
+		// SetColumnVerseListFile()): the file the text belonged to is
+		// gone, so there is nothing to write it into and nothing to
+		// report.
+		return;
+	}
+
+	BString text(view->Text());
+	// A description is one line of prose in the file's header (see
+	// VerseListFile's own comment); an embedded newline would end the
+	// header line and turn the rest into what reads as a reference.
+	text.ReplaceAll('\n', ' ');
+	text.Trim();
+	if (BString(file.Description()) == text)
+		return;			// nothing actually changed -- don't touch the file
+
+	file.SetDescription(text.String());
+	file.Save();
+}
+
+
+void
+ParallelBibleView::_TearDownChainDescriptionViews()
+{
+	for (size_t i = 0; i < fDescriptionViews.size(); i++) {
+		// Before the view goes away, not after: a strip torn down while
+		// its debounce timer is still pending (switching a chain to a
+		// different list right after typing into the old one's
+		// description) would otherwise drop what was typed on the floor.
+		if (fDescriptionSaveRunners[i] != NULL)
+			_SaveChainDescription((int32)i);
+
+		BScrollView* scroller = fDescriptionScrollViews[i];
+		if (scroller != NULL) {
+			scroller->RemoveSelf();
+			delete scroller;	// takes its BTextView target with it
+		}
+	}
+	fDescriptionChainAnchors.clear();
+	fDescriptionPaths.clear();
+	fDescriptionViews.clear();
+	fDescriptionScrollViews.clear();
+	fDescriptionSaveRunners.clear();
+}
+
+
+// Brings the strips in line with what the chains are now showing: one
+// per chain on a file-backed list, none anywhere else.
+//
+// Returns without touching anything when the answer is the same as last
+// time. That matters more than it looks: this runs on every
+// SetColumnVerseList(), including the one behind every "add to list" and
+// "remove from list", and rebuilding a strip the user is typing into
+// would take the caret (and, without the flush in
+// _TearDownChainDescriptionViews(), the text) with it.
+void
+ParallelBibleView::_RebuildChainDescriptionViews()
+{
+	std::vector<int32> anchors;
+	std::vector<BString> paths;
+	int32 position = 0;
+	while ((size_t)position < fColumnOrder.size()) {
+		BString path = _ChainVerseListPath(position);
+		if (!path.IsEmpty()) {
+			anchors.push_back(_ChainStart(position));
+			paths.push_back(path);
+		}
+		position = _ChainEnd(position) + 1;
+	}
+
+	if (anchors == fDescriptionChainAnchors && paths == fDescriptionPaths)
+		return;
+
+	_TearDownChainDescriptionViews();
+
+	for (size_t i = 0; i < anchors.size(); i++) {
+		VerseListFile file;
+		BString description;
+		if (file.SetTo(paths[i].String()) == B_OK)
+			description = file.Description();
+
+		ChainDescriptionView* view = new ChainDescriptionView(
+			"chainDescription", this, anchors[i]);
+		view->SetTextQuietly(description.String());
+		// Its own vertical scrollbar: the strip is a fixed height by
+		// design (see kChainDescriptionHeight), so a description longer
+		// than fits has to scroll inside it rather than push the chain's
+		// columns further down every time a word is added.
+		BScrollView* scroller = new BScrollView("chainDescriptionScroll",
+			view, 0, false, true, B_FANCY_BORDER);
+		AddChild(scroller);
+
+		fDescriptionChainAnchors.push_back(anchors[i]);
+		fDescriptionPaths.push_back(paths[i]);
+		fDescriptionViews.push_back(view);
+		fDescriptionScrollViews.push_back(scroller);
+		fDescriptionSaveRunners.push_back(NULL);
+	}
+
+	// The chains' available height just changed for at least one chain,
+	// so where their columns start and how far they scroll has to be
+	// recomputed -- not just where the new strips go.
+	_PositionColumns();
+}
+
+
+// Each strip spans its whole chain, from the left edge of the chain's
+// first column to the right edge of its last -- the same span the band
+// above it covers (_ChainHeaderRange()), which is what makes the two
+// read as belonging together. Uses the offsets _PositionColumns() just
+// computed rather than recomputing widths, so the strip can never drift
+// out of line with the columns beneath it.
+void
+ParallelBibleView::_PositionChainDescriptionViews(
+	const std::vector<float>& columnLeft,
+	const std::vector<float>& columnWidth)
+{
+	for (size_t i = 0; i < fDescriptionScrollViews.size(); i++) {
+		int32 start = fDescriptionChainAnchors[i];
+		int32 end = _ChainEnd(start);
+		if (start < 0 || (size_t)end >= columnLeft.size())
+			continue;
+
+		float left = columnLeft[start];
+		float right = columnLeft[end] + columnWidth[end];
+		fDescriptionScrollViews[i]->MoveTo(left, 0.0f);
+		fDescriptionScrollViews[i]->ResizeTo(std::max(0.0f, right - left),
+			kChainDescriptionHeight);
+	}
+}
+
+
 // Builds and shows the band's popup: every verse list on disk, "New
 // list...", and -- once the chain is actually on one -- "Back to
 // chapter". Fire-and-forget, same idiom as PARALLEL_INSERT_COLUMN_MENU's
@@ -3125,6 +3458,12 @@ ParallelBibleView::SetColumnVerseListFile(int32 position, const char* path)
 		if (document != NULL)
 			document->SetVerseListOrigin(file.Name(), file.Path());
 	}
+
+	// Again, and deliberately after the origins are set: the call inside
+	// SetColumnVerseList() above ran while this chain still had a list
+	// but no file recorded for it yet, so it correctly built no strip.
+	// This is the one that gives the chain the strip for THIS file.
+	_RebuildChainDescriptionViews();
 	return B_OK;
 }
 
@@ -3429,6 +3768,30 @@ ParallelBibleView::NoteTextEdited()
 }
 
 
+// Reports that the user has just typed in a chain's description strip
+// (called by ChainDescriptionView). Arms -- or re-arms, restarting the
+// interval -- that ONE strip's own timer, so a second chain being
+// described at the same time cannot cancel this one's pending save.
+void
+ParallelBibleView::ChainDescriptionEdited(int32 chainAnchor)
+{
+	// BMessageRunner needs a valid BMessenger, which needs this view to
+	// be attached to a window. Nothing typed before then anyway.
+	if (Window() == NULL)
+		return;
+
+	int32 index = _DescriptionIndexForChain(chainAnchor);
+	if (index < 0)
+		return;
+
+	delete fDescriptionSaveRunners[index];
+	BMessage message(PARALLEL_CHAIN_DESCRIPTION_CHANGED);
+	message.AddInt32("chainAnchor", chainAnchor);
+	fDescriptionSaveRunners[index] = new BMessageRunner(BMessenger(this),
+		&message, kChainDescriptionSaveDelay, 1);
+}
+
+
 void
 ParallelBibleView::_TearDownNotesColumnView(NotesColumn& notes)
 {
@@ -3675,6 +4038,9 @@ ParallelBibleView::SetColumnVerseList(int32 position, const char* listText)
 		}
 	}
 
+	// Before the realign and the scroll, both of which measure against a
+	// chain viewport this may just have changed the height of.
+	_RebuildChainDescriptionViews();
 	_Realign();
 	_ScrollChainTo(position, 0.0f);
 	return B_OK;
@@ -4146,6 +4512,10 @@ ParallelBibleView::_RebuildLayout()
 		}
 	}
 
+	// After the columns exist and before anything measures them: the
+	// chains themselves may have moved (a column added, removed or
+	// reordered), which changes which anchor each strip belongs to.
+	_RebuildChainDescriptionViews();
 	_RebuildHeader();
 	_Realign();
 }
@@ -4435,11 +4805,19 @@ ParallelBibleView::_PositionColumns()
 		Frame().bottom);
 	fColumnDividerX.clear();
 
+	// Kept so the description strips can be laid across their own
+	// chain's full span afterwards without recomputing any of this --
+	// see _PositionChainDescriptionViews().
+	std::vector<float> columnLeft;
+	std::vector<float> columnWidth;
+
 	size_t bibleIndex = 0;
 	size_t notesIndex = 0;
 	for (size_t i = 0; i < fColumnOrder.size(); i++) {
 		bool isNotes = (fColumnOrder[i] == COLUMN_NOTES);
 		float width = isNotes ? _NotesColumnWidth() : _ColumnWidth();
+		columnLeft.push_back(x);
+		columnWidth.push_back(width);
 
 		if (i < fHeaderFields.size()) {
 			// Sized to its own natural (preferred) width -- like the
@@ -4491,8 +4869,15 @@ ParallelBibleView::_PositionColumns()
 		BScrollView* scroller = view != NULL
 			? dynamic_cast<BScrollView*>(view->Parent()) : NULL;
 		if (scroller != NULL) {
-			scroller->MoveTo(x, 0.0f);
-			scroller->ResizeTo(width, viewportHeight);
+			// A chain showing a verse list starts below its own
+			// description strip, and is shorter by exactly that much;
+			// every other chain still starts at the top. This one offset
+			// is what keeps the strip a property of its chain rather
+			// than of the whole window -- nothing else in the layout
+			// needs to know the strip exists.
+			float top = _ChainDescriptionTop((int32)i);
+			scroller->MoveTo(x, top);
+			scroller->ResizeTo(width, std::max(0.0f, viewportHeight - top));
 		}
 		if (_IsChainRightmost((int32)i)) {
 			BScrollBar* bar = scroller != NULL
@@ -4540,6 +4925,8 @@ ParallelBibleView::_PositionColumns()
 			fLinkButtons[i]->ResizeTo(kLinkButtonWidth, kHeaderHeight);
 		}
 	}
+
+	_PositionChainDescriptionViews(columnLeft, columnWidth);
 
 	// No trailing "+" reservation any more -- every column has its own
 	// insert button in its own header cell now (see _RebuildHeader()),

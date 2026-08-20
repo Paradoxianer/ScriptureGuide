@@ -1371,6 +1371,64 @@ TestVerseListFileAppliesItsNameToTheChain(SWMgr* manager, SWModule* moduleA)
 	BEntry(file.Path()).Remove();
 }
 
+// The description strip (#47) belongs to its own chain, not to the
+// window: a chain showing a list gives up room at the top of itself for
+// one, and a chain beside it reading an ordinary chapter gives up none
+// and still starts at the very top.
+//
+// This is the whole point of putting the strip in the content area
+// instead of in the header, where it would have taken the same height
+// off every chain at once and left a dead band over any chain without a
+// list -- so it is what a regression here would break first.
+static void
+TestChainDescriptionBelongsToItsOwnChain(SWMgr* manager, SWModule* moduleA,
+	SWModule* moduleB)
+{
+	const char* name = "ParallelBibleView: only a chain on a list gives "
+		"up room for a description, and only its own columns move down";
+	if (manager == NULL || moduleA == NULL || moduleB == NULL) {
+		Skip(name, "need two Bible modules installed");
+		return;
+	}
+
+	VerseListFile file;
+	if (file.CreateNew("Beschreibungstest", "Genesis 1:1", "KJV") != B_OK) {
+		Skip(name, "could not create a list file");
+		return;
+	}
+
+	ParallelBibleView view("testDescription", manager, 900.0f);
+	view.AddColumn(moduleA->getName());
+	view.AddColumn(moduleB->getName());
+	// Two separate chains, so the two columns can disagree about whether
+	// they are on a list at all.
+	view.SetColumnLinked(0, false);
+
+	bool bothStartAtTop = view.ChainDescriptionTop(0) == 0.0f
+		&& view.ChainDescriptionTop(1) == 0.0f;
+
+	view.SetColumnVerseListFile(0, file.Path());
+
+	float listed = view.ChainDescriptionTop(0);
+	float chapter = view.ChainDescriptionTop(1);
+	if (!(bothStartAtTop && listed > 0.0f && chapter == 0.0f)) {
+		printf("      before: both at top = %s; after: chain 0 = %.1f, "
+			"chain 1 = %.1f\n", bothStartAtTop ? "yes" : "no", listed,
+			chapter);
+	}
+	Check(bothStartAtTop && listed > 0.0f && chapter == 0.0f, name);
+
+	// And back again: leaving the list has to give the room back, or a
+	// chain would keep a gap over columns with nothing to explain.
+	view.SetColumnVerseListFile(0, "");
+	Check(view.ChainDescriptionTop(0) == 0.0f,
+		"ParallelBibleView: returning a chain to its chapter takes its "
+		"description strip away again");
+
+	BEntry(file.Path()).Remove();
+}
+
+
 // The exact conversion "Add to list" depends on to avoid reopening #46:
 // a reference read in one column's counting has to be written into a
 // list in the TARGET list's own counting, not left as displayed.
@@ -1528,6 +1586,7 @@ main()
 	TestSplitChainKeepsOtherChainUnaffected(&manager, moduleA, moduleB);
 	TestChainVerseListAppliesToItsChainOnly(&manager, moduleA, moduleB);
 	TestVerseListFileAppliesItsNameToTheChain(&manager, moduleA);
+	TestChainDescriptionBelongsToItsOwnChain(&manager, moduleA, moduleB);
 	TestFormatVerseRangeInConvertsAcrossVersifications();
 	TestVerseListFileRemovesOneLine();
 	TestListLineForParagraphIndexMatchesSourceLines(moduleA);
