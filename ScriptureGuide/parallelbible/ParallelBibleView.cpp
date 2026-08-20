@@ -353,6 +353,29 @@ public:
 		if (current != NULL)
 			current->FindInt32("buttons", (int32*)&buttons);
 		if (buttons == B_SECONDARY_MOUSE_BUTTON) {
+			// A right-click landing on a section HEADING (verse 0, a
+			// real list line -- see ListLineForParagraphIndex()) means
+			// "remove this section", not "add its reference somewhere
+			// else" -- checked first and exclusively, since the two
+			// only ever differ in which one of them a click could mean.
+			if (fBibleDocument != NULL && fOwner != NULL) {
+				int32 paragraphOffset;
+				int32 paragraphIndex = fBibleDocument->ParagraphIndexFor(
+					TextOffsetAt(where), paragraphOffset);
+				int32 listLine = fBibleDocument->ListLineForParagraphIndex(
+					paragraphIndex);
+				if (listLine >= 0
+					&& fBibleDocument->VerseForParagraphIndex(
+						paragraphIndex) <= 0) {
+					BPoint screenPoint = where;
+					ConvertToScreen(&screenPoint);
+					fOwner->_ShowRemoveFromListMenu(
+						fBibleDocument->VerseListPath(), listLine,
+						screenPoint);
+					return;
+				}
+			}
+
 			// The reference an existing selection already covers, or
 			// (no selection, or clicked outside it) just the one verse
 			// under the pointer -- right-clicking a single verse to
@@ -2012,6 +2035,17 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case PARALLEL_REMOVE_FROM_VERSE_LIST:
+		{
+			BString path;
+			int32 lineIndex;
+			if (message->FindString("path", &path) == B_OK
+				&& message->FindInt32("lineIndex", &lineIndex) == B_OK) {
+				_RemoveVerseListLine(path.String(), lineIndex);
+			}
+			break;
+		}
+
 		default:
 			BView::MessageReceived(message);
 			break;
@@ -2958,6 +2992,75 @@ ParallelBibleView::_ShowAddToListMenu(const char* bookName, int chapter,
 }
 
 
+void
+ParallelBibleView::_ShowRemoveFromListMenu(const char* path,
+	int32 lineIndex, BPoint screenPoint)
+{
+	if (path == NULL || path[0] == '\0')
+		return;
+
+	BPopUpMenu* menu = new BPopUpMenu("removeFromList", false, false);
+
+	BMessage* remove = new BMessage(PARALLEL_REMOVE_FROM_VERSE_LIST);
+	remove->AddString("path", path);
+	remove->AddInt32("lineIndex", lineIndex);
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Remove from list"), remove));
+
+	menu->SetTargetForItems(this);
+	menu->SetAsyncAutoDestruct(true);
+	menu->Go(screenPoint, true, true, true);
+}
+
+
+status_t
+ParallelBibleView::_RemoveVerseListLine(const char* path, int32 lineIndex)
+{
+	VerseListFile file;
+	if (file.SetTo(path) != B_OK) {
+		// Same reasoning as everywhere else this file gets reopened:
+		// deleted or moved since the menu was built, nothing to roll
+		// back.
+		return B_ENTRY_NOT_FOUND;
+	}
+
+	status_t status = file.RemoveLine(lineIndex);
+	if (status != B_OK)
+		return status;
+
+	_RefreshChainsShowingListFile(path);
+	return B_OK;
+}
+
+
+// Reloads every chain currently showing `path`, or a chain would sit one
+// entry behind a change just made to its own file until something else
+// happened to reselect the list -- shared by appending an entry
+// (_AppendToVerseListFile()) and removing one. Once per CHAIN, not per
+// column -- SetColumnVerseListFile() rescrolls to the top of the list,
+// which a redundant second call on the same chain would do twice for no
+// reason.
+void
+ParallelBibleView::_RefreshChainsShowingListFile(const char* path)
+{
+	int32 refreshedThrough = -1;
+	for (size_t i = 0; i < fColumnOrder.size(); i++) {
+		if ((int32)i <= refreshedThrough)
+			continue;
+		BibleTextDocument* document = NULL;
+		if (fColumnOrder[i] == COLUMN_BIBLE)
+			document = fDocuments[_BibleIndexForPosition((int32)i)];
+		else if (fColumnOrder[i] == COLUMN_NOTES)
+			document = fNotesColumns[_NotesIndexForPosition((int32)i)]
+				.document;
+		if (document == NULL || BString(document->VerseListPath()) != path)
+			continue;
+
+		SetColumnVerseListFile((int32)i, path);
+		refreshedThrough = _ChainEnd((int32)i);
+	}
+}
+
+
 status_t
 ParallelBibleView::_AppendToVerseListFile(const char* path,
 	const char* bookName, int chapter, int startVerse, int endVerse,
@@ -2979,28 +3082,7 @@ ParallelBibleView::_AppendToVerseListFile(const char* path,
 	if (status != B_OK)
 		return status;
 
-	// Reload every chain already showing this exact file, or it would
-	// sit one entry behind the change just made to it until something
-	// else happened to reselect the list. Once per CHAIN, not per
-	// column -- SetColumnVerseListFile() rescrolls to the top of the
-	// list, which a redundant second call on the same chain would do
-	// twice for no reason.
-	int32 refreshedThrough = -1;
-	for (size_t i = 0; i < fColumnOrder.size(); i++) {
-		if ((int32)i <= refreshedThrough)
-			continue;
-		BibleTextDocument* document = NULL;
-		if (fColumnOrder[i] == COLUMN_BIBLE)
-			document = fDocuments[_BibleIndexForPosition((int32)i)];
-		else if (fColumnOrder[i] == COLUMN_NOTES)
-			document = fNotesColumns[_NotesIndexForPosition((int32)i)]
-				.document;
-		if (document == NULL || BString(document->VerseListPath()) != path)
-			continue;
-
-		SetColumnVerseListFile((int32)i, path);
-		refreshedThrough = _ChainEnd((int32)i);
-	}
+	_RefreshChainsShowingListFile(path);
 	return B_OK;
 }
 

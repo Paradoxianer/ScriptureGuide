@@ -99,6 +99,17 @@ public:
 			// anything to append to.
 			status_t			AppendReference(const char* referenceLine);
 
+			// Removes the Nth (0-based) line of ReferenceText() and saves
+			// immediately -- the counterpart to AppendReference(), and
+			// what BibleTextDocument::ListLineForParagraphIndex()'s index
+			// refers to: both split the same text on "\n" the same way,
+			// so a section's own paragraph index maps straight to the
+			// line to delete. B_BAD_INDEX if there is no such line
+			// (already removed by something else since the menu was
+			// built -- Tracker or another window could always have
+			// edited this file in the meantime).
+			status_t			RemoveLine(int32 lineIndex);
+
 			// settings/scriptureguide/lists/, created on first use.
 			static BString		ListsDirectory();
 

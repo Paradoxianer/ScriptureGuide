@@ -215,6 +215,10 @@ public:
 			// key). -1/empty if the index is out of range.
 			int					ChapterForParagraphIndex(int32 index) const;
 			BString				BookNameForParagraphIndex(int32 index) const;
+			// Which list line (see VerseListFile::RemoveLine()) this
+			// paragraph's section came from -- -1 outside list mode.
+			// What "remove this section" (#47) needs.
+			int32				ListLineForParagraphIndex(int32 index) const;
 
 			// Where a paragraph sits in what this document was asked to
 			// render -- verse N of a chapter is step N-1, and step N of a
@@ -352,6 +356,7 @@ private:
 			// BookNameForParagraphIndex()/ChapterForParagraphIndex().
 			std::vector<BString>	fParagraphBookName;
 			std::vector<int>	fParagraphChapter;
+			std::vector<int32>	fParagraphListLine;
 
 			// paragraph index -> step, rebuilt alongside it.
 			std::vector<int32>	fParagraphStep;

@@ -1416,6 +1416,82 @@ TestFormatVerseRangeInConvertsAcrossVersifications()
 		"sides is an exact repositioning");
 }
 
+// VerseListFile::RemoveLine() removes the Nth entry and leaves the
+// others in order -- the write half of #47's "remove from list".
+static void
+TestVerseListFileRemovesOneLine()
+{
+	const char* name = "VerseListFile::RemoveLine: removes exactly the "
+		"Nth entry, keeping the others in order";
+
+	VerseListFile list;
+	if (list.CreateNew("__unit_test_remove__", "Genesis 1:1",
+			"KJV") != B_OK) {
+		Skip(name, "could not create a list file");
+		return;
+	}
+	list.SetReferenceText("Genesis 1:1\nPsalms 1:1\nJohn 1:1");
+	list.Save();
+
+	status_t status = list.RemoveLine(1);	// the middle one, "Psalms 1:1"
+
+	VerseListFile reloaded;
+	reloaded.SetTo(list.Path());
+	bool ok = status == B_OK
+		&& BString(reloaded.ReferenceText()) == "Genesis 1:1\nJohn 1:1"
+		&& reloaded.EntryCount() == 2;
+	if (!ok) {
+		printf("      status=%s text=\"%s\" count=%d\n", strerror(status),
+			reloaded.ReferenceText(), (int)reloaded.EntryCount());
+	}
+	Check(ok, name);
+
+	Check(list.RemoveLine(99) == B_BAD_INDEX,
+		"VerseListFile::RemoveLine: an out-of-range index fails rather "
+		"than silently doing nothing to the wrong entry");
+
+	BEntry(list.Path()).Remove();
+}
+
+
+// The other half: a heading's paragraph correctly reports which list
+// LINE it came from, matching the index RemoveLine() above expects --
+// checked directly rather than assumed, since removal quietly deleting
+// the wrong section would be worse than not offering removal at all.
+static void
+TestListLineForParagraphIndexMatchesSourceLines(SWModule* module)
+{
+	const char* name = "BibleTextDocument::ListLineForParagraphIndex: "
+		"each heading reports its own line, in order";
+	if (module == NULL) {
+		Skip(name, "no Bible module");
+		return;
+	}
+
+	BibleTextDocument document(module);
+	document.SetSkipEmptyVerses(false);
+	document.SetKey("Genesis 1:1");
+	document.SetVerseList("Genesis 1:1\nPsalms 1:1\nJohn 1:1");
+
+	// Three sections (heading + its one verse), lines 0/1/2 in order --
+	// propagated to every row of a section, not just its heading, so
+	// any paragraph in it can answer "which line" without walking back
+	// to find the heading first.
+	int32 count = document.CountParagraphs();
+	bool ok = count == 6;
+	int32 expectedLines[] = { 0, 0, 1, 1, 2, 2 };
+	for (int32 i = 0; ok && i < count; i++)
+		ok = document.ListLineForParagraphIndex(i) == expectedLines[i];
+
+	if (!ok) {
+		printf("      %d paragraphs, lines:", (int)count);
+		for (int32 i = 0; i < count; i++)
+			printf(" %d", (int)document.ListLineForParagraphIndex(i));
+		printf("\n");
+	}
+	Check(ok, name);
+}
+
 int
 main()
 {
@@ -1453,6 +1529,8 @@ main()
 	TestChainVerseListAppliesToItsChainOnly(&manager, moduleA, moduleB);
 	TestVerseListFileAppliesItsNameToTheChain(&manager, moduleA);
 	TestFormatVerseRangeInConvertsAcrossVersifications();
+	TestVerseListFileRemovesOneLine();
+	TestListLineForParagraphIndexMatchesSourceLines(moduleA);
 	TestVerseListFileRoundTrips();
 	TestVerseListFileSurvivesLosingItsAttributes();
 	TestMoveColumnPreservesEachColumnsOwnKey(&manager, moduleA, moduleB);

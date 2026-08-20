@@ -13,6 +13,7 @@
 #include <MimeType.h>
 #include <NodeInfo.h>
 #include <Path.h>
+#include <StringList.h>
 
 #include "../constants.h"
 
@@ -353,6 +354,35 @@ VerseListFile::AppendReference(const char* referenceLine)
 	if (!fReferenceText.IsEmpty())
 		fReferenceText << "\n";
 	fReferenceText << referenceLine;
+	return Save();
+}
+
+
+status_t
+VerseListFile::RemoveLine(int32 lineIndex)
+{
+	if (lineIndex < 0 || fPath.IsEmpty())
+		return B_BAD_INDEX;
+
+	// Split on "\n" -- the exact same rule _Rebuild() applies to this
+	// same text -- rather than anything smarter, so the Nth entry here
+	// is always the Nth section there.
+	BStringList lines;
+	if (!fReferenceText.Split("\n", true, lines)
+		|| lineIndex >= lines.CountStrings()) {
+		return B_BAD_INDEX;
+	}
+
+	lines.Remove(lineIndex);
+
+	BString rebuilt;
+	for (int32 i = 0; i < lines.CountStrings(); i++) {
+		if (i > 0)
+			rebuilt << "\n";
+		rebuilt << lines.StringAt(i);
+	}
+	fReferenceText = rebuilt;
+
 	return Save();
 }
 

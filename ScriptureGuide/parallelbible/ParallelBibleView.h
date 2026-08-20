@@ -533,6 +533,12 @@ public:
 										int startVerse, int endVerse,
 										const char* sourceVersification,
 										BPoint screenPoint);
+				// Same reasoning, for a right-click landing on a
+				// section HEADING instead of a verse -- "remove this
+				// line from the list it belongs to".
+				void				_ShowRemoveFromListMenu(
+										const char* path, int32 lineIndex,
+										BPoint screenPoint);
 
 private:
 				friend class ParallelHeaderView;
@@ -812,6 +818,13 @@ private:
 										const char* bookName, int chapter,
 										int startVerse, int endVerse,
 										const char* sourceVersification);
+				// Shared by append and remove -- see the definition.
+				void				_RefreshChainsShowingListFile(
+										const char* path);
+				// Removes one line and refreshes any chain showing the
+				// file -- the write half of _ShowRemoveFromListMenu().
+				status_t			_RemoveVerseListLine(const char* path,
+										int32 lineIndex);
 				void				_ApplyVerseListFile(
 										int32 anchorPosition,
 										const char* path);

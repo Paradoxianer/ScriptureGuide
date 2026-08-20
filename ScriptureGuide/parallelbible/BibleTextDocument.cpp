@@ -77,8 +77,14 @@ struct RenderStep {
 	BString		title;		// heading only: what it reads
 	BString		linkKey;	// heading only: where clicking it goes
 	VerseKey	key;		// verse only
+	// Which physical line of fVerseListText this section came from
+	// (0-based, counting every line the split-on-"\n" loop below visits,
+	// matching how VerseListFile::RemoveLine() indexes the same text) --
+	// -1 outside list mode. What "remove this section" (#47) needs to
+	// know which line to delete.
+	int32		listLineIndex;
 
-	RenderStep() : isHeading(false) {}
+	RenderStep() : isHeading(false), listLineIndex(-1) {}
 };
 
 
@@ -601,6 +607,15 @@ BibleTextDocument::BookNameForParagraphIndex(int32 index) const
 
 
 int32
+BibleTextDocument::ListLineForParagraphIndex(int32 index) const
+{
+	if (index < 0 || (size_t)index >= fParagraphListLine.size())
+		return -1;
+	return fParagraphListLine[index];
+}
+
+
+int32
 BibleTextDocument::StepForParagraphIndex(int32 index) const
 {
 	if (index < 0 || (size_t)index >= fParagraphStep.size())
@@ -751,6 +766,7 @@ BibleTextDocument::_Rebuild()
 	fParagraphVerse.clear();
 	fParagraphBookName.clear();
 	fParagraphChapter.clear();
+	fParagraphListLine.clear();
 	fLinkedToPrevious.clear();
 	fParagraphStep.clear();
 	fReferenceLinks.clear();
@@ -830,6 +846,7 @@ BibleTextDocument::_Rebuild()
 		// across three invented ranges including all of Genesis 3, with
 		// no error of any kind. A newline cannot collide with anything.
 		BString remaining(fVerseListText);
+		int32 lineIndex = 0;
 		while (remaining.Length() > 0) {
 			BString line;
 			int32 breakAt = remaining.FindFirst("\n");
@@ -840,6 +857,12 @@ BibleTextDocument::_Rebuild()
 				remaining.CopyInto(line, 0, breakAt);
 				remaining.Remove(0, breakAt + 1);
 			}
+			// Counted before any of the skips below, so this always
+			// matches "the Nth line of the raw text split on \n" --
+			// exactly what VerseListFile::RemoveLine() does to the same
+			// text, regardless of whether THIS line turned out blank or
+			// unparseable.
+			int32 thisLine = lineIndex++;
 			line.Trim();
 			if (line.IsEmpty())
 				continue;
@@ -875,12 +898,14 @@ BibleTextDocument::_Rebuild()
 			heading.title
 				= _CondensedRangeText(verses.front(), verses.back());
 			heading.linkKey = verses[0].getText();
+			heading.listLineIndex = thisLine;
 			sequence.push_back(heading);
 
 			for (size_t v = 0; v < verses.size(); v++) {
 				RenderStep row;
 				row.isHeading = false;
 				row.key = verses[v];
+				row.listLineIndex = thisLine;
 				sequence.push_back(row);
 			}
 		}
@@ -949,6 +974,7 @@ BibleTextDocument::_Rebuild()
 			// resolve to a real verse row).
 			fParagraphBookName.push_back(BString());
 			fParagraphChapter.push_back(-1);
+			fParagraphListLine.push_back(sequence[step].listLineIndex);
 			documentOffset += headingParagraph.Length();
 			continue;
 		}
@@ -1145,6 +1171,7 @@ BibleTextDocument::_Rebuild()
 		fParagraphStep.push_back((int32)step);
 		fParagraphBookName.push_back(BString(iterKey.getBookName()));
 		fParagraphChapter.push_back(iterKey.getChapter());
+		fParagraphListLine.push_back(sequence[step].listLineIndex);
 		fLinkedToPrevious[(int32)step] = linkedToPrevious;
 		documentOffset += paragraph.Length();
 
