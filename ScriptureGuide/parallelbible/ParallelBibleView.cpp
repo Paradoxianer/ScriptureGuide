@@ -61,6 +61,72 @@ SetVerseKeyLocale(VerseKey& key)
 	key.setLocale(language.Code());
 }
 
+
+// bookName/chapter/startVerse/endVerse, counted in sourceV11n, formatted
+// as a reference counted in targetV11n instead -- condensed the same way
+// BibleTextDocument's own _CondensedRangeText() is (duplicated rather
+// than shared across translation units for a dozen lines neither
+// otherwise needs to know about).
+//
+// Always goes through positionFrom(), whether or not the two systems
+// actually differ -- same reasoning already used for stepping through a
+// verse-list sequence: "same versification on both sides" makes it an
+// exact repositioning rather than a mapping, so there is no special case
+// to get right or wrong.
+//
+// This is what "Add to list" (#47) needs and _ReferenceFor() does not:
+// appending a reference as read in ONE column's counting into a list
+// file declaring ANOTHER would silently mean a different verse the next
+// time that file is rendered -- the exact failure #46 exists to
+// prevent, reopened at the point of adding rather than reading.
+BString
+ParallelBibleView::FormatVerseRangeIn(const char* bookName, int chapter,
+	int startVerse, int endVerse, const char* sourceVersification,
+	const char* targetVersification)
+{
+	if (sourceVersification == NULL || sourceVersification[0] == '\0')
+		sourceVersification = "KJV";
+	if (targetVersification == NULL || targetVersification[0] == '\0')
+		targetVersification = "KJV";
+
+	VerseKey sourceStart, sourceEnd;
+	SetVerseKeyLocale(sourceStart);
+	SetVerseKeyLocale(sourceEnd);
+	sourceStart.setVersificationSystem(sourceVersification);
+	sourceEnd.setVersificationSystem(sourceVersification);
+	sourceStart.setBookName(bookName);
+	sourceStart.setChapter(chapter);
+	sourceStart.setVerse(startVerse);
+	sourceEnd.setBookName(bookName);
+	sourceEnd.setChapter(chapter);
+	sourceEnd.setVerse(endVerse);
+
+	VerseKey start, end;
+	SetVerseKeyLocale(start);
+	SetVerseKeyLocale(end);
+	start.setVersificationSystem(targetVersification);
+	end.setVersificationSystem(targetVersification);
+	start.positionFrom(sourceStart);
+	end.positionFrom(sourceEnd);
+
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+	const char* separator
+		= strcmp(language.Code(), "de") == 0 ? ", " : ":";
+
+	BString reference(start.getBookName());
+	reference << " " << start.getChapter() << separator << start.getVerse();
+	if (end.getBook() == start.getBook()
+		&& end.getChapter() == start.getChapter()) {
+		if (end.getVerse() > start.getVerse())
+			reference << "-" << end.getVerse();
+	} else {
+		reference << "-" << end.getBookName() << " " << end.getChapter()
+			<< separator << end.getVerse();
+	}
+	return reference;
+}
+
 const float ParallelBibleView::kMinColumnWidth = 150.0f;
 // Wide enough for the link/unlink toggle button (see kLinkButtonWidth)
 // to sit centered on a column's divider line without crowding either
@@ -280,6 +346,70 @@ public:
 	{
 		if (fOwner != NULL)
 			fOwner->_SetActiveColumn(fPosition);
+
+		uint32 buttons = 0;
+		BMessage* current = Window() != NULL
+			? Window()->CurrentMessage() : NULL;
+		if (current != NULL)
+			current->FindInt32("buttons", (int32*)&buttons);
+		if (buttons == B_SECONDARY_MOUSE_BUTTON) {
+			// The reference an existing selection already covers, or
+			// (no selection, or clicked outside it) just the one verse
+			// under the pointer -- right-clicking a single verse to
+			// bookmark it should not first require selecting it.
+			int32 start, end;
+			if (HasSelection()) {
+				GetSelection(start, end);
+				int32 offset = TextOffsetAt(where);
+				if (offset < start || offset >= end)
+					start = end = -1;
+			} else {
+				start = end = -1;
+			}
+			if (start < 0) {
+				int verse = VerseAt(where);
+				if (verse > 0 && fBibleDocument != NULL) {
+					fBibleDocument->TextRangeForVerseRange(verse, verse,
+						start, end);
+				}
+			}
+			if (start >= 0 && end > start && fOwner != NULL
+				&& fBibleDocument != NULL) {
+				// Book/chapter for the paragraph actually clicked, not
+				// this document's own current position -- while
+				// rendering a verse list those can disagree (a section
+				// can be in a different book entirely), and getting
+				// this wrong would silently add the wrong verse.
+				int32 paragraphOffset;
+				int32 paragraphIndex = fBibleDocument->ParagraphIndexFor(
+					start, paragraphOffset);
+				BString bookName
+					= fBibleDocument->BookNameForParagraphIndex(
+						paragraphIndex);
+				int chapter = fBibleDocument->ChapterForParagraphIndex(
+					paragraphIndex);
+				int startVerse = fBibleDocument->VerseForParagraphIndex(
+					paragraphIndex);
+				int32 endParagraph = fBibleDocument->ParagraphIndexFor(
+					end > start ? end - 1 : end, paragraphOffset);
+				int endVerse = fBibleDocument->VerseForParagraphIndex(
+					endParagraph);
+
+				SWModule* module = fBibleDocument->Module();
+				const char* sourceVersification = module != NULL
+					? module->getConfigEntry("Versification") : NULL;
+
+				if (!bookName.IsEmpty() && chapter > 0 && startVerse > 0) {
+					BPoint screenPoint = where;
+					ConvertToScreen(&screenPoint);
+					fOwner->_ShowAddToListMenu(bookName.String(), chapter,
+						startVerse, endVerse > startVerse ? endVerse
+							: startVerse,
+						sourceVersification, screenPoint);
+				}
+			}
+			return;
+		}
 
 		fMouseDownPoint = where;
 		fTrackingForDrag = false;
@@ -1148,6 +1278,11 @@ private:
 // was looking at when they asked for a new list in the first place.
 class NewVerseListWindow : public BWindow {
 public:
+	// anchorPosition < 0 means this list isn't for any particular chain
+	// -- "Add to list" on a selection elsewhere in the reading pane
+	// creating a NEW list to add to, rather than the band's own "New
+	// list...", which always means "and show it in THIS chain". Only
+	// the latter applies the result anywhere once created.
 	NewVerseListWindow(BMessenger target, int32 anchorPosition,
 		const char* seedReference, const char* versification)
 		:
@@ -1207,7 +1342,7 @@ public:
 
 		VerseListFile list;
 		if (list.CreateNew(name.String(), fSeedReference.String(),
-				fVersification.String()) == B_OK) {
+				fVersification.String()) == B_OK && fAnchorPosition >= 0) {
 			BMessage applied(PARALLEL_SELECT_VERSE_LIST);
 			applied.AddInt32("index", fAnchorPosition);
 			applied.AddString("path", list.Path());
@@ -1829,6 +1964,50 @@ ParallelBibleView::MessageReceived(BMessage* message)
 				// get re-enabled.
 				_SetActiveColumn(index);
 				SetColumnVerseList(index, "");
+			}
+			break;
+		}
+
+		case PARALLEL_ADD_TO_VERSE_LIST:
+		{
+			BString path, book, versification;
+			int32 chapter, startVerse, endVerse;
+			if (message->FindString("path", &path) == B_OK
+				&& message->FindString("book", &book) == B_OK
+				&& message->FindInt32("chapter", &chapter) == B_OK
+				&& message->FindInt32("startVerse", &startVerse) == B_OK
+				&& message->FindInt32("endVerse", &endVerse) == B_OK
+				&& message->FindString("versification", &versification)
+					== B_OK) {
+				_AppendToVerseListFile(path.String(), book.String(),
+					chapter, startVerse, endVerse, versification.String());
+			}
+			break;
+		}
+
+		case PARALLEL_ADD_TO_NEW_VERSE_LIST:
+		{
+			BString book, versification;
+			int32 chapter, startVerse, endVerse;
+			if (message->FindString("book", &book) == B_OK
+				&& message->FindInt32("chapter", &chapter) == B_OK
+				&& message->FindInt32("startVerse", &startVerse) == B_OK
+				&& message->FindInt32("endVerse", &endVerse) == B_OK
+				&& message->FindString("versification", &versification)
+					== B_OK) {
+				// A brand-new list adopts the reference's own
+				// versification as its own -- no conversion, source and
+				// target are the same system.
+				BString seed = FormatVerseRangeIn(book.String(), chapter,
+					startVerse, endVerse, versification.String(),
+					versification.String());
+				// -1: this list isn't meant for any particular chain --
+				// see NewVerseListWindow's own comment on the
+				// distinction.
+				NewVerseListWindow* window = new NewVerseListWindow(
+					BMessenger(this), -1, seed.String(),
+					versification.String());
+				window->Show();
 			}
 			break;
 		}
@@ -2653,15 +2832,17 @@ ParallelBibleView::_ChainBands() const
 // list...", and -- once the chain is actually on one -- "Back to
 // chapter". Fire-and-forget, same idiom as PARALLEL_INSERT_COLUMN_MENU's
 // own popup: not owned by any BMenuField, so it cleans itself up.
-void
-ParallelBibleView::_ShowChainBandMenu(int32 anchorPosition,
-	BPoint screenPoint)
+// Every verse list on disk, name paired with path, sorted by name the
+// way Tracker's own Name column would read -- not by path, which is
+// alphabetized by filename instead and would disagree with it whenever
+// sanitizing a name changed its case. Read fresh every call rather than
+// cached anywhere -- files can appear or vanish here from Tracker at any
+// moment (see VerseListFile::ListPaths()'s own comment). Shared by the
+// band's own popup and the "Add to list" context menu below, so the two
+// always agree on what exists and in what order.
+std::vector<std::pair<BString, BString> >
+ParallelBibleView::_SortedVerseListEntries()
 {
-	BPopUpMenu* menu = new BPopUpMenu("chainBand", false, false);
-
-	// Read fresh every time rather than cached anywhere -- files can
-	// appear or vanish here from Tracker at any moment (see
-	// VerseListFile::ListPaths()'s own comment).
 	std::vector<BString> paths = VerseListFile::ListPaths();
 	std::vector<std::pair<BString, BString> > entries;	// name, path
 	for (size_t i = 0; i < paths.size(); i++) {
@@ -2669,11 +2850,19 @@ ParallelBibleView::_ShowChainBandMenu(int32 anchorPosition,
 		if (probe.SetTo(paths[i].String()) == B_OK)
 			entries.push_back(std::make_pair(BString(probe.Name()), paths[i]));
 	}
-	// By display name, the way Tracker's own Name column would read --
-	// not by path, which is alphabetized by filename instead and would
-	// disagree with it whenever sanitizing a name changed its case.
 	std::sort(entries.begin(), entries.end());
+	return entries;
+}
 
+
+void
+ParallelBibleView::_ShowChainBandMenu(int32 anchorPosition,
+	BPoint screenPoint)
+{
+	BPopUpMenu* menu = new BPopUpMenu("chainBand", false, false);
+
+	std::vector<std::pair<BString, BString> > entries
+		= _SortedVerseListEntries();
 	for (size_t i = 0; i < entries.size(); i++) {
 		BMessage* select = new BMessage(PARALLEL_SELECT_VERSE_LIST);
 		select->AddInt32("index", anchorPosition);
@@ -2713,6 +2902,106 @@ ParallelBibleView::_ApplyVerseListFile(int32 anchorPosition,
 {
 	_SetActiveColumn(anchorPosition);
 	SetColumnVerseListFile(anchorPosition, path);
+}
+
+
+void
+ParallelBibleView::_ShowAddToListMenu(const char* bookName, int chapter,
+	int startVerse, int endVerse, const char* sourceVersification,
+	BPoint screenPoint)
+{
+	BPopUpMenu* menu = new BPopUpMenu("addToList", false, false);
+
+	// Read-only, for context -- shown in the SOURCE's own counting,
+	// since that is what the user actually clicked on. Each item below
+	// converts into ITS OWN list's counting when chosen (#46); showing
+	// that conversion happening here, for every list at once before any
+	// is picked, would be more confusing than clarifying.
+	BString displayReference = FormatVerseRangeIn(bookName, chapter,
+		startVerse, endVerse, sourceVersification, sourceVersification);
+	BMenuItem* heading = new BMenuItem(displayReference.String(),
+		(BMessage*)NULL);
+	heading->SetEnabled(false);
+	menu->AddItem(heading);
+	menu->AddSeparatorItem();
+
+	std::vector<std::pair<BString, BString> > entries
+		= _SortedVerseListEntries();
+	for (size_t i = 0; i < entries.size(); i++) {
+		BMessage* add = new BMessage(PARALLEL_ADD_TO_VERSE_LIST);
+		add->AddString("path", entries[i].second);
+		add->AddString("book", bookName);
+		add->AddInt32("chapter", chapter);
+		add->AddInt32("startVerse", startVerse);
+		add->AddInt32("endVerse", endVerse);
+		add->AddString("versification",
+			sourceVersification != NULL ? sourceVersification : "KJV");
+		menu->AddItem(new BMenuItem(entries[i].first.String(), add));
+	}
+
+	if (!entries.empty())
+		menu->AddSeparatorItem();
+
+	BMessage* newList = new BMessage(PARALLEL_ADD_TO_NEW_VERSE_LIST);
+	newList->AddString("book", bookName);
+	newList->AddInt32("chapter", chapter);
+	newList->AddInt32("startVerse", startVerse);
+	newList->AddInt32("endVerse", endVerse);
+	newList->AddString("versification",
+		sourceVersification != NULL ? sourceVersification : "KJV");
+	menu->AddItem(new BMenuItem(B_TRANSLATE("New list" B_UTF8_ELLIPSIS),
+		newList));
+
+	menu->SetTargetForItems(this);
+	menu->SetAsyncAutoDestruct(true);
+	menu->Go(screenPoint, true, true, true);
+}
+
+
+status_t
+ParallelBibleView::_AppendToVerseListFile(const char* path,
+	const char* bookName, int chapter, int startVerse, int endVerse,
+	const char* sourceVersification)
+{
+	VerseListFile file;
+	if (file.SetTo(path) != B_OK) {
+		// Same reasoning as _ApplyVerseListFile(): deleted or moved
+		// since the menu was built, nothing to roll back.
+		return B_ENTRY_NOT_FOUND;
+	}
+
+	// The file's OWN declared versification, not the column the
+	// reference was read from -- see this method's header comment.
+	BString reference = FormatVerseRangeIn(bookName, chapter, startVerse,
+		endVerse, sourceVersification, file.Versification());
+
+	status_t status = file.AppendReference(reference.String());
+	if (status != B_OK)
+		return status;
+
+	// Reload every chain already showing this exact file, or it would
+	// sit one entry behind the change just made to it until something
+	// else happened to reselect the list. Once per CHAIN, not per
+	// column -- SetColumnVerseListFile() rescrolls to the top of the
+	// list, which a redundant second call on the same chain would do
+	// twice for no reason.
+	int32 refreshedThrough = -1;
+	for (size_t i = 0; i < fColumnOrder.size(); i++) {
+		if ((int32)i <= refreshedThrough)
+			continue;
+		BibleTextDocument* document = NULL;
+		if (fColumnOrder[i] == COLUMN_BIBLE)
+			document = fDocuments[_BibleIndexForPosition((int32)i)];
+		else if (fColumnOrder[i] == COLUMN_NOTES)
+			document = fNotesColumns[_NotesIndexForPosition((int32)i)]
+				.document;
+		if (document == NULL || BString(document->VerseListPath()) != path)
+			continue;
+
+		SetColumnVerseListFile((int32)i, path);
+		refreshedThrough = _ChainEnd((int32)i);
+	}
+	return B_OK;
 }
 
 

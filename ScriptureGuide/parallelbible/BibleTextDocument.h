@@ -206,6 +206,16 @@ public:
 			int32				ParagraphIndexForVerse(int verse) const;
 			int					VerseForParagraphIndex(int32 index) const;
 
+			// Book and chapter for the paragraph at this index -- what
+			// BookName()/Chapter() answer for the CURRENT position,
+			// answered instead for any row, correctly even while
+			// rendering a verse list whose sections cross books or
+			// chapters (#47's "Add to list", which needs the range a
+			// specific click landed on, not the chain's own current
+			// key). -1/empty if the index is out of range.
+			int					ChapterForParagraphIndex(int32 index) const;
+			BString				BookNameForParagraphIndex(int32 index) const;
+
 			// Where a paragraph sits in what this document was asked to
 			// render -- verse N of a chapter is step N-1, and step N of a
 			// verse list is its Nth reference (#47).
@@ -337,6 +347,11 @@ private:
 			// For display and for addressing a note; NOT for identifying
 			// a row across columns -- see SequenceLength().
 			std::vector<int>	fParagraphVerse;
+
+			// Same idea, book name and chapter -- see
+			// BookNameForParagraphIndex()/ChapterForParagraphIndex().
+			std::vector<BString>	fParagraphBookName;
+			std::vector<int>	fParagraphChapter;
 
 			// paragraph index -> step, rebuilt alongside it.
 			std::vector<int32>	fParagraphStep;

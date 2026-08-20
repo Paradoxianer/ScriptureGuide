@@ -353,6 +353,19 @@ public:
 										int32 chainAnchorPosition) const
 										{ return _RowHeight(verse,
 											chainAnchorPosition); }
+				// Formats a book/chapter/startVerse/endVerse range,
+				// converting from sourceVersification into
+				// targetVersification via VerseKey::positionFrom() --
+				// what "Add to list" (#47) uses to write an entry in
+				// the counting the TARGET list declares rather than the
+				// column it was read from (#46). Public and static:
+				// touches no instance, and a headless regression test
+				// can check the conversion directly.
+				static BString		FormatVerseRangeIn(
+										const char* bookName, int chapter,
+										int startVerse, int endVerse,
+										const char* sourceVersification,
+										const char* targetVersification);
 				// The column most recently interacted with -- see the
 				// class comment -- or -1 if there are no columns at all.
 				// The owning window (see PARALLEL_ACTIVE_COLUMN_CHANGED)
@@ -510,6 +523,16 @@ public:
 				// their own FrameResized(), same not-a-friend reasoning
 				// as _ColumnScrolled() above.
 				void				_ColumnResized(int32 position);
+
+				// Called by BibleColumnView's own MouseDown() (unrelated
+				// class, not a friend -- same reasoning as
+				// _ColumnScrolled() etc. above) on a right-click. See
+				// the definition.
+				void				_ShowAddToListMenu(
+										const char* bookName, int chapter,
+										int startVerse, int endVerse,
+										const char* sourceVersification,
+										BPoint screenPoint);
 
 private:
 				friend class ParallelHeaderView;
@@ -760,6 +783,12 @@ private:
 				BString				_ChainBandLabel(int32 anchorPosition) const;
 				std::vector<ChainBand> _ChainBands() const;
 
+				// Every verse list on disk, name/path, sorted by name --
+				// see the definition. Static: touches no member, shared
+				// by the band's popup and the "Add to list" context menu.
+				static std::vector<std::pair<BString, BString> >
+									_SortedVerseListEntries();
+
 				// The band's own click handling -- a popup listing the
 				// verse lists on disk, "New list...", and "Back to
 				// chapter" -- for the chain anchored at `anchorPosition`
@@ -768,6 +797,21 @@ private:
 				void				_ShowChainBandMenu(
 										int32 anchorPosition,
 										BPoint screenPoint);
+				// Converts book/chapter/startVerse/endVerse (counted in
+				// sourceVersification) into the TARGET file's own
+				// versification before appending -- reading `path`'s
+				// header is what supplies that target system (#46: the
+				// file's declared versification is what governs how it
+				// will be re-parsed later, so the entry has to already
+				// be written in that system, not the source column's).
+				// Saves, then reloads any chain currently showing that
+				// same file so it never sits stale next to the change
+				// just made to it.
+				status_t			_AppendToVerseListFile(
+										const char* path,
+										const char* bookName, int chapter,
+										int startVerse, int endVerse,
+										const char* sourceVersification);
 				void				_ApplyVerseListFile(
 										int32 anchorPosition,
 										const char* path);

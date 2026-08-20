@@ -1371,6 +1371,51 @@ TestVerseListFileAppliesItsNameToTheChain(SWMgr* manager, SWModule* moduleA)
 	BEntry(file.Path()).Remove();
 }
 
+// The exact conversion "Add to list" depends on to avoid reopening #46:
+// a reference read in one column's counting has to be written into a
+// list in the TARGET list's own counting, not left as displayed.
+// Measured earlier this session: German "Ps 51,20" is KJV "Psalms
+// 51:19", because German counting gives Psalm 51 two more verses than
+// KJV and the last KJV verse absorbs both.
+static void
+TestFormatVerseRangeInConvertsAcrossVersifications()
+{
+	const char* name = "ParallelBibleView::FormatVerseRangeIn: converts "
+		"into the target versification, not the source's";
+
+	BString same = ParallelBibleView::FormatVerseRangeIn("Psalms", 51,
+		20, 20, "German", "German");
+	BString converted = ParallelBibleView::FormatVerseRangeIn("Psalms",
+		51, 20, 20, "German", "KJV");
+
+	bool ok = same.FindFirst("51") >= 0 && same.FindFirst("20") >= 0
+		&& converted.FindFirst("51") >= 0
+		&& converted.FindFirst("19") >= 0
+		&& converted != same;
+
+	if (!ok) {
+		printf("      unconverted: \"%s\"  converted to KJV: \"%s\"\n",
+			same.String(), converted.String());
+	}
+	Check(ok, name);
+
+	// Same system on both sides is an exact repositioning, not a
+	// mapping -- verified directly rather than assumed, since every
+	// call site relies on this being safe to do unconditionally. Not
+	// checking the book name's exact text: getBookName() answers in
+	// whatever locale this happens to run under (German gives "1.
+	// Mose", not "Genesis") -- exactly the assumption that broke a
+	// hardcoded-English-name test earlier this session. Verse and
+	// chapter numbers are locale-independent, so those are what this
+	// checks.
+	BString identity = ParallelBibleView::FormatVerseRangeIn("Genesis",
+		1, 1, 3, "KJV", "KJV");
+	Check(identity.FindFirst(" 1") >= 0 && identity.FindFirst("3") >= 0
+			&& !identity.IsEmpty(),
+		"ParallelBibleView::FormatVerseRangeIn: the same system on both "
+		"sides is an exact repositioning");
+}
+
 int
 main()
 {
@@ -1407,6 +1452,7 @@ main()
 	TestSplitChainKeepsOtherChainUnaffected(&manager, moduleA, moduleB);
 	TestChainVerseListAppliesToItsChainOnly(&manager, moduleA, moduleB);
 	TestVerseListFileAppliesItsNameToTheChain(&manager, moduleA);
+	TestFormatVerseRangeInConvertsAcrossVersifications();
 	TestVerseListFileRoundTrips();
 	TestVerseListFileSurvivesLosingItsAttributes();
 	TestMoveColumnPreservesEachColumnsOwnKey(&manager, moduleA, moduleB);

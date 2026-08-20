@@ -91,6 +91,14 @@ public:
 			// CreateNew() must have set a path first.
 			status_t			Save();
 
+			// Appends one reference line and saves immediately -- the
+			// file IS the list (#47's whole point), so "add an entry"
+			// means write it now, not queue an in-memory change someone
+			// has to remember to flush. SetTo() must have already
+			// loaded a file (or CreateNew() built one) for this to have
+			// anything to append to.
+			status_t			AppendReference(const char* referenceLine);
+
 			// settings/scriptureguide/lists/, created on first use.
 			static BString		ListsDirectory();
 

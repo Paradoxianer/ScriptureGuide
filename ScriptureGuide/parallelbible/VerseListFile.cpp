@@ -343,6 +343,21 @@ VerseListFile::EntryCount() const
 
 
 status_t
+VerseListFile::AppendReference(const char* referenceLine)
+{
+	if (referenceLine == NULL || referenceLine[0] == '\0')
+		return B_BAD_VALUE;
+	if (fPath.IsEmpty())
+		return B_NO_INIT;
+
+	if (!fReferenceText.IsEmpty())
+		fReferenceText << "\n";
+	fReferenceText << referenceLine;
+	return Save();
+}
+
+
+status_t
 VerseListFile::Save()
 {
 	if (fPath.IsEmpty())

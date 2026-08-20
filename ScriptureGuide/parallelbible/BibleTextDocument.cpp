@@ -582,6 +582,24 @@ BibleTextDocument::VerseForParagraphIndex(int32 index) const
 }
 
 
+int
+BibleTextDocument::ChapterForParagraphIndex(int32 index) const
+{
+	if (index < 0 || (size_t)index >= fParagraphChapter.size())
+		return -1;
+	return fParagraphChapter[index];
+}
+
+
+BString
+BibleTextDocument::BookNameForParagraphIndex(int32 index) const
+{
+	if (index < 0 || (size_t)index >= fParagraphBookName.size())
+		return BString();
+	return fParagraphBookName[index];
+}
+
+
 int32
 BibleTextDocument::StepForParagraphIndex(int32 index) const
 {
@@ -731,6 +749,8 @@ BibleTextDocument::_Rebuild()
 	// are untouched since only the base-class subobject is reassigned.
 	TextDocument::operator=(TextDocument());
 	fParagraphVerse.clear();
+	fParagraphBookName.clear();
+	fParagraphChapter.clear();
 	fLinkedToPrevious.clear();
 	fParagraphStep.clear();
 	fReferenceLinks.clear();
@@ -923,6 +943,12 @@ BibleTextDocument::_Rebuild()
 			// one in a notes column cannot write itself over a note.
 			fParagraphVerse.push_back(0);
 			fParagraphStep.push_back((int32)step);
+			// A heading can span a whole section, possibly crossing
+			// books -- no single book/chapter describes it, and
+			// nothing needs one (VerseAt()-driven callers only ever
+			// resolve to a real verse row).
+			fParagraphBookName.push_back(BString());
+			fParagraphChapter.push_back(-1);
 			documentOffset += headingParagraph.Length();
 			continue;
 		}
@@ -1117,6 +1143,8 @@ BibleTextDocument::_Rebuild()
 		Append(paragraph);
 		fParagraphVerse.push_back(verse);
 		fParagraphStep.push_back((int32)step);
+		fParagraphBookName.push_back(BString(iterKey.getBookName()));
+		fParagraphChapter.push_back(iterKey.getChapter());
 		fLinkedToPrevious[(int32)step] = linkedToPrevious;
 		documentOffset += paragraph.Length();
 

@@ -85,6 +85,13 @@ const uint32 PARALLEL_TOGGLE_LINK		= 'PVtl';
 const uint32 PARALLEL_SELECT_VERSE_LIST	= 'PVsl';
 const uint32 PARALLEL_NEW_VERSE_LIST	= 'PVnl';
 const uint32 PARALLEL_BACK_TO_CHAPTER	= 'PVbc';
+
+// "Add to list" on a selection or a right-clicked verse (#47) -- appends
+// a reference to an EXISTING list rather than replacing/creating the
+// active chain's own list, which is what PARALLEL_SELECT_VERSE_LIST/
+// PARALLEL_NEW_VERSE_LIST above are for.
+const uint32 PARALLEL_ADD_TO_VERSE_LIST	= 'PVal';
+const uint32 PARALLEL_ADD_TO_NEW_VERSE_LIST	= 'PVan';
 const uint32 PARALLEL_INSERT_COLUMN_MENU	= 'PVic';
 const uint32 PARALLEL_INSERT_MODULE	= 'PVim';
 const uint32 PARALLEL_INSERT_NOTES		= 'PVin';
