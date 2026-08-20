@@ -1156,6 +1156,13 @@ TestChainVerseListAppliesToItsChainOnly(SWMgr* manager, SWModule* moduleA,
 	key.setText("Genesis 1:2");	listText << "-" << key.getText();
 	key.setText("Psalms 1:1");	listText << ", " << key.getText();
 
+	VerseListFile file;
+	if (file.CreateNew("__unit_test_chain_list__", listText.String(),
+			v11n != NULL ? v11n : "KJV") != B_OK) {
+		Skip(name, "could not create a list file");
+		return;
+	}
+
 	ParallelBibleView view("testChainList", manager, 900.0f);
 	view.AddColumn(moduleA->getName());
 	view.AddColumn(moduleB->getName());
@@ -1163,32 +1170,35 @@ TestChainVerseListAppliesToItsChainOnly(SWMgr* manager, SWModule* moduleA,
 	// Break the chain before the last column, so there are two chains.
 	view.SetColumnLinked(1, false);
 
-	view.SetColumnVerseList(0, listText.String());
+	view.SetColumnVerseListFile(0, file.Path());
 
 	std::vector<ParallelBibleView::ColumnDescription> layout
 		= view.ColumnLayout();
 	bool ok = layout.size() == 3
-		// Both columns of the first chain took the list ...
-		&& layout[0].verseList == listText
-		&& layout[1].verseList == listText
+		// Both columns of the first chain took the list, recorded as
+		// the FILE it came from ...
+		&& layout[0].verseListPath == file.Path()
+		&& layout[1].verseListPath == file.Path()
 		// ... and the chain beyond the break did not.
-		&& layout[2].verseList.IsEmpty();
+		&& layout[2].verseListPath.IsEmpty();
 
 	if (!ok && layout.size() == 3) {
 		for (size_t i = 0; i < 3; i++) {
 			printf("      column %d: \"%s\"\n", (int)i,
-				layout[i].verseList.String());
+				layout[i].verseListPath.String());
 		}
 	}
 	Check(ok, name);
 
-	// And an empty list returns the chain to its chapter.
-	view.SetColumnVerseList(0, "");
+	// And an empty path returns the chain to its chapter.
+	view.SetColumnVerseListFile(0, "");
 	layout = view.ColumnLayout();
-	Check(layout.size() == 3 && layout[0].verseList.IsEmpty()
-			&& layout[1].verseList.IsEmpty(),
-		"ParallelBibleView::SetColumnVerseList: an empty list returns "
-		"the chain to its chapter");
+	Check(layout.size() == 3 && layout[0].verseListPath.IsEmpty()
+			&& layout[1].verseListPath.IsEmpty(),
+		"ParallelBibleView::SetColumnVerseListFile: an empty path "
+		"returns the chain to its chapter");
+
+	BEntry(file.Path()).Remove();
 }
 
 // Round-trip: create with a seed line, append a second, save, reload
@@ -1324,6 +1334,43 @@ TestVerseListFileSurvivesLosingItsAttributes()
 	BEntry(barePath.String()).Remove();
 }
 
+// The actual bug this whole branch exists to fix: the band showed a
+// list's raw first reference instead of the name it was given, because
+// nothing recorded which FILE a chain's list came from. Round-trips
+// through SetColumnVerseListFile() and checks the document itself
+// reports the name -- _ChainBandLabel() reads exactly this.
+static void
+TestVerseListFileAppliesItsNameToTheChain(SWMgr* manager, SWModule* moduleA)
+{
+	const char* name = "ParallelBibleView::SetColumnVerseListFile: the "
+		"chain's documents report the list's own name, not its text";
+	if (manager == NULL || moduleA == NULL) {
+		Skip(name, "need a Bible module installed");
+		return;
+	}
+
+	VerseListFile file;
+	if (file.CreateNew("Engel im Alten Testament", "Genesis 1:1",
+			"KJV") != B_OK) {
+		Skip(name, "could not create a list file");
+		return;
+	}
+
+	ParallelBibleView view("testListName", manager, 900.0f);
+	view.AddColumn(moduleA->getName());
+	view.SetColumnVerseListFile(0, file.Path());
+
+	// This is the bug itself: before origin tracking existed, this came
+	// back as "Genesis 1:1" (the list's first, and only, reference) --
+	// the name given at creation was never shown anywhere.
+	BString label = view.ChainBandLabel(0);
+	if (label != "Engel im Alten Testament")
+		printf("      band label: \"%s\"\n", label.String());
+	Check(label == "Engel im Alten Testament", name);
+
+	BEntry(file.Path()).Remove();
+}
+
 int
 main()
 {
@@ -1359,6 +1406,7 @@ main()
 	TestRemoveMiddleColumnRelinksNeighbors(&manager, moduleA, moduleB);
 	TestSplitChainKeepsOtherChainUnaffected(&manager, moduleA, moduleB);
 	TestChainVerseListAppliesToItsChainOnly(&manager, moduleA, moduleB);
+	TestVerseListFileAppliesItsNameToTheChain(&manager, moduleA);
 	TestVerseListFileRoundTrips();
 	TestVerseListFileSurvivesLosingItsAttributes();
 	TestMoveColumnPreservesEachColumnsOwnKey(&manager, moduleA, moduleB);

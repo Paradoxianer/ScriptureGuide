@@ -179,7 +179,22 @@ BibleTextDocument::SetVerseList(const char* listText)
 	if (wanted == fVerseListText)
 		return;
 	fVerseListText = wanted;
+	// Cleared here, not left stale: a caller that knows this text's
+	// origin always calls SetVerseListOrigin() right after this one, so
+	// the two fields only ever describe whatever text is actually
+	// current -- never a previous list's name surviving a switch to a
+	// different one.
+	fVerseListName = "";
+	fVerseListPath = "";
 	_Rebuild();
+}
+
+
+void
+BibleTextDocument::SetVerseListOrigin(const char* name, const char* path)
+{
+	fVerseListName = name != NULL ? name : "";
+	fVerseListPath = path != NULL ? path : "";
 }
 
 
@@ -345,8 +360,11 @@ BibleTextDocument::SetKey(const char* key)
 	// Naming a chapter leaves list mode. That is how you get out of a
 	// verse list -- clicking one of its section headings navigates here
 	// (#47) -- and it keeps "what does this document show" answerable by
-	// one thing rather than two that could disagree.
+	// one thing rather than two that could disagree. Its origin leaves
+	// with it, for the same reason.
 	fVerseListText = "";
+	fVerseListName = "";
+	fVerseListPath = "";
 
 	_Rebuild();
 	return B_OK;

@@ -653,14 +653,14 @@ void SGMainWindow::SavePrefsForModule(void)
 	preferences.RemoveName("columnIsNotes");
 	preferences.RemoveName("columnModule");
 	preferences.RemoveName("columnLinkedToNext");
-	preferences.RemoveName("columnVerseList");
+	preferences.RemoveName("columnVerseListPath");
 	std::vector<ParallelBibleView::ColumnDescription> columns
 		= fParallelView->ColumnLayout();
 	for (size_t i = 0; i < columns.size(); i++) {
 		preferences.AddBool("columnIsNotes", columns[i].isNotes);
 		preferences.AddString("columnModule", columns[i].moduleName);
 		preferences.AddBool("columnLinkedToNext", columns[i].linkedToNext);
-		preferences.AddString("columnVerseList", columns[i].verseList);
+		preferences.AddString("columnVerseListPath", columns[i].verseListPath);
 	}
 	prefsLock.Unlock();
 }
@@ -677,21 +677,26 @@ void SGMainWindow::RestoreVerseLists(void)
 	prefsLock.Lock();
 	type_code type = B_ANY_TYPE;
 	int32 count = 0;
-	std::vector<BString> lists;
-	if (preferences.GetInfo("columnVerseList", &type, &count) == B_OK) {
+	std::vector<BString> paths;
+	if (preferences.GetInfo("columnVerseListPath", &type, &count) == B_OK) {
 		for (int32 i = 0; i < count; i++) {
-			BString list;
+			BString path;
 			// Absent for anything saved before verse lists existed,
 			// which simply means "this column shows a chapter".
-			preferences.FindString("columnVerseList", i, &list);
-			lists.push_back(list);
+			preferences.FindString("columnVerseListPath", i, &path);
+			paths.push_back(path);
 		}
 	}
 	prefsLock.Unlock();
 
-	for (size_t i = 0; i < lists.size(); i++) {
-		if (!lists[i].IsEmpty())
-			fParallelView->SetColumnVerseList((int32)i, lists[i].String());
+	// The FILE path is what was saved, not the list's text -- restoring
+	// re-reads it fresh via SetColumnVerseListFile(), which is also what
+	// gives the band its actual name (see BibleTextDocument::
+	// SetVerseListOrigin()) instead of leaving it to fall back to the
+	// list's raw first line the way it silently did before this existed.
+	for (size_t i = 0; i < paths.size(); i++) {
+		if (!paths[i].IsEmpty())
+			fParallelView->SetColumnVerseListFile((int32)i, paths[i].String());
 	}
 
 	// SetColumnVerseList() alone does not touch which chain is active or

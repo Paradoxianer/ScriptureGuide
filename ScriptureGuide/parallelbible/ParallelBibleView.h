@@ -303,6 +303,14 @@ public:
 				// the active chain.
 				status_t			SetColumnVerseList(int32 position,
 										const char* listText);
+				// Same, but loads `path` and also records it as the
+				// chain's origin (name shown on the band, path is what
+				// a future "remove/add an entry" writes back to) --
+				// see the definition. Empty/NULL path returns the
+				// chain to its chapter, same as an empty listText
+				// would above.
+				status_t			SetColumnVerseListFile(int32 position,
+										const char* path);
 				BString				ChainVerseList() const
 										{ return _ChainVerseList(
 											fActivePosition); }
@@ -330,6 +338,14 @@ public:
 				// notes chain).
 				BString				ChainKey(int32 anchorPosition) const
 										{ return _ChainKey(anchorPosition); }
+				// Public wrapper around _ChainBandLabel() -- what the
+				// band actually shows, so a headless regression test can
+				// check it directly instead of only the file path
+				// backing it.
+				BString				ChainBandLabel(
+										int32 anchorPosition) const
+										{ return _ChainBandLabel(
+											anchorPosition); }
 				// Public wrapper around _RowHeight() -- exists so headless
 				// regression tests can check a chain's own aligned row
 				// heights without a shown window.
@@ -392,11 +408,17 @@ public:
 					BString	moduleName;
 					bool	linkedToNext;
 					BString	key;
-					// Non-empty when this column is showing a verse list
-					// rather than a chapter (#47). The key stays filled
-					// in either way, so leaving the list returns to a
+					// Non-empty when this column is showing a verse
+					// list rather than a chapter (#47) -- the FILE it
+					// came from, not the list's text: restoring re-reads
+					// it fresh (via SetColumnVerseListFile()), which
+					// picks up whatever the file says now (a name, a
+					// description, entries added or removed since) rather
+					// than freezing a snapshot of the text as it stood
+					// when this was saved. The key stays filled in
+					// either way, so leaving the list returns to a
 					// sensible chapter.
-					BString	verseList;
+					BString	verseListPath;
 				};
 				std::vector<ColumnDescription> ColumnLayout() const;
 

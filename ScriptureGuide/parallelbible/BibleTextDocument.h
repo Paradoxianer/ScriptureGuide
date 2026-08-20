@@ -96,6 +96,21 @@ public:
 			const char*			VerseList() const
 									{ return fVerseListText.String(); }
 
+			// Records which FILE the text just given to SetVerseList()
+			// came from, purely for display and for anything that later
+			// needs to write back to it (#47's remove/add-entry work) --
+			// does not affect rendering, so no rebuild. Call right after
+			// SetVerseList(); that call already clears both fields, so
+			// they only ever describe the text that is actually current.
+			// Empty means "not backed by a file" (typed directly, or a
+			// chapter).
+			void				SetVerseListOrigin(const char* name,
+									const char* path);
+			const char*			VerseListName() const
+									{ return fVerseListName.String(); }
+			const char*			VerseListPath() const
+									{ return fVerseListPath.String(); }
+
 			void				SetShowVerseNumbers(bool show);
 			bool				ShowVerseNumbers() const
 									{ return fShowVerseNumbers; }
@@ -279,6 +294,10 @@ private:
 			BString				fVersification;
 			// Empty for an ordinary chapter -- see SetVerseList().
 			BString				fVerseListText;
+			// See SetVerseListOrigin(). Cleared whenever fVerseListText
+			// changes underneath them, in SetVerseList() itself.
+			BString				fVerseListName;
+			BString				fVerseListPath;
 
 			// This document's OWN current position, independent of
 			// fModule's own (shared, mutable) key state -- see the class

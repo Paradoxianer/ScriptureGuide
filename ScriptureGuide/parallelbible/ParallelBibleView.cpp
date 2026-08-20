@@ -2578,6 +2578,25 @@ ParallelBibleView::_ChainBandLabel(int32 anchorPosition) const
 {
 	BString list = _ChainVerseList(anchorPosition);
 	if (!list.IsEmpty()) {
+		// The name a file-backed list was actually given (see
+		// SetColumnVerseListFile()) -- what the band is FOR, not a
+		// fallback. Every live way of entering list mode goes through
+		// that method, so this is empty only for the case it can't
+		// cover: a saved layout from before origin tracking existed,
+		// with a name to show but nothing recorded to show it from.
+		int32 end = _ChainEnd(anchorPosition);
+		for (int32 i = _ChainStart(anchorPosition); i <= end; i++) {
+			BibleTextDocument* document = NULL;
+			if (fColumnOrder[i] == COLUMN_BIBLE)
+				document = fDocuments[_BibleIndexForPosition(i)];
+			else if (fColumnOrder[i] == COLUMN_NOTES) {
+				document
+					= fNotesColumns[_NotesIndexForPosition(i)].document;
+			}
+			if (document != NULL && document->VerseListName()[0] != '\0')
+				return BString(document->VerseListName());
+		}
+
 		BString first;
 		int32 lineBreak = list.FindFirst("\n");
 		if (lineBreak < 0)
@@ -2692,17 +2711,50 @@ void
 ParallelBibleView::_ApplyVerseListFile(int32 anchorPosition,
 	const char* path)
 {
-	VerseListFile list;
-	if (list.SetTo(path) != B_OK) {
-		// Deleted or moved between building the menu and choosing an
-		// item in it -- Tracker can do this at any moment. Nothing was
-		// applied yet, so there is nothing to roll back; doing nothing
-		// is the correct response, not an error dialog over a file the
-		// user may have deleted on purpose.
-		return;
-	}
 	_SetActiveColumn(anchorPosition);
-	SetColumnVerseList(anchorPosition, list.ReferenceText());
+	SetColumnVerseListFile(anchorPosition, path);
+}
+
+
+// Loads `path` and applies both its text and its origin (name/path,
+// see BibleTextDocument::SetVerseListOrigin()) to the chain anchored at
+// `position` -- the one place this happens, used live from the band's
+// own popup (_ApplyVerseListFile()) and at startup (see
+// SGMainWindow::RestoreVerseLists()), so the band's label
+// (_ChainBandLabel()) is never left showing a list's raw text instead
+// of the name it was actually given.
+status_t
+ParallelBibleView::SetColumnVerseListFile(int32 position, const char* path)
+{
+	if (path == NULL || path[0] == '\0')
+		return SetColumnVerseList(position, "");
+
+	VerseListFile file;
+	if (file.SetTo(path) != B_OK) {
+		// Deleted or moved since this was last pointed at it -- Tracker
+		// can do this at any moment. Nothing was applied yet, so there
+		// is nothing to roll back; doing nothing is the correct
+		// response, not an error dialog over a file the user may have
+		// deleted on purpose.
+		return B_ENTRY_NOT_FOUND;
+	}
+
+	status_t status = SetColumnVerseList(position, file.ReferenceText());
+	if (status != B_OK)
+		return status;
+
+	int32 start = _ChainStart(position);
+	int32 end = _ChainEnd(position);
+	for (int32 i = start; i <= end; i++) {
+		BibleTextDocument* document = NULL;
+		if (fColumnOrder[i] == COLUMN_BIBLE)
+			document = fDocuments[_BibleIndexForPosition(i)];
+		else if (fColumnOrder[i] == COLUMN_NOTES)
+			document = fNotesColumns[_NotesIndexForPosition(i)].document;
+		if (document != NULL)
+			document->SetVerseListOrigin(file.Name(), file.Path());
+	}
+	return B_OK;
 }
 
 
@@ -3330,8 +3382,8 @@ ParallelBibleView::ColumnLayout() const
 				const char* key = fNotesColumns[notesIndex].document->Key();
 				if (key != NULL)
 					desc.key = key;
-				desc.verseList
-					= fNotesColumns[notesIndex].document->VerseList();
+				desc.verseListPath
+					= fNotesColumns[notesIndex].document->VerseListPath();
 				// An editable column on a module the user chose records
 				// which one, or it would come back as a plain notes
 				// column after a restart and quietly stop being the
@@ -3351,7 +3403,7 @@ ParallelBibleView::ColumnLayout() const
 				const char* key = fDocuments[bibleIndex]->Key();
 				if (key != NULL)
 					desc.key = key;
-				desc.verseList = fDocuments[bibleIndex]->VerseList();
+				desc.verseListPath = fDocuments[bibleIndex]->VerseListPath();
 			}
 		}
 		desc.linkedToNext = i < fLinkedToNext.size() ? fLinkedToNext[i]
