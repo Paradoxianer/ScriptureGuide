@@ -18,6 +18,7 @@
 #define PREFERENCES_FILE "/boot/home/config/settings/scriptureguide/settings"
 #define MODULES_PATH "/boot/home/config/settings/sword/"
 #define WEBSITE_URL "http://www.scripture-guide.org/"
+#define SG_APP_SIGNATURE "application/x-vnd.Scripture-Guide"
 #define SG_MANAGER_SIGNATURE "application/x-vnd.wgp.ScriptureGuideManager"
 
 #define FONTSIZE 12

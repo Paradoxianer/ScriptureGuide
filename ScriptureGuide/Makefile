@@ -36,6 +36,7 @@ SRCS = \
 	 LogosApp.cpp  \
 	 LogosMainWindow.cpp  \
 	 LogosSearchWindow.cpp  \
+	 LogosVerseListWindow.cpp  \
 	 Preferences.cpp  \
 	 ResultListView.cpp  \
 	 Spinner.cpp  \
@@ -44,6 +45,7 @@ SRCS = \
 	 parallelbible/BibleTextDocument.cpp  \
 	 parallelbible/PersonalNotesModule.cpp  \
 	 parallelbible/VerseAligner.cpp  \
+	 parallelbible/VerseListFile.cpp  \
 	 parallelbible/ParallelBibleView.cpp  \
 	 \
 	 textview/Bullet.cpp  \
