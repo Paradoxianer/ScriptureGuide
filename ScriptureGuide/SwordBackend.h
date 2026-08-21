@@ -187,7 +187,15 @@ public:
 	SGModule*			CommentaryAt(const int32 &index) const;
 	SGModule*			LexiconAt(const int32 &index) const;
 	SGModule*			GeneralTextAt(const int32 &index) const;
-	
+
+	// Every installed Bible/Commentary module's name (the same two
+	// categories _PopulateModuleMenu() offers as real, key-searchable
+	// text -- Lexicons/GeneralTexts have no book/chapter/verse concept
+	// to search by). What the search window's "Search in" field should
+	// offer: every module the user could search, not just whichever
+	// ones happen to be open as reading-pane columns right now.
+	std::vector<BString>	SearchableModuleNames(void) const;
+
 	SGModule*			FindModule(const char* name);
 	status_t			SetModule(SGModule* mod);
  	SGModule*			CurrentModule(void);

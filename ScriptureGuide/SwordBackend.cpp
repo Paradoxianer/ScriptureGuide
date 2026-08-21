@@ -469,6 +469,23 @@ SGModule* SwordBackend::GeneralTextAt(const int32 &index) const
 }
 
 
+std::vector<BString> SwordBackend::SearchableModuleNames(void) const
+{
+	std::vector<BString> names;
+	for (int32 i = 0; i < CountBibles(); i++) {
+		SGModule* module = BibleAt(i);
+		if (module != NULL)
+			names.push_back(BString(module->Name()));
+	}
+	for (int32 i = 0; i < CountCommentaries(); i++) {
+		SGModule* module = CommentaryAt(i);
+		if (module != NULL)
+			names.push_back(BString(module->Name()));
+	}
+	return names;
+}
+
+
 // True if `lexicon` declares the standard SWORD Feature= config entry
 // that marks it as a Strong's dictionary of the wanted kind.
 static bool
