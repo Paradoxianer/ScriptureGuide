@@ -1,10 +1,13 @@
 #include "LogosVerseListWindow.h"
 
 #include <Alert.h>
+#include <Box.h>
 #include <Button.h>
 #include <Catalog.h>
 #include <Entry.h>
 #include <FilePanel.h>
+#include <GroupLayout.h>
+#include <InterfaceDefs.h>
 #include <LayoutBuilder.h>
 #include <ListItem.h>
 #include <MenuBar.h>
@@ -17,6 +20,7 @@
 #include <ScrollView.h>
 #include <String.h>
 #include <StringItem.h>
+#include <StringView.h>
 #include <TextControl.h>
 
 #include <algorithm>
@@ -127,6 +131,7 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 		B_NOT_ZOOMABLE | B_CLOSE_ON_ESCAPE),
 	fHasOpenFile(false),
 	fMenuBar(NULL),
+	fNameView(NULL),
 	fSaveItem(NULL),
 	fSaveAsItem(NULL),
 	fDeleteItem(NULL),
@@ -192,11 +197,19 @@ SGVerseListWindow::_BuildGUI()
 {
 	fMenuBar = _BuildMenuBar();
 
+	// Always visible, regardless of how tall the description/row boxes
+	// below grow -- the one place that answers "which list is this" at
+	// a glance.
+	fNameView = new BStringView("verseListName",
+		B_TRANSLATE("(No list open)"));
+	fNameView->SetFont(be_bold_font);
+	fNameView->SetAlignment(B_ALIGN_CENTER);
+
 	fRowList = new VerseListRowListView("verseListRows", this);
 	fRowList->SetSelectionMessage(new BMessage(VLIST_ROW_SELECTED));
 	fRowList->SetTarget(this);
 	fRowScroll = new BScrollView("verseListRowsScroll", fRowList, 0, false,
-		true);
+		true, B_NO_BORDER);
 
 	fDescriptionDocument.SetTo(new TextDocument(), true);
 	// A brand-new TextDocument has ZERO paragraphs, not one empty one --
@@ -222,17 +235,40 @@ SGVerseListWindow::_BuildGUI()
 	fDescriptionView->SetEditingEnabled(true);
 	fDescriptionView->SetTextDocument(fDescriptionDocument);
 	fDescriptionScroll = new BScrollView("verseListDescriptionScroll",
-		fDescriptionView, 0, false, true, B_FANCY_BORDER);
+		fDescriptionView, 0, false, true, B_NO_BORDER);
 	// A short, fixed-height strip -- overflow scrolls inside it rather
 	// than pushing the row list down every time a sentence is added.
 	fDescriptionScroll->SetExplicitMinSize(BSize(B_SIZE_UNSET, 60.0f));
 	fDescriptionScroll->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, 60.0f));
 
+	// Labeled boxes around each field, same idiom Haiku apps use
+	// elsewhere for "group of controls with a caption" (BBox::SetLabel()
+	// plus its own BGroupLayout, continued via BLayoutBuilder::Group<>'s
+	// AddGroup(BGroupLayout*) overload below) -- so it's visually
+	// unambiguous which box is the description and which is the list of
+	// references, not just implied by vertical order.
+	BBox* descriptionBox = new BBox("descriptionBox");
+	descriptionBox->SetLabel(B_TRANSLATE("Description"));
+	BGroupLayout* descriptionBoxLayout = new BGroupLayout(B_VERTICAL, 0);
+	descriptionBox->SetLayout(descriptionBoxLayout);
+
+	BBox* rowsBox = new BBox("versesBox");
+	rowsBox->SetLabel(B_TRANSLATE("Verses"));
+	BGroupLayout* rowsBoxLayout = new BGroupLayout(B_VERTICAL, 0);
+	rowsBox->SetLayout(rowsBoxLayout);
+
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(fMenuBar)
 		.SetInsets(B_USE_SMALL_INSETS)
-		.Add(fDescriptionScroll)
-		.Add(fRowScroll)
+		.Add(fNameView)
+		.AddGroup(descriptionBoxLayout)
+			.SetInsets(B_USE_ITEM_INSETS)
+			.Add(fDescriptionScroll)
+		.End()
+		.AddGroup(rowsBoxLayout)
+			.SetInsets(B_USE_ITEM_INSETS)
+			.Add(fRowScroll)
+		.End()
 	.End();
 }
 
@@ -621,10 +657,13 @@ SGVerseListWindow::_RebuildDescription()
 void
 SGVerseListWindow::_UpdateTitle()
 {
-	if (fHasOpenFile && fFile.Name()[0] != '\0')
+	if (fHasOpenFile && fFile.Name()[0] != '\0') {
 		SetTitle(fFile.Name());
-	else
+		fNameView->SetText(fFile.Name());
+	} else {
 		SetTitle(B_TRANSLATE("Verse Lists"));
+		fNameView->SetText(B_TRANSLATE("(No list open)"));
+	}
 
 	bool onList = fHasOpenFile;
 	fSaveItem->SetEnabled(onList);

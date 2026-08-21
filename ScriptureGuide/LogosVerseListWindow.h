@@ -17,6 +17,7 @@ class BMenuBar;
 class BMenuItem;
 class BOutlineListView;
 class BScrollView;
+class BStringView;
 class TextDocumentView;
 
 // Local message constants, same convention as LogosSearchWindow.h's
@@ -135,6 +136,10 @@ private:
 			bool					fHasOpenFile;
 
 			BMenuBar*				fMenuBar;
+			// The list's own name, shown above everything else -- so
+			// the window reads as "this is the list you have open" even
+			// once the description/row boxes below it fill up.
+			BStringView*			fNameView;
 			BMenuItem*				fSaveItem;
 			BMenuItem*				fSaveAsItem;
 			BMenuItem*				fDeleteItem;
