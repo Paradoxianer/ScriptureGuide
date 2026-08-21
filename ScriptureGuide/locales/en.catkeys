@@ -1,39 +1,57 @@
-1	English	application/x-vnd.Scripture-Guide	3458641352
+1	English	application/x-vnd.Scripture-Guide	228661391
+Move Up	VerseListWindow		Move Up
 Find Verse…	MainWindow		Find Verse…
 Dictionary 	DictionaryWindow		Dictionary 
+Open Verse List…	VerseListWindow		Open Verse List…
 Regular Expression	SearchWindow		Regular Expression
 Commentaries	ParallelBibleView		Commentaries
+Open	VerseListWindow		Open
 Choose Font…	MainWindow		Choose Font…
 As HTML Table	MainWindow		As HTML Table
 Back	MainWindow		Back
 Verse	MainWindow		Verse
 Notes	ExportFormats		Notes
+Delete Verse List	VerseListWindow		Delete Verse List
 Show Cross-References	MainWindow		Show Cross-References
 Quit	MainWindow		Quit
 Forward	MainWindow		Forward
 Copy Comparison	MainWindow		Copy Comparison
+Close Verse List	VerseListWindow		Close Verse List
 Look up: 	DictionaryWindow		Look up: 
+File	VerseListWindow		File
+Move Down	VerseListWindow		Move Down
+(No list open)	VerseListWindow		(No list open)
 Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Search results (only shown if a lookup finds more than one match):
 As Plain Text	MainWindow		As Plain Text
 Find	SearchWindow		Find
 Book Manager…	MainWindow		Book Manager…
+New Verse List…	VerseListWindow		New Verse List…
 Duplicate This Window…	MainWindow		Duplicate This Window…
 Search in 	SearchWindow		Search in 
+New Verse List	VerseListWindow		New Verse List
+Remove	VerseListWindow		Remove
+Start in 	SearchWindow		Start in 
 Font Size: 	FontPanel		Font Size: 
 Close This Window	MainWindow		Close This Window
 Show Verse Numbers	MainWindow		Show Verse Numbers
-Start in 	SearchWindow		Start in 
+Create	VerseListWindow		Create
+Description	VerseListWindow		Description
 Find Words	SearchWindow		Find Words
 As Tab-Separated	MainWindow		As Tab-Separated
+Cancel	VerseListWindow		Cancel
+Edit	VerseListWindow		Edit
 Next Book	MainWindow		Next Book
 Verse	ExportFormats		Verse
 Go to / Search:	MainWindow		Go to / Search:
 Book:	MainWindow		Book:
+Verses	VerseListWindow		Verses
 Program	MainWindow		Program
 About Scripture Guide…	MainWindow		About Scripture Guide…
 Font Name	FontPanel		Font Name
 Next Chapter	MainWindow		Next Chapter
+Verse Lists	VerseListWindow		Verse Lists
 Dictionary…	MainWindow		Dictionary…
+Delete File…	VerseListWindow		Delete File…
 Previous Book	MainWindow		Previous Book
 Search Progress:	SearchWindow		Search Progress:
 Look up	DictionaryWindow		Look up
@@ -43,20 +61,27 @@ No Strong's dictionary for these numbers is installed. Install the %module% modu
 No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		No entry for %number% in the installed Strong's dictionary.
 Show Strong's Numbers	MainWindow		Show Strong's Numbers
 Match Case	SearchWindow		Match Case
+Name:	VerseListWindow		Name:
 Chapter	MainWindow		Chapter
 OK	FontPanel		OK
 Options	MainWindow		Options
 No matching entry found.	DictionaryWindow		No matching entry found.
 Search Results:	SearchWindow		Search Results:
 Notes	ParallelBibleView		Notes
+Delete	VerseListWindow		Delete
 End in 	SearchWindow		End in 
+Save	VerseListWindow		Save
 Dictionary	DictionaryWindow		Dictionary
+Delete this verse list file? This cannot be undone.	VerseListWindow		Delete this verse list file? This cannot be undone.
+Verse Lists…	MainWindow		Verse Lists…
 As Markdown Table	MainWindow		As Markdown Table
 Entry:	DictionaryWindow		Entry:
 Notes	MainWindow		Notes
 No module selected.	BibleTextDocument		No module selected.
+Save As…	VerseListWindow		Save As…
 Navigation	MainWindow		Navigation
 Biblical Texts	ParallelBibleView		Biblical Texts
 Previous Chapter	MainWindow		Previous Chapter
 Find: 	SearchWindow		Find: 
+Go to List	VerseListWindow		Go to List
 %d matching entries -- pick one below.	DictionaryWindow		%d matching entries -- pick one below.

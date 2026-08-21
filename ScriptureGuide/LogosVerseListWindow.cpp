@@ -49,6 +49,39 @@ SetVerseKeyLocale(sword::VerseKey& key)
 	key.setLocale(language.Code());
 }
 
+
+// Parses `key` (a single, unhyphenated verse reference -- see
+// BibleColumnView::_StartDrag()'s own comment on why a drag never hands
+// over a combined "start-end" string for this to re-split) in
+// `sourceVersification`, repositions it into `targetVersification`, and
+// writes the localized result into `outText`. False (leaving `outText`
+// untouched) if `key` doesn't parse at all.
+static bool
+ConvertVerseReference(const char* key, const char* sourceVersification,
+	const char* targetVersification, BString& outText)
+{
+	sword::VerseKey source;
+	SetVerseKeyLocale(source);
+	source.setVersificationSystem(sourceVersification);
+	source.setText(key);
+	if (source.popError() != 0)
+		return false;
+
+	sword::VerseKey target;
+	// Locale on target too, not just source -- getText() below renders
+	// in whatever locale is set (or none, which is English), completely
+	// independent of source's own locale. Missing this left every
+	// appended reference stored as its English name even under a
+	// non-English locale (confirmed against the same "no locale set =
+	// English" behavior measured for VerseKey earlier this session).
+	SetVerseKeyLocale(target);
+	target.setVersificationSystem(targetVersification);
+	target.positionFrom(source);
+
+	outText = target.getText();
+	return true;
+}
+
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "VerseListWindow"
 
@@ -109,6 +142,26 @@ public:
 	virtual void MouseDown(BPoint where)
 	{
 		int32 index = IndexOf(where);
+
+		// Right-click: a "Remove" context menu on whichever row is
+		// under the pointer (#66) -- there was previously no way at
+		// all to take a single reference back out of an open list,
+		// short of deleting the whole file.
+		uint32 buttons = 0;
+		BMessage* current = Window() != NULL
+			? Window()->CurrentMessage() : NULL;
+		if (current != NULL)
+			current->FindInt32("buttons", (int32*)&buttons);
+		if (buttons == B_SECONDARY_MOUSE_BUTTON) {
+			if (index >= 0) {
+				Select(index);
+				BPoint screenPoint = where;
+				ConvertToScreen(&screenPoint);
+				_ShowRemoveMenu(index, screenPoint);
+			}
+			return;
+		}
+
 		if (index < 0 || !ItemAt(index)->IsSelected()) {
 			BOutlineListView::MouseDown(where);
 			return;
@@ -119,8 +172,28 @@ public:
 		DragMessage(&dragMessage, ItemFrame(index));
 	}
 
+	virtual void KeyDown(const char* bytes, int32 numBytes)
+	{
+		if (numBytes == 1 && bytes[0] == B_DELETE) {
+			int32 index = CurrentSelection();
+			if (index >= 0 && fOwner != NULL) {
+				fOwner->_RemoveRow(index);
+				return;
+			}
+		}
+		BOutlineListView::KeyDown(bytes, numBytes);
+	}
+
 	virtual void MessageReceived(BMessage* message)
 	{
+		if (message->what == VLIST_REMOVE_ROW) {
+			int32 index;
+			if (message->FindInt32("index", &index) == B_OK
+				&& fOwner != NULL) {
+				fOwner->_RemoveRow(index);
+			}
+			return;
+		}
 		if (message->WasDropped() && message->what == VLIST_ROW_REORDER) {
 			int32 from;
 			if (message->FindInt32("from", &from) == B_OK) {
@@ -134,13 +207,17 @@ public:
 			}
 			return;
 		}
-		// Any other dropped message carrying "key" strings -- what
-		// ResultListView's own drag (search results, single or multi-
-		// select) and the universal search box both produce -- means
-		// "add these references to the open list", the same way a drop
-		// onto a chain reading list mode already worked in #52. Checked
-		// by content, not just WasDropped(), so a drop from somewhere
-		// unrelated that happens to land here doesn't misfire.
+		// Any other dropped message carrying "key" strings -- one per
+		// reference, from either drag source in this app (ResultListView's
+		// own search-result drag, one per selected result, or
+		// BibleColumnView's own reading-pane selection drag, always
+		// exactly one -- both build the same shape, see _StartDrag()'s
+		// own comment on why this was unified rather than left as two)
+		// -- means "add these references to the open list", the same
+		// way a drop onto a chain reading list mode already worked in
+		// #52. Checked by content, not just WasDropped(), so a drop
+		// from somewhere unrelated that happens to land here doesn't
+		// misfire.
 		if (message->WasDropped() && message->HasString("key")
 			&& fOwner != NULL) {
 			fOwner->_AppendDroppedReferences(message);
@@ -150,6 +227,20 @@ public:
 	}
 
 private:
+	// Fire-and-forget, same idiom this app already uses for its other
+	// context menus (e.g. ParallelBibleView's "Add to list"/"Remove
+	// from list" popups) -- not owned by anything, cleans itself up.
+	void _ShowRemoveMenu(int32 index, BPoint screenPoint)
+	{
+		BPopUpMenu* menu = new BPopUpMenu("removeRow", false, false);
+		BMessage* remove = new BMessage(VLIST_REMOVE_ROW);
+		remove->AddInt32("index", index);
+		menu->AddItem(new BMenuItem(B_TRANSLATE("Remove"), remove));
+		menu->SetTargetForItems(this);
+		menu->SetAsyncAutoDestruct(true);
+		menu->Go(screenPoint, true, true, true);
+	}
+
 	SGVerseListWindow*	fOwner;
 };
 
@@ -178,7 +269,10 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 {
 	float minWidth, minHeight, maxWidth, maxHeight;
 	GetSizeLimits(&minWidth, &maxWidth, &minHeight, &maxHeight);
-	minWidth = 320;
+	// Narrow enough to tile comfortably alongside other windows via
+	// Stack & Tile -- a row's own reference text and the box labels
+	// don't need much horizontal room.
+	minWidth = 180;
 	minHeight = 360;
 	SetSizeLimits(minWidth, maxWidth, minHeight, maxHeight);
 
@@ -304,12 +398,22 @@ SGVerseListWindow::_BuildGUI()
 	descriptionBoxLayout->AddView(fDescriptionScroll);
 	rowsBoxLayout->AddView(fRowScroll);
 
+	// SetInsets() applies to the whole group it's called on -- calling it
+	// directly on this outer one would have inset fMenuBar too, leaving
+	// it with a margin on every side instead of flush against the
+	// window edges like every other menu bar in this app (confirmed live:
+	// it visibly floated instead of docking). The content below it gets
+	// its own nested group with the inset instead, same shape
+	// LogosMainWindow.cpp already uses for fMenuBar/fToolBar vs. the
+	// content beneath them.
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(fMenuBar)
-		.SetInsets(B_USE_SMALL_INSETS)
-		.Add(fNameView)
-		.Add(descriptionBox)
-		.Add(rowsBox)
+		.AddGroup(B_VERTICAL, B_USE_DEFAULT_SPACING)
+			.SetInsets(B_USE_SMALL_INSETS)
+			.Add(fNameView)
+			.Add(descriptionBox)
+			.Add(rowsBox)
+		.End()
 	.End();
 }
 
@@ -833,6 +937,28 @@ SGVerseListWindow::_MoveRow(int32 from, int32 to)
 }
 
 
+// Removes exactly one row (#66) -- the Delete key or the row list's own
+// right-click "Remove" item, unlike File > Delete File..., which removes
+// the whole list. VerseListFile::RemoveLine() already does the file half
+// of this (and already saves immediately); this is just the row-list
+// side plus keeping the selection somewhere sensible afterward.
+void
+SGVerseListWindow::_RemoveRow(int32 index)
+{
+	if (!fHasOpenFile || index < 0 || index >= fRowList->CountItems())
+		return;
+
+	if (fFile.RemoveLine(index) != B_OK)
+		return;
+
+	_RebuildRows();
+
+	int32 count = fRowList->CountItems();
+	if (count > 0)
+		fRowList->Select(std::min(index, count - 1));
+}
+
+
 // One "key" per dropped reference (ResultListView's own drag carries one
 // per selected search result -- confirmed live: a multi-select drag
 // previously did nothing at all, because nothing in this window listened
@@ -868,21 +994,39 @@ SGVerseListWindow::_AppendDroppedReferences(BMessage* message)
 	if (targetVersification.IsEmpty())
 		targetVersification = "KJV";
 
-	const char* key;
+	// One "key" per reference regardless of which drag source this came
+	// from -- ResultListView's own search-result drag and
+	// BibleColumnView's reading-pane selection drag both build the same
+	// shape now (see BibleColumnView::_StartDrag()'s own comment, #63).
+	// "endKey" is BibleColumnView-only and only present for an actual
+	// multi-verse selection -- ResultListView never sends it (a search
+	// result is always exactly one verse), and BibleColumnView never
+	// sends more than one "key" at all, so treating "a single key plus
+	// endKey" as one range covers exactly the one case that needs it.
 	bool appendedAny = false;
+	BString endKey;
+	bool hasRange = message->FindString("endKey", &endKey) == B_OK;
+
+	const char* key;
 	for (int32 i = 0; message->FindString("key", i, &key) == B_OK; i++) {
-		sword::VerseKey source;
-		SetVerseKeyLocale(source);
-		source.setVersificationSystem(sourceVersification.String());
-		source.setText(key);
-		if (source.popError() != 0)
+		BString startText;
+		if (!ConvertVerseReference(key, sourceVersification.String(),
+				targetVersification.String(), startText)) {
 			continue;
+		}
 
-		sword::VerseKey target;
-		target.setVersificationSystem(targetVersification.String());
-		target.positionFrom(source);
+		BString line(startText);
+		if (hasRange) {
+			BString endText;
+			if (ConvertVerseReference(endKey.String(),
+					sourceVersification.String(),
+					targetVersification.String(), endText)
+				&& endText != startText) {
+				line << "-" << endText;
+			}
+		}
 
-		if (fFile.AppendReference(target.getText()) == B_OK)
+		if (fFile.AppendReference(line.String()) == B_OK)
 			appendedAny = true;
 	}
 

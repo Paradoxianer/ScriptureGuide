@@ -1,4 +1,4 @@
-1	German	application/x-vnd.Scripture-Guide	3458641352
+1	German	application/x-vnd.Scripture-Guide	228661391
 Find Verse…	MainWindow		Vers finden…
 Dictionary 	DictionaryWindow		Wörterbuch 
 Regular Expression	SearchWindow		Regulärer Ausdruck
@@ -60,3 +60,28 @@ Biblical Texts	ParallelBibleView		Bibeltexte
 Previous Chapter	MainWindow		vorheriges Kapitel
 Find: 	SearchWindow		Suche:
 %d matching entries -- pick one below.	DictionaryWindow		%d passende Einträge – bitte unten auswählen.
+Remove	VerseListWindow		Entfernen
+(No list open)	VerseListWindow		(Keine Liste geöffnet)
+Description	VerseListWindow		Beschreibung
+Verses	VerseListWindow		Verse
+File	VerseListWindow		Datei
+New Verse List…	VerseListWindow		Neue Versliste…
+Open Verse List…	VerseListWindow		Versliste öffnen…
+Close Verse List	VerseListWindow		Versliste schließen
+Save	VerseListWindow		Speichern
+Save As…	VerseListWindow		Speichern unter…
+Delete File…	VerseListWindow		Datei löschen…
+Edit	VerseListWindow		Bearbeiten
+Move Up	VerseListWindow		Nach oben
+Move Down	VerseListWindow		Nach unten
+Go to List	VerseListWindow		Gehe zu Liste
+New Verse List	VerseListWindow		Neue Versliste
+Name:	VerseListWindow		Name:
+Create	VerseListWindow		Erstellen
+Open	VerseListWindow		Öffnen
+Delete Verse List	VerseListWindow		Versliste löschen
+Delete this verse list file? This cannot be undone.	VerseListWindow		Diese Versliste löschen? Dies kann nicht rückgängig gemacht werden.
+Cancel	VerseListWindow		Abbrechen
+Delete	VerseListWindow		Löschen
+Verse Lists	VerseListWindow		Verslisten
+Verse Lists…	MainWindow		Verslisten…

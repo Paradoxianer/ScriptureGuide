@@ -447,7 +447,9 @@ private:
 		// selection, not repeated per column.
 		int32 dragStart, dragEnd;
 		GetSelection(dragStart, dragEnd);
-		BString reference = _ReferenceFor(dragStart, dragEnd);
+		BString startKey, endKey;
+		BString reference = _ReferenceFor(dragStart, dragEnd, &startKey,
+			&endKey);
 
 		const std::vector<TextDocumentView*>& columns = fOwner->_ColumnViews();
 
@@ -489,23 +491,59 @@ private:
 		BString clipName(reference);
 		clipName.ReplaceAll("/", "-");
 
-		// B_MIME_DATA, not B_SIMPLE_DATA -- this is the "what" a BTextView
-		// itself puts on its own drag messages, and the one text drop
-		// targets (StyledEdit and friends) actually recognize. B_SIMPLE_DATA
-		// is the convention for file-ref drags (Tracker), not text.
+		// B_MIME_DATA, not B_SIMPLE_DATA -- B_SIMPLE_DATA is the
+		// convention for file-ref drags (Tracker), not text; B_MIME_DATA
+		// is what BTextView itself constructs for its own outgoing drags.
+		// Doesn't actually gate whether an external target (StyledEdit
+		// and friends) accepts the drop either way -- confirmed against
+		// BTextView::AcceptsDrop(), which checks only for "text/plain"
+		// data -- but matching it is also what makes this drag and
+		// ResultListView's own (search results, see MakeDragMessage())
+		// carry the same shape, so a drop target only has one format to
+		// understand rather than two.
 		BMessage drag(B_MIME_DATA);
 		drag.AddData("text/plain", B_MIME_TYPE, clipText.String(),
 			clipText.Length());
 		drag.AddString("be:clip_name", clipName);
-		// Not consumed by anything yet -- for a future drop target (see
-		// issue #23) that wants the reference/translation without having
-		// to re-parse them back out of the plain-text clipping. Only the
-		// dragging column's own translation when more than one
+		// Only the dragging column's own translation when more than one
 		// participated -- there's no single "the" translation once
 		// several columns are involved.
 		if (partCount == 1)
 			drag.AddString("scriptureguide:translation", fTranslationName);
-		drag.AddString("scriptureguide:reference", reference);
+		// "key", not a ScriptureGuide-specific field name -- the same
+		// one ResultListView::MakeDragMessage() uses (there, one per
+		// selected search result; here, always exactly one, since the
+		// reference is the same across every participating column no
+		// matter its translation). A drop target that wants "the
+		// reference(s) being dropped" only ever has to look in one
+		// place regardless of which of the two drag sources it came
+		// from.
+		//
+		// Deliberately `startKey`, not the human-formatted `reference`
+		// ("Genesis 1:1-3") -- VerseKey::setText() silently truncates a
+		// hyphenated range to its start with no error (confirmed
+		// empirically), so handing that combined string to a receiver
+		// as "key" would have looked fine and quietly dropped every
+		// verse after the first the moment anything tried to parse it
+		// back. `endKey`, present only for an actual multi-verse
+		// selection, is what lets a receiver that wants the whole range
+		// (see SGVerseListWindow::_AppendDroppedReferences()) reconstruct
+		// it correctly instead of only ever getting the first verse.
+		drag.AddString("key", startKey);
+		if (endKey != startKey)
+			drag.AddString("endKey", endKey);
+		// Same reasoning as ResultListView::SetSourceVersification():
+		// `reference` is built from this column's own module, so it
+		// counts in that module's versification -- whatever receives
+		// the drop needs this to reposition it correctly rather than
+		// assume its own counting matches (#46).
+		if (fBibleDocument != NULL && fBibleDocument->Module() != NULL) {
+			const char* versification
+				= fBibleDocument->Module()->getConfigEntry("Versification");
+			drag.AddString("scriptureguide:versification",
+				versification != NULL && versification[0] != '\0'
+					? versification : "KJV");
+		}
 
 		BPoint dragScreenPoint = ConvertToScreen(fDragStartPoint);
 		BBitmap* dragBitmap = _CreateDragBitmap(dragScreenPoint);
@@ -553,8 +591,17 @@ private:
 	}
 
 	// "<Book> <Chapter>:<StartVerse>[-<EndVerse>]" for the given text
-	// offset range, e.g. "Genesis 1:1-3".
-	BString _ReferenceFor(int32 start, int32 end) const
+	// offset range, e.g. "Genesis 1:1-3" -- for display/clipping text
+	// only. `startKey`/`endKey`, if given, are filled with the SAME
+	// range's two ends as plain, unhyphenated single-verse references
+	// ("Genesis 1:1"/"Genesis 1:3") -- what a drag message needs instead
+	// (see _StartDrag()): VerseKey::setText() silently truncates a
+	// hyphenated range to its start and reports no error doing so
+	// (confirmed empirically, not assumed), so a receiver reconstructing
+	// a range has to be handed its two ends already separate, not
+	// re-parse them back out of the combined, human-formatted string.
+	BString _ReferenceFor(int32 start, int32 end, BString* startKey = NULL,
+		BString* endKey = NULL) const
 	{
 		int32 paragraphOffset;
 		int32 startParagraph = fBibleDocument->ParagraphIndexFor(start,
@@ -575,11 +622,23 @@ private:
 		const char* separator
 			= strcmp(language.Code(), "de") == 0 ? ", " : ":";
 
-		BString reference(fBibleDocument->BookName());
-		reference << " " << fBibleDocument->Chapter() << separator
-			<< startVerse;
+		BString bookAndChapter(fBibleDocument->BookName());
+		bookAndChapter << " " << fBibleDocument->Chapter() << separator;
+
+		BString reference(bookAndChapter);
+		reference << startVerse;
 		if (endVerse > startVerse)
 			reference << "-" << endVerse;
+
+		if (startKey != NULL) {
+			*startKey = bookAndChapter;
+			*startKey << startVerse;
+		}
+		if (endKey != NULL) {
+			*endKey = bookAndChapter;
+			*endKey << endVerse;
+		}
+
 		return reference;
 	}
 
@@ -639,20 +698,22 @@ private:
 
 
 	// True if `message` carried a Bible reference to navigate to --
-	// "scriptureguide:reference" if this came from our own drag source
-	// (see _StartDrag()), otherwise falling back to parsing whatever
-	// plain text was dropped so drops from outside the app work too.
-	// Only the first line matters for the fallback case, since our own
-	// multi-column clippings put the reference alone on the first line
-	// with each translation's own text following it.
+	// "key" if this came from one of our own drag sources (_StartDrag()
+	// below, or ResultListView's own search-result drag -- both build
+	// the same shape, see _StartDrag()'s own comment on why), otherwise
+	// falling back to parsing whatever plain text was dropped so drops
+	// from outside the app work too. Only the first "key" and only the
+	// first line of the plain-text fallback matter here -- multiple
+	// dropped references (a multi-select search-result drag) navigate
+	// to the first only; see SGVerseListWindow::_AppendDroppedReferences()
+	// for the one place that DOES want all of them.
 	bool _HandleReferenceDrop(BMessage* message)
 	{
 		if (fOwner == NULL)
 			return false;
 
 		BString reference;
-		if (message->FindString("scriptureguide:reference", &reference)
-				!= B_OK) {
+		if (message->FindString("key", &reference) != B_OK) {
 			BString firstLine;
 			const char* text;
 			ssize_t length;

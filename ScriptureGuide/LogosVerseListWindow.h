@@ -37,6 +37,7 @@ class TextDocumentView;
 #define VLIST_NAV_SELECT		'VLns'
 #define VLIST_ROW_SELECTED		'VLrs'
 #define VLIST_ROW_REORDER		'VLrr'
+#define VLIST_REMOVE_ROW		'VLrm'
 #define VLIST_DESCRIPTION_CHANGED	'VLdc'
 
 // A dedicated, standalone window for browsing, editing and reading a
@@ -89,6 +90,12 @@ public:
 			// see the definition for why this doesn't just take the
 			// dropped keys at face value (#46).
 			void			_AppendDroppedReferences(BMessage* message);
+			// Same not-a-friend reasoning: the Delete key or the
+			// row list's own right-click "Remove" item, both handled in
+			// VerseListRowListView. Removes exactly one row (#66) --
+			// unlike File > Delete File..., which removes the whole
+			// list.
+			void			_RemoveRow(int32 index);
 
 private:
 			void			_BuildGUI();

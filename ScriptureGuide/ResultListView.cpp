@@ -152,7 +152,18 @@ void BibleItem::Update(BView* owner, const BFont* font)
 ResultListView::ResultListView(const char* name, list_view_type type
 					, uint32 flags)
 	:BOutlineListView( name, type, flags),
-	fDragCommand(SG_BIBLE)
+	// B_MIME_DATA, not SG_BIBLE -- matches BibleColumnView::_StartDrag()'s
+	// own drag (ParallelBibleView.cpp) and, more to the point, what
+	// BTextView itself constructs for its own outgoing drags
+	// (_InitiateDrag(), Haiku's own TextView.cpp). Doesn't actually
+	// change whether an external drop target (StyledEdit and friends)
+	// accepts the drop -- confirmed against BTextView::AcceptsDrop(),
+	// which gates purely on the presence of "text/plain" data, not on
+	// `what` at all -- but it does mean this drag and BibleColumnView's
+	// now carry an identical shape (see MakeDragMessage()), so anything
+	// receiving either only ever has one format to understand instead
+	// of two.
+	fDragCommand(B_MIME_DATA)
 {
 	Init();
 }
