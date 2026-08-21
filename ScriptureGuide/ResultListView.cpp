@@ -301,6 +301,14 @@ void ResultListView::MakeDragMessage(BMessage* message)
 				message->AddString("locale", language.Code());
 			}
 		}
+		// Once, not per key: every result in one drag came out of the
+		// same searched module, so they all count the same way. What
+		// receives the drop needs this to reposition them into its own
+		// versification rather than assume it matches (#46).
+		if (fSourceVersification.Length() > 0) {
+			message->AddString("scriptureguide:versification",
+				fSourceVersification);
+		}
 		message->AddData("text/plain", B_MIME_TYPE, allVerses.String(), allVerses.Length());
 		message->AddString("be:clip_name", allKeys);
 	}

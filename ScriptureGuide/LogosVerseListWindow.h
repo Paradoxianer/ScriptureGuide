@@ -83,6 +83,12 @@ public:
 			// drag-reorder drop has landed. Reorders both the row list
 			// view and the underlying VerseListFile to match.
 			void			_MoveRow(int32 from, int32 to);
+			// Same not-a-friend reasoning, for a drop that isn't a
+			// reorder: one or more references dragged in from outside
+			// (a multi-select search-result drag, in particular) --
+			// see the definition for why this doesn't just take the
+			// dropped keys at face value (#46).
+			void			_AppendDroppedReferences(BMessage* message);
 
 private:
 			void			_BuildGUI();

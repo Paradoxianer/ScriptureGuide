@@ -7,6 +7,8 @@
 #include <Catalog.h>
 #include <Entry.h>
 #include <FilePanel.h>
+#include <Language.h>
+#include <Locale.h>
 #include <GroupLayout.h>
 #include <InterfaceDefs.h>
 #include <LayoutBuilder.h>
@@ -28,10 +30,24 @@
 #include <utility>
 #include <vector>
 
+#include <versekey.h>
+
 #include "TextDocumentView.h"
 #include "TextListener.h"
 
 #include "constants.h"
+
+// See the identical helper in BibleTextDocument.cpp/ParallelBibleView.cpp:
+// VerseKey::setText() only recognizes localized book names (e.g. German
+// "1. Mose") if the key's locale has been set first, otherwise it fails
+// silently and the key is left unchanged.
+static void
+SetVerseKeyLocale(sword::VerseKey& key)
+{
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+	key.setLocale(language.Code());
+}
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "VerseListWindow"
@@ -116,6 +132,18 @@ public:
 				if (fOwner != NULL)
 					fOwner->_MoveRow(from, to);
 			}
+			return;
+		}
+		// Any other dropped message carrying "key" strings -- what
+		// ResultListView's own drag (search results, single or multi-
+		// select) and the universal search box both produce -- means
+		// "add these references to the open list", the same way a drop
+		// onto a chain reading list mode already worked in #52. Checked
+		// by content, not just WasDropped(), so a drop from somewhere
+		// unrelated that happens to land here doesn't misfire.
+		if (message->WasDropped() && message->HasString("key")
+			&& fOwner != NULL) {
+			fOwner->_AppendDroppedReferences(message);
 			return;
 		}
 		BOutlineListView::MessageReceived(message);
@@ -802,6 +830,64 @@ SGVerseListWindow::_MoveRow(int32 from, int32 to)
 	}
 	fFile.SetReferenceText(text.String());
 	fFile.Save();
+}
+
+
+// One "key" per dropped reference (ResultListView's own drag carries one
+// per selected search result -- confirmed live: a multi-select drag
+// previously did nothing at all, because nothing in this window listened
+// for a drop that wasn't its own internal reorder message).
+//
+// Each key is parsed in the SOURCE's own versification -- the searched
+// module's, carried as "scriptureguide:versification" on the drag message
+// (see ResultListView::SetSourceVersification()) -- and repositioned into
+// this list's own declared versification before being written down.
+// Skipping that conversion is exactly the #46 mistake #52 already found
+// and fixed once for dropping onto a chain reading list mode: a verse
+// read in one counting silently becomes a DIFFERENT verse if written
+// down unconverted in another.
+void
+SGVerseListWindow::_AppendDroppedReferences(BMessage* message)
+{
+	if (!fHasOpenFile)
+		return;
+
+	BString sourceVersification;
+	message->FindString("scriptureguide:versification", &sourceVersification);
+	if (sourceVersification.IsEmpty()) {
+		// Nothing outside the app declares one (a Tracker clipping, a
+		// plain-text drag) -- this list's own counting is the best
+		// available guess, the same fallback AppendDroppedReferences()
+		// already established on the chain-drop side of #52.
+		sourceVersification = fFile.Versification();
+	}
+	if (sourceVersification.IsEmpty())
+		sourceVersification = "KJV";
+
+	BString targetVersification(fFile.Versification());
+	if (targetVersification.IsEmpty())
+		targetVersification = "KJV";
+
+	const char* key;
+	bool appendedAny = false;
+	for (int32 i = 0; message->FindString("key", i, &key) == B_OK; i++) {
+		sword::VerseKey source;
+		SetVerseKeyLocale(source);
+		source.setVersificationSystem(sourceVersification.String());
+		source.setText(key);
+		if (source.popError() != 0)
+			continue;
+
+		sword::VerseKey target;
+		target.setVersificationSystem(targetVersification.String());
+		target.positionFrom(source);
+
+		if (fFile.AppendReference(target.getText()) == B_OK)
+			appendedAny = true;
+	}
+
+	if (appendedAny)
+		_RebuildRows();
 }
 
 
