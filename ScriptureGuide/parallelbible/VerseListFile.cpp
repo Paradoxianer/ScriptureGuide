@@ -356,22 +356,18 @@ VerseListFile::CreateNew(const char* displayName,
 // As..." behaves everywhere else (StyledEdit, a browser's "Save Page
 // As...").
 status_t
-VerseListFile::SaveAs(const char* displayName, const char* collectionName)
+VerseListFile::SaveAs(const char* directory, const char* displayName)
 {
 	EnsureMimeTypeRegistered();
 
-	BPath directory(ListsDirectory().String());
-	if (directory.InitCheck() != B_OK)
-		return B_ERROR;
-	if (collectionName != NULL && collectionName[0] != '\0') {
-		directory.Append(collectionName);
-		create_directory(directory.Path(), 0755);
-	}
+	if (directory == NULL || directory[0] == '\0')
+		return B_BAD_VALUE;
+	create_directory(directory, 0755);
 
 	BString baseName = _SanitizeFileName(displayName);
 	BString fileName(baseName);
 	fileName << ".sgvl";
-	BPath path(directory.Path());
+	BPath path(directory);
 	path.Append(fileName.String());
 
 	// Same collision handling as CreateNew(): a number, not a silent
@@ -380,7 +376,7 @@ VerseListFile::SaveAs(const char* displayName, const char* collectionName)
 	while (BEntry(path.Path()).Exists()) {
 		fileName = baseName;
 		fileName << " " << suffix << ".sgvl";
-		path.SetTo(directory.Path());
+		path.SetTo(directory);
 		path.Append(fileName.String());
 		suffix++;
 	}

@@ -137,15 +137,19 @@ public:
 			static std::vector<BString>	ListCollectionPaths(
 										const char* collectionName);
 
-			// Changes this file's path to a new name inside
-			// ListsDirectory() (or, when collectionName is non-NULL,
-			// inside that collection subfolder -- created if it doesn't
-			// exist yet) and saves there, leaving the original file on
-			// disk untouched. What "Save As..." needs; CreateNew() is
+			// Changes this file's path to `displayName` (sanitized,
+			// with the same numbered-collision handling as CreateNew())
+			// inside `directory` and saves there, leaving the original
+			// file on disk untouched. `directory` is an absolute path --
+			// typically what a native BFilePanel's own "directory" result
+			// field already gives, so the user can save anywhere, not
+			// only inside ListsDirectory(); pass ListsDirectory() (with a
+			// collection subfolder appended, if any) to keep a new name
+			// inside the library. What "Save As..." needs; CreateNew() is
 			// for a brand-new, still-empty list, not for relocating one
 			// that already has content.
-			status_t			SaveAs(const char* displayName,
-										const char* collectionName = NULL);
+			status_t			SaveAs(const char* directory,
+										const char* displayName);
 
 			// Installs the MIME type in the database if it is not there
 			// yet -- short/long description, this application as the
