@@ -164,6 +164,15 @@ SGVerseListWindow::~SGVerseListWindow()
 	if (fDescriptionSaveRunner != NULL)
 		_SaveDescription();
 
+	// Same idiom as SGDictionaryWindow's destructor: tells the owning
+	// SGMainWindow this window is really being destroyed (only happens
+	// on real app shutdown -- QuitRequested() otherwise always hides
+	// instead), so it nulls its own pointer rather than calling Show()/
+	// Activate() on a deleted BWindow next time EnsureVerseListWindow()
+	// runs.
+	if (fMessenger != NULL)
+		fMessenger->SendMessage(VLIST_QUIT);
+
 	delete fOpenPanel;
 	delete fSaveAsPanel;
 	delete fMessenger;

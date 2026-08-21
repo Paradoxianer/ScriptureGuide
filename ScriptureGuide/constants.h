@@ -49,6 +49,7 @@ const uint32 MENU_FILE_NEW				= 'MFnw';
 const uint32 MENU_FILE_QUIT				= 'MFqu';
 const uint32 MENU_PROGRAM_BOOKMANAGER	= 'MPbm';
 const uint32 MENU_PROGRAM_DICTIONARY	= 'MPdi';
+const uint32 MENU_PROGRAM_VERSELISTS	= 'MPvl';
 const uint32 MENU_PROGRAM_EXPORT_PLAIN		= 'MPe1';
 const uint32 MENU_PROGRAM_EXPORT_TSV		= 'MPe2';
 const uint32 MENU_PROGRAM_EXPORT_MARKDOWN	= 'MPe3';

@@ -98,6 +98,7 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	fToolBar(NULL),
 	fSearchWindow(NULL),
 	fDictionaryWindow(NULL),
+	fVerseListWindow(NULL),
  	fModManager(NULL),
  	fCurrentModule(NULL),
  	fCurrentChapter(1),
@@ -253,6 +254,8 @@ void SGMainWindow::BuildGUI(void)
 		new BMessage(MENU_PROGRAM_BOOKMANAGER)));
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Dictionary…"),
 		new BMessage(MENU_PROGRAM_DICTIONARY)));
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Verse Lists…"),
+		new BMessage(MENU_PROGRAM_VERSELISTS)));
 	menu->AddSeparatorItem();
 
 	// One verse-aligned table of every open column (+ notes, if any),
@@ -892,6 +895,11 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			EnsureDictionaryWindow();
 			break;
 		}
+		case MENU_PROGRAM_VERSELISTS:
+		{
+			EnsureVerseListWindow();
+			break;
+		}
 		case MENU_PROGRAM_EXPORT_PLAIN:
 		case MENU_PROGRAM_EXPORT_TSV:
 		case MENU_PROGRAM_EXPORT_MARKDOWN:
@@ -1047,6 +1055,13 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			// Activate() on a deleted BWindow (reported: reopening after
 			// closing behaved oddly, exactly this class of bug).
 			fDictionaryWindow = NULL;
+			break;
+		}
+
+		case VLIST_QUIT:
+		{
+			// Same reasoning as DICT_QUIT just above.
+			fVerseListWindow = NULL;
 			break;
 		}
 		case UNIVERSAL_SEARCH:
@@ -1524,6 +1539,21 @@ SGMainWindow::EnsureDictionaryWindow(void)
 }
 
 
+void
+SGMainWindow::EnsureVerseListWindow(void)
+{
+	if (!fVerseListWindow)
+	{
+		BRect r(Frame().OffsetByCopy(60, 60));
+		r.right = r.left + 380;
+		r.bottom = r.top + 440;
+		fVerseListWindow = new SGVerseListWindow(r, new BMessenger(this));
+	}
+	fVerseListWindow->Show();
+	fVerseListWindow->Activate(true);
+}
+
+
 bool SGMainWindow::QuitRequested()
 {
 	if (fFindMessenger)
@@ -1541,6 +1571,11 @@ bool SGMainWindow::QuitRequested()
 	{
 		if (fDictionaryWindow->LockLooper())
 			fDictionaryWindow->Quit();
+	}
+	if (fVerseListWindow)
+	{
+		if (fVerseListWindow->LockLooper())
+			fVerseListWindow->Quit();
 	}
 	if (fFontPanel)
 	{
