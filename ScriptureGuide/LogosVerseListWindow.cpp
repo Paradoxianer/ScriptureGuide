@@ -3,6 +3,7 @@
 #include <Alert.h>
 #include <Box.h>
 #include <Button.h>
+#include <ControlLook.h>
 #include <Catalog.h>
 #include <Entry.h>
 #include <FilePanel.h>
@@ -257,18 +258,30 @@ SGVerseListWindow::_BuildGUI()
 	BGroupLayout* rowsBoxLayout = new BGroupLayout(B_VERTICAL, 0);
 	rowsBox->SetLayout(rowsBoxLayout);
 
+	// A plain fixed inset (what SetInsets(B_USE_ITEM_INSETS) alone gives
+	// every side) has no idea how tall the box's own floating label is,
+	// so the content's top edge landed almost under the label text
+	// itself -- confirmed live, not just suspected. TopBorderOffset()
+	// is exactly the label's own reserved height (see BBox::
+	// _ValidateLayoutData(), which grows the box's own top inset to fit
+	// it); adding the normal item padding on top of that is the same
+	// pattern MediaConverterWindow uses for its own labeled boxes
+	// (_UpdateBBoxLayoutInsets()) -- left/right/bottom get plain
+	// padding, top gets padding *plus* the label's height.
+	float padding = be_control_look->DefaultItemSpacing();
+	descriptionBoxLayout->SetInsets(padding,
+		descriptionBox->TopBorderOffset() + padding, padding, padding);
+	rowsBoxLayout->SetInsets(padding, rowsBox->TopBorderOffset() + padding,
+		padding, padding);
+	descriptionBoxLayout->AddView(fDescriptionScroll);
+	rowsBoxLayout->AddView(fRowScroll);
+
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(fMenuBar)
 		.SetInsets(B_USE_SMALL_INSETS)
 		.Add(fNameView)
-		.AddGroup(descriptionBoxLayout)
-			.SetInsets(B_USE_ITEM_INSETS)
-			.Add(fDescriptionScroll)
-		.End()
-		.AddGroup(rowsBoxLayout)
-			.SetInsets(B_USE_ITEM_INSETS)
-			.Add(fRowScroll)
-		.End()
+		.Add(descriptionBox)
+		.Add(rowsBox)
 	.End();
 }
 
