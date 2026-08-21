@@ -614,9 +614,11 @@ private:
 		int endVerse = fBibleDocument->VerseForParagraphIndex(endParagraph);
 
 		// German convention uses a comma between chapter and verse
-		// ("Epheser 6, 9"), not a colon -- ParseVerseReference() already
-		// accepts both on input, so this stays round-trip safe when the
-		// reference gets dropped back into the app.
+		// ("Epheser 6, 9"), not a colon -- fine for `reference`, which
+		// only ever reaches VerseKey::setText() through
+		// ParseVerseReference() (see _HandleReferenceDrop()'s plain-text
+		// fallback), and that function normalizes the comma back to a
+		// colon before parsing.
 		BLanguage language;
 		BLocale::Default()->GetLanguage(&language);
 		const char* separator
@@ -630,13 +632,29 @@ private:
 		if (endVerse > startVerse)
 			reference << "-" << endVerse;
 
-		if (startKey != NULL) {
-			*startKey = bookAndChapter;
-			*startKey << startVerse;
-		}
-		if (endKey != NULL) {
-			*endKey = bookAndChapter;
-			*endKey << endVerse;
+		// `startKey`/`endKey`, unlike `reference` above, are consumed
+		// directly by VerseKey::setText() with no ParseVerseReference()
+		// normalization in between (see ConvertVerseReference() in
+		// LogosVerseListWindow.cpp and _HandleReferenceDrop()'s "key"
+		// branch just below) -- so they always need the unambiguous ':'
+		// separator, regardless of locale. Confirmed empirically: under
+		// German locale, setText("Johannes 3, 12") reports no error but
+		// silently returns chapter 3 *verse 1*, treating the comma as
+		// SWORD's own list separator and discarding "12" as a second,
+		// ignored list element -- the exact bug ParseVerseReference()'s
+		// own comma-to-colon normalization exists to prevent, just hit
+		// through a path that skips it.
+		if (startKey != NULL || endKey != NULL) {
+			BString keyBookAndChapter(fBibleDocument->BookName());
+			keyBookAndChapter << " " << fBibleDocument->Chapter() << ":";
+			if (startKey != NULL) {
+				*startKey = keyBookAndChapter;
+				*startKey << startVerse;
+			}
+			if (endKey != NULL) {
+				*endKey = keyBookAndChapter;
+				*endKey << endVerse;
+			}
 		}
 
 		return reference;

@@ -1022,7 +1022,38 @@ SGVerseListWindow::_AppendDroppedReferences(BMessage* message)
 					sourceVersification.String(),
 					targetVersification.String(), endText)
 				&& endText != startText) {
-				line << "-" << endText;
+				// `startText`/`endText` are both "<Book> <Chapter>:<Verse>"
+				// -- VerseKey::getText() always uses ':', regardless of
+				// locale (confirmed empirically, unlike the display
+				// separator _ReferenceFor() uses for `reference`). When
+				// they share the same book/chapter, appending the bare
+				// trailing verse number keeps the stored line
+				// "<Book> <Chapter>:<Start>-<End>" -- the one shape
+				// _NavigateToRow() can feed back into VerseKey::setText()
+				// as a single reference (which silently truncates to the
+				// start verse, exactly like clicking a plain single-verse
+				// row) instead of two references awkwardly concatenated
+				// with a bare "-" between them.
+				int32 startColon = startText.FindLast(':');
+				int32 endColon = endText.FindLast(':');
+				BString startPrefix, endPrefix, endVerse;
+				if (startColon >= 0)
+					startText.CopyInto(startPrefix, 0, startColon);
+				if (endColon >= 0) {
+					endText.CopyInto(endPrefix, 0, endColon);
+					endText.CopyInto(endVerse, endColon + 1,
+						endText.Length() - endColon - 1);
+				}
+
+				if (startColon >= 0 && endColon >= 0
+					&& startPrefix == endPrefix) {
+					line << "-" << endVerse;
+				} else {
+					// Book/chapter differ (a versification-driven shift
+					// across a boundary) -- can't collapse to one
+					// trailing number, so keep both full references.
+					line << " - " << endText;
+				}
 			}
 		}
 
