@@ -13,6 +13,7 @@
 #include <Bitmap.h>
 #include <Button.h>
 #include <Catalog.h>
+#include <ControlLook.h>
 #include <Cursor.h>
 #include <Entry.h>
 #include <File.h>
@@ -26,7 +27,6 @@
 #include <MessageRunner.h>
 #include <OS.h>
 #include <PopUpMenu.h>
-#include <Screen.h>
 #include <ScrollBar.h>
 #include <ScrollView.h>
 #include <StringView.h>
@@ -457,6 +457,13 @@ private:
 		clipText << "\n\n";
 		int32 partCount = 0;
 
+		// One row per participating column for the drag bitmap below --
+		// bold "<reference> (<translation>)" label plus a one-line
+		// excerpt of its selected text, gathered in the same pass as
+		// clipText so the text doesn't need re-fetching.
+		std::vector<BString> dragLabels;
+		std::vector<BString> dragExcerpts;
+
 		for (size_t i = 0; i < columns.size(); i++) {
 			BibleColumnView* column
 				= dynamic_cast<BibleColumnView*>(columns[i]);
@@ -475,6 +482,17 @@ private:
 			if (partCount > 0)
 				clipText << "\n\n";
 			clipText << column->fTranslationName << ":\n" << text;
+
+			BString label(reference);
+			label << " (" << column->fTranslationName << ")";
+			dragLabels.push_back(label);
+
+			BString excerpt(text);
+			int32 newline = excerpt.FindFirst("\n");
+			if (newline >= 0)
+				excerpt.Truncate(newline);
+			excerpt.Trim();
+			dragExcerpts.push_back(excerpt);
 
 			partCount++;
 		}
@@ -545,8 +563,7 @@ private:
 					? versification : "KJV");
 		}
 
-		BPoint dragScreenPoint = ConvertToScreen(fDragStartPoint);
-		BBitmap* dragBitmap = _CreateDragBitmap(dragScreenPoint);
+		BBitmap* dragBitmap = _CreateDragBitmap(dragLabels, dragExcerpts);
 		if (dragBitmap != NULL && dragBitmap->IsValid()) {
 			BRect bounds = dragBitmap->Bounds();
 			BPoint hotspot(bounds.Width() / 2.0f, bounds.Height() / 2.0f);
@@ -560,33 +577,113 @@ private:
 		}
 	}
 
-	// A small screenshot excerpt centered on the drag point -- just
-	// enough to show the user what they're carrying, not the whole
-	// selection. Ownership passes to DragMessage() once called; the
-	// caller must not delete the returned bitmap itself.
-	BBitmap* _CreateDragBitmap(BPoint screenPoint) const
+	// One rendered row per label/excerpt pair -- bold label, plain
+	// excerpt after it, black frame, fading past kMaxHeight -- the
+	// same look ResultListView::InitiateDrag() already gives a
+	// dragged search result (see BibleItem::DrawItem() there),
+	// instead of a literal screenshot excerpt of whatever pixels
+	// happened to be under the cursor. Ownership passes to
+	// DragMessage() once called; the caller must not delete the
+	// returned bitmap itself.
+	BBitmap* _CreateDragBitmap(const std::vector<BString>& labels,
+		const std::vector<BString>& excerpts) const
 	{
-		const float kHalfWidth = 90.0f;
-		const float kHalfHeight = 24.0f;
-
-		BScreen screen(Window());
-		if (!screen.IsValid())
+		if (labels.empty())
 			return NULL;
 
-		BRect screenRect(screenPoint.x - kHalfWidth,
-			screenPoint.y - kHalfHeight, screenPoint.x + kHalfWidth,
-			screenPoint.y + kHalfHeight);
-		screenRect = screenRect & screen.Frame();
-		if (!screenRect.IsValid())
-			return NULL;
+		const float kMaxWidth = 280.0f;
+		const float kMaxHeight = 200.0f;
+		const uint8 kAlpha = 170;
+		const float kPadding = be_control_look->DefaultLabelSpacing();
 
-		BBitmap* bitmap = new BBitmap(screenRect, B_RGB32);
-		if (!bitmap->IsValid()
-			|| screen.ReadBitmap(bitmap, false, &screenRect) != B_OK) {
+		BFont font;
+		GetFont(&font);
+		BFont boldFont(font);
+		boldFont.SetFace(B_BOLD_FACE);
+
+		font_height fheight;
+		font.GetHeight(&fheight);
+		float rowHeight = ceilf(fheight.ascent) + ceilf(fheight.descent)
+			+ ceilf(fheight.leading) + 4.0f;
+		float baseline = 2.0f + ceilf(fheight.ascent + fheight.leading / 2.0f);
+
+		bool fade = false;
+		size_t rowCount = 0;
+		for (; rowCount < labels.size(); rowCount++) {
+			if ((rowCount + 1) * rowHeight > kMaxHeight) {
+				fade = true;
+				break;
+			}
+		}
+		if (rowCount == 0)
+			rowCount = 1;
+
+		BRect dragRect(0.0f, 0.0f, kMaxWidth,
+			std::min(rowCount * rowHeight, kMaxHeight));
+
+		BBitmap* bitmap = new BBitmap(dragRect, B_RGB32, true);
+		if (!bitmap->IsValid()) {
 			delete bitmap;
 			return NULL;
 		}
 
+		BView* helper = new BView(bitmap->Bounds(), "helper",
+			B_FOLLOW_NONE, B_WILL_DRAW);
+		bitmap->AddChild(helper);
+		bitmap->Lock();
+
+		helper->SetLowColor(ui_color(B_LIST_BACKGROUND_COLOR));
+		helper->FillRect(helper->Bounds(), B_SOLID_LOW);
+
+		float top = 0.0f;
+		for (size_t i = 0; i < rowCount; i++) {
+			helper->MovePenTo(kPadding, top + baseline);
+			helper->SetFont(&boldFont);
+			helper->DrawString(labels[i].String());
+			float labelWidth = boldFont.StringWidth(labels[i].String());
+
+			if (!excerpts[i].IsEmpty()) {
+				helper->MovePenBy(kPadding, 0.0f);
+				helper->SetFont(&font);
+				float remaining = kMaxWidth - kPadding - labelWidth
+					- kPadding - kPadding;
+				BString excerpt(excerpts[i]);
+				font.TruncateString(&excerpt, B_TRUNCATE_END,
+					std::max(remaining, 0.0f));
+				helper->DrawString(excerpt.String());
+			}
+			top += rowHeight;
+		}
+
+		helper->SetHighColor(0, 0, 0, 255);
+		helper->StrokeRect(helper->Bounds());
+		helper->Sync();
+
+		uint8* bits = (uint8*)bitmap->Bits();
+		int32 height = (int32)bitmap->Bounds().Height() + 1;
+		int32 width = (int32)bitmap->Bounds().Width() + 1;
+		int32 bpr = bitmap->BytesPerRow();
+
+		if (fade) {
+			for (int32 y = 0; y < height - kAlpha / 2; y++, bits += bpr) {
+				uint8* line = bits + 3;
+				for (uint8* end = line + 4 * width; line < end; line += 4)
+					*line = kAlpha;
+			}
+			for (int32 y = height - kAlpha / 2; y < height; y++, bits += bpr) {
+				uint8* line = bits + 3;
+				for (uint8* end = line + 4 * width; line < end; line += 4)
+					*line = (height - y) << 1;
+			}
+		} else {
+			for (int32 y = 0; y < height; y++, bits += bpr) {
+				uint8* line = bits + 3;
+				for (uint8* end = line + 4 * width; line < end; line += 4)
+					*line = kAlpha;
+			}
+		}
+
+		bitmap->Unlock();
 		return bitmap;
 	}
 
