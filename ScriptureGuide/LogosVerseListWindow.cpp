@@ -199,6 +199,18 @@ SGVerseListWindow::_BuildGUI()
 		true);
 
 	fDescriptionDocument.SetTo(new TextDocument(), true);
+	// A brand-new TextDocument has ZERO paragraphs, not one empty one --
+	// confirmed the hard way: TextDocument::ParagraphIndexFor() returns
+	// -1 unconditionally when fParagraphs is empty, which makes
+	// Insert()/Replace() fail silently (nothing here checked the return
+	// value, so the very first population of this field did nothing at
+	// all, with no error). Append() has no such requirement -- it just
+	// appends to the paragraph vector -- so it's used once, here, to
+	// seed the one paragraph every Insert()/Remove() after this point
+	// needs to already exist. _Remove() only ever clears a paragraph's
+	// own text, never erases the last remaining one, so this holds for
+	// the document's whole lifetime, not just at construction.
+	fDescriptionDocument->Append(Paragraph());
 	fDescriptionListenerRef.SetTo(new DescriptionSaveListener(this), true);
 	fDescriptionDocument->AddListener(fDescriptionListenerRef);
 
@@ -596,7 +608,13 @@ SGVerseListWindow::_RebuildDescription()
 		fDescriptionDocument->Insert(0, description);
 
 	fDescriptionDocument->AddListener(fDescriptionListenerRef);
+	// Relayout() alone only invalidates the cached layout -- it doesn't
+	// repaint. A document mutated directly (bypassing the TextEditor a
+	// real keystroke goes through) needs both, same pairing
+	// ParallelBibleView uses everywhere a document's content changes out
+	// from under an already-visible view.
 	fDescriptionView->Relayout();
+	fDescriptionView->Invalidate();
 }
 
 
