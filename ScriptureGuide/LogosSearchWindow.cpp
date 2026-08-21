@@ -26,7 +26,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <algorithm>
 #include <iostream>
+#include <utility>
+#include <vector>
 #include <versekey.h>
 
 #include "constants.h"
@@ -35,6 +38,7 @@
 #include "LogosSearchWindow.h"
 #include "SwordBackend.h"
 #include "Preferences.h"
+#include "parallelbible/VerseListFile.h"
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "SearchWindow"
@@ -109,6 +113,7 @@ SGSearchWindow::SGSearchWindow(BRect frame,
 	BuildGUI();
 	_RebuildModuleMenu(0);
 	_ApplyModuleSelection(0);
+	_RebuildScopeMenu();
 	searchString->MakeFocus(true);
 }
 
@@ -194,6 +199,111 @@ SGSearchWindow::_ApplyModuleSelection(int32 selectIndex)
 }
 
 
+// "Book range" first, then every verse list on disk, sorted by name the
+// way Tracker's own Name column reads -- the same ordering (and the same
+// read-fresh-every-time reasoning) as the chain band's own list popup.
+void
+SGSearchWindow::_RebuildScopeMenu()
+{
+	BMenu* menu = scopeField->Menu();
+	for (int32 i = menu->CountItems() - 1; i >= 0; i--)
+		delete menu->RemoveItem(i);
+	fScopeListPaths.clear();
+
+	BMenuItem* wholeRange = new BMenuItem(B_TRANSLATE("in a book range"),
+		new BMessage(FIND_SELECT_SCOPE));
+	menu->AddItem(wholeRange);
+
+	std::vector<BString> paths = VerseListFile::ListPaths();
+	std::vector<std::pair<BString, BString> > entries;	// name, path
+	for (size_t i = 0; i < paths.size(); i++) {
+		VerseListFile probe;
+		if (probe.SetTo(paths[i].String()) == B_OK)
+			entries.push_back(std::make_pair(BString(probe.Name()), paths[i]));
+	}
+	std::sort(entries.begin(), entries.end());
+
+	if (!entries.empty())
+		menu->AddSeparatorItem();
+	for (size_t i = 0; i < entries.size(); i++) {
+		BString label(B_TRANSLATE("in list"));
+		label << " \"" << entries[i].first << "\"";
+		menu->AddItem(new BMenuItem(label.String(),
+			new BMessage(FIND_SELECT_SCOPE)));
+		fScopeListPaths.push_back(entries[i].second);
+	}
+
+	// Keep whatever was selected before if it is still on disk, so
+	// reopening the menu after a list was added elsewhere doesn't
+	// silently widen the search back to the whole book range.
+	int32 mark = 0;
+	if (!fScopeListPath.IsEmpty()) {
+		for (size_t i = 0; i < fScopeListPaths.size(); i++) {
+			if (fScopeListPaths[i] == fScopeListPath) {
+				// +1 for "in a book range", +1 for the separator.
+				mark = (int32)i + 2;
+				break;
+			}
+		}
+	}
+	BMenuItem* marked = menu->ItemAt(mark);
+	if (marked != NULL)
+		marked->SetMarked(true);
+	_ApplyScopeSelection(mark);
+}
+
+
+void
+SGSearchWindow::_ApplyScopeSelection(int32 selectIndex)
+{
+	// Index 0 is "in a book range"; index 1 is the separator, which
+	// cannot be selected. Everything from 2 on is a list, offset by
+	// those two.
+	int32 listIndex = selectIndex - 2;
+	if (listIndex >= 0 && (size_t)listIndex < fScopeListPaths.size())
+		fScopeListPath = fScopeListPaths[listIndex];
+	else
+		fScopeListPath = "";
+
+	// The book menus would otherwise sit there stating a range the
+	// search is not honouring -- the same reason the main window's
+	// book/chapter/verse fields go quiet while a chain is on a list.
+	bool onList = !fScopeListPath.IsEmpty();
+	bookField->SetEnabled(!onList);
+	sndBookField->SetEnabled(!onList);
+}
+
+
+vector<const char*>
+SGSearchWindow::_SearchWithinList()
+{
+	vector<const char*> empty;
+
+	VerseListFile list;
+	if (list.SetTo(fScopeListPath.String()) != B_OK) {
+		// Deleted or moved from Tracker since the menu was built --
+		// the same thing that can happen to a list a chain is showing,
+		// and the same response: nothing to search, nothing to report.
+		return empty;
+	}
+
+	sword::SWModule* module = fCurrentModule != NULL
+		? fCurrentModule->GetModule() : NULL;
+	if (module == NULL)
+		return empty;
+
+	const char* moduleVersification
+		= module->getConfigEntry("Versification");
+	sword::ListKey scope = VerseListScope(list.ReferenceText(),
+		list.Versification(),
+		moduleVersification != NULL && moduleVersification[0] != '\0'
+			? moduleVersification : "KJV");
+
+	return fCurrentModule->SearchModuleInScope(fSearchMode, fSearchFlags,
+		fSearchString.String(), scope, searchStatus);
+}
+
+
 void SGSearchWindow::BuildGUI(void)
 {
 	// The find button
@@ -232,6 +342,16 @@ void SGSearchWindow::BuildGUI(void)
 	for (unsigned int i = 1; i<books.size(); i++)
 		bookChoice->AddItem(new BMenuItem(books[i], new BMessage(FIND_SELECT_FROM)));
 	
+	// Search a verse list instead of a book range (#53) -- a list is
+	// the same kind of thing the "Start in"/"End in" menus produce, an
+	// ordered set of references, so it goes to SWORD's own scope
+	// parameter rather than needing a search path of its own.
+	BPopUpMenu* scopeChoice = new BPopUpMenu("scopechoice");
+	scopeField = new BMenuField("scope_field", B_TRANSLATE("Search "),
+		scopeChoice);
+	scopeField->SetDivider(
+		scopeField->StringWidth(B_TRANSLATE("Search ")) + 5);
+
 	// The last book in the scope
 	BPopUpMenu* sndBookChoice = new BPopUpMenu("biblebook2");
 	sndBookField = new BMenuField("book_field", B_TRANSLATE("End in "),
@@ -296,6 +416,7 @@ void SGSearchWindow::BuildGUI(void)
 				//.AddGlue()
 			.End()
 			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
+				.Add(scopeField)
 				.Add(bookField)
 				.Add(sndBookField)
 				.Add(caseSensitiveCheckBox)
@@ -413,6 +534,13 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case FIND_SELECT_SCOPE:
+		{
+			BMenu* menu = scopeField->Menu();
+			_ApplyScopeSelection(menu->IndexOf(menu->FindMarked()));
+			break;
+		}
+
 		case FIND_SEARCH_STR:
 		{
 			fSearchString = searchString->Text();
@@ -427,11 +555,16 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 				findButton->SetEnabled(false);
 				searchString->SetEnabled(false);
 				
-				verseList = fCurrentModule->SearchModule(fSearchMode, fSearchFlags,
+				if (fScopeListPath.IsEmpty()) {
+					verseList = fCurrentModule->SearchModule(fSearchMode,
+														fSearchFlags,
 														fSearchString.String(),
 														books[fSearchStart],
 														books[fSearchEnd],
 														searchStatus);
+				} else {
+					verseList = _SearchWithinList();
+				}
 				searchResults->MakeEmpty();
 				BLanguage language;
 				BLocale::Default()->GetLanguage(&language);

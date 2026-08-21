@@ -23,6 +23,7 @@ class SGModule;
 #define FIND_RUN_SEARCH		'FRun'
 #define FIND_SELECT_MODULE	'FSmd'
 #define FIND_UPDATE_MODULES	'FUmd'
+#define FIND_SELECT_SCOPE	'FSsc'
 
 using namespace std;
 
@@ -84,6 +85,24 @@ private:
 					// title -- shared by BuildGUI(), FIND_SELECT_MODULE,
 					// and FIND_UPDATE_MODULES.
 	void			_ApplyModuleSelection(int32 selectIndex);
+					// Rebuilds scopeField's menu: "Book range" plus one
+					// entry per verse list on disk (#53). Read fresh
+					// every time the menu is about to matter, since
+					// lists can appear or vanish from Tracker at any
+					// moment.
+	void			_RebuildScopeMenu();
+					// Applies a scope choice: index 0 is the book range
+					// (the two book menus stay live), anything else is
+					// fScopeListPaths[index - 1] and disables them --
+					// they would be saying something the search is not
+					// doing.
+	void			_ApplyScopeSelection(int32 selectIndex);
+					// Runs the current search confined to
+					// fScopeListPath's references, converted into the
+					// searched module's own versification. Empty result
+					// (and no crash) if the list has gone from disk
+					// since the menu was built.
+	vector<const char*>	_SearchWithinList();
 
 	vector<const char*>	books;
 	SwordBackend		*myBible;
@@ -93,6 +112,7 @@ private:
 	BMenuField			*moduleField;
 	BMenuField			*bookField;
 	BMenuField			*sndBookField;
+	BMenuField			*scopeField;
 	BTextControl		*searchString;
 	ResultListView		*searchResults;
 	VersePreview		*verseSelected;
@@ -106,6 +126,12 @@ private:
 	int					fSearchFlags;
 	int					fSearchStart;
 	int					fSearchEnd;
+					// Empty while searching a book range; otherwise the
+					// verse list file the search is confined to (#53).
+	BString				fScopeListPath;
+					// Parallel to scopeField's items after the first
+					// ("Book range"), so a menu index maps to a file.
+	vector<BString>		fScopeListPaths;
 	BString				fSearchString;
 	vector<const char*>	verseList;
 	

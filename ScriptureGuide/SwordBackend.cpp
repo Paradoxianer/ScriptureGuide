@@ -293,6 +293,120 @@ vector<const char*> SGModule::SearchModule(int searchType, int flags,
 }
 
 
+vector<const char*> SGModule::SearchModuleInScope(int searchType, int flags,
+						const char* searchText, ListKey& scope,
+						BStatusBar* statusBar)
+{
+	vector<const char*> results;
+
+	ListKey &listkey = fModule->search(searchText, searchType, flags,
+								&scope, 0, &percentUpdate, statusBar);
+
+	listkey.setPersist(true);
+	fModule->setKey(listkey);
+
+	for (listkey = TOP; !listkey.popError(); listkey++)
+		results.push_back((const char*) listkey);
+
+	return results;
+}
+
+
+void NormalizeReferenceSeparators(BString& reference)
+{
+	for (int32 i = 1; i + 1 < reference.Length(); i++) {
+		if (reference.ByteAt(i) != ',')
+			continue;
+		if (!isdigit(reference.ByteAt(i - 1)))
+			continue;
+		int32 next = i + 1;
+		while (next < reference.Length() && reference.ByteAt(next) == ' ')
+			next++;
+		if (next >= reference.Length() || !isdigit(reference.ByteAt(next)))
+			continue;
+		reference.Remove(i, next - i);
+		reference.Insert(":", i);
+	}
+}
+
+
+// One reference per line, parsed in the versification the list declares
+// and repositioned into the one the module counts in. See the header for
+// why that conversion is not optional.
+ListKey VerseListScope(const char* referenceText,
+			const char* sourceVersification,
+			const char* targetVersification)
+{
+	ListKey scope;
+	if (referenceText == NULL)
+		return scope;
+
+	if (sourceVersification == NULL || sourceVersification[0] == '\0')
+		sourceVersification = "KJV";
+	if (targetVersification == NULL || targetVersification[0] == '\0')
+		targetVersification = "KJV";
+
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+
+	BString remaining(referenceText);
+	while (remaining.Length() > 0) {
+		BString line;
+		int32 breakAt = remaining.FindFirst("\n");
+		if (breakAt < 0) {
+			line = remaining;
+			remaining = "";
+		} else {
+			remaining.CopyInto(line, 0, breakAt);
+			remaining.Remove(0, breakAt + 1);
+		}
+		line.Trim();
+		if (line.IsEmpty())
+			continue;
+
+		// German writes "Psalm 51,20" where SWORD wants a colon -- the
+		// same normalization BibleTextDocument applies before parsing a
+		// list line, and deliberately the same function rather than a
+		// second copy of the rule.
+		NormalizeReferenceSeparators(line);
+
+		// expandRange=true hands back ONE ELEMENT PER VERSE, already --
+		// "Genesis 16:7-16:14" arrives as eight separate keys, not as
+		// one range. So each is repositioned on its own and the scope is
+		// simply those verses; rebuilding ranges out of them was tried
+		// first and produced garbage (a range assembled with
+		// setLowerBound()/setUpperBound() reported itself as "Genesis
+		// 1:1", and the eight expanded elements each re-added the whole
+		// range, giving a 65-element scope for a two-line list that then
+		// matched verses the list never contained).
+		VerseKey parser;
+		parser.setVersificationSystem(sourceVersification);
+		parser.setLocale(language.Code());
+		ListKey parsed = parser.parseVerseList(line.String(), "", true);
+
+		for (parsed = TOP; !parsed.popError(); parsed++) {
+			VerseKey* element = dynamic_cast<VerseKey*>(parsed.getElement());
+			if (element == NULL)
+				continue;
+
+			VerseKey one;
+			one.setVersificationSystem(targetVersification);
+			one.positionFrom(*element);
+			// positionFrom() leaves the key BOUNDED (isBoundSet() is 1,
+			// with lower == upper == the verse itself), and a bounded
+			// key inside a ListKey iterates one verse too far: German
+			// "Psalmen 51:20" correctly became KJV "Psalms 51:19" and
+			// then yielded "Psalms 52:1" as well. Measured, not
+			// reasoned about.
+			one.clearBounds();
+			scope.add(one);
+		}
+	}
+
+	return scope;
+}
+
+
 vector<const char*> SGModule::SearchEntries(const char* searchText)
 {
 	vector<const char*> results;

@@ -1,6 +1,7 @@
 #ifndef __SWORDBACKEND_H__
 #define __SWORDBACKEND_H__
 
+#include <listkey.h>
 #include <swmgr.h>
 #include <swtext.h>
 #include <vector>
@@ -28,6 +29,34 @@ enum
 	TESTAMENT_NEW = 2,
 	TESTAMENT_APOCRYPHA = 4
 };
+
+// Rewrites the German "chapter,verse" convention into the "chapter:verse"
+// SWORD parses, in place -- but ONLY where a comma actually sits between
+// two numbers (spaces between them allowed and removed). A comma
+// separating whole references, which is SWORD's own list separator,
+// is left alone, as is any other comma in the string.
+//
+// That care is the point: replacing every comma turns "Psalmen 51, 19"
+// into "Psalmen 51: 19", which SWORD parses as the whole of Psalm 51 --
+// measured, after a scoped search built that way returned verses the
+// list never contained.
+void			NormalizeReferenceSeparators(BString& reference);
+
+// Turns one-reference-per-line text (a verse list's own body -- see
+// VerseListFile) into a scope ListKey suitable for
+// SGModule::SearchModuleInScope(), repositioning every reference from
+// the versification the list declares into the one the module being
+// searched counts in.
+//
+// That conversion is the whole reason this exists rather than a bare
+// parseVerseList() call: a list written in German counting names verses
+// that are numbered differently, or do not exist at all, in a KJV
+// module. Measured -- German "Psalmen 51:20" is KJV "Psalms 51:19" --
+// so a scope built without converting would search the wrong verses and
+// report them under the wrong numbers (#46).
+sword::ListKey	VerseListScope(const char* referenceText,
+					const char* sourceVersification,
+					const char* targetVersification);
 
 // Utility Functions
 int				ChaptersInBook(const char* book); 
@@ -136,6 +165,20 @@ public:
 	std::vector<const char*>	SearchModule(int searchType, int flags,
 								const char* searchText, const char* scopeFrom,
 								const char* scopeTo, BStatusBar* statusBar);
+
+	// Same search, but confined to an arbitrary set of references
+	// instead of a book range -- what searching within a verse list
+	// (#53) needs. SWModule::search() has always taken a scope
+	// ListKey; SearchModule() above just happens to only ever compose
+	// one kind of it. Confirmed empirically that a scope of two
+	// unrelated verses really does confine the search to exactly those.
+	//
+	// `scope` must already be expressed in THIS module's versification
+	// -- see VerseListScope(), which is what converts it.
+	std::vector<const char*>	SearchModuleInScope(int searchType, int flags,
+								const char* searchText,
+								sword::ListKey& scope,
+								BStatusBar* statusBar);
 
 	// Same underlying SWModule::search(), but with no VerseKey scope at
 	// all (unlike SearchModule() above, built for Bible/Commentary book

@@ -142,25 +142,6 @@ _CondensedRangeText(const VerseKey& first, const VerseKey& last)
 }
 
 
-static void
-_NormalizeReferenceSeparators(BString& reference)
-{
-	for (int32 i = 1; i + 1 < reference.Length(); i++) {
-		if (reference.ByteAt(i) != ',')
-			continue;
-		if (!isdigit(reference.ByteAt(i - 1)))
-			continue;
-		int32 next = i + 1;
-		while (next < reference.Length() && reference.ByteAt(next) == ' ')
-			next++;
-		if (next >= reference.Length() || !isdigit(reference.ByteAt(next)))
-			continue;
-		reference.Remove(i, next - i);
-		reference.Insert(":", i);
-	}
-}
-
-
 void
 BibleTextDocument::_PrepareKey(VerseKey& key) const
 {
@@ -870,7 +851,7 @@ BibleTextDocument::_Rebuild()
 			// And normalize the separator anyway, because someone
 			// hand-editing a list in German will write the comma they
 			// see everywhere else in this program.
-			_NormalizeReferenceSeparators(line);
+			NormalizeReferenceSeparators(line);
 
 			VerseKey parser;
 			_PrepareKey(parser);

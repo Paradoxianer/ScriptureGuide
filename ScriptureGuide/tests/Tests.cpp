@@ -28,6 +28,7 @@
 #include "ParallelBibleView.h"
 #include "PersonalNotesModule.h"
 #include "VerseAligner.h"
+#include "SwordBackend.h"
 #include "VerseListFile.h"
 #include "constants.h"
 
@@ -1502,6 +1503,90 @@ TestDroppedReferenceGoesIntoTheListNotTheChain(SWMgr* manager,
 }
 
 
+// Searching within a verse list means handing the list to SWORD as the
+// search SCOPE (#53). Three separate things had to be right for that,
+// and all three were wrong at first -- each one silently returned
+// verses the list does not contain rather than failing:
+//
+//   1. parseVerseList(..., expandRange=true) already yields one element
+//      PER VERSE, so a range must not be reassembled from them. Doing
+//      that re-added the whole range once per expanded verse and built
+//      a 65-element scope out of a two-line list.
+//   2. positionFrom() leaves the key bounded, and a bounded key inside
+//      a ListKey iterates one verse too far -- KJV "Psalms 51:19" also
+//      produced "Psalms 52:1".
+//   3. The German "51, 19" convention has to be normalized the careful
+//      way (only between two digits); a blanket comma-to-colon replace
+//      yields "Psalmen 51: 19", which parses as the whole of Psalm 51.
+static void
+TestVerseListScopeIsExactlyTheListsVerses()
+{
+	const char* name = "VerseListScope: the scope is exactly the list's "
+		"own verses, converted into the module's versification";
+
+	// A range, a German-comma reference, and a single verse -- the three
+	// shapes a list file actually contains.
+	const char* listText =
+		"Genesis 16:7-Genesis 16:14\n"
+		"Psalmen 51, 19\n"
+		"Daniel 6:1\n";
+
+	ListKey scope = VerseListScope(listText, "KJV", "KJV");
+	int count = 0;
+	bool sawFirstOfRange = false, sawLastOfRange = false;
+	bool sawPsalm = false, sawDaniel = false, sawStray = false;
+	for (scope = TOP; !scope.popError(); scope++) {
+		BString element(scope.getText());
+		count++;
+		if (element == "Genesis 16:7") sawFirstOfRange = true;
+		else if (element == "Genesis 16:14") sawLastOfRange = true;
+		else if (element == "Psalms 51:19") sawPsalm = true;
+		else if (element == "Daniel 6:1") sawDaniel = true;
+		else if (element.FindFirst("Genesis 16:") != 0) {
+			// Anything that is not one of the eight Genesis verses or
+			// the two singles is the bug: Psalms 52:1, Daniel 6:2,
+			// a whole chapter, a repeat.
+			sawStray = true;
+			printf("      stray scope element: %s\n", element.String());
+		}
+	}
+
+	// 8 verses of Genesis 16 + Psalms 51:19 + Daniel 6:1.
+	bool exact = count == 10 && sawFirstOfRange && sawLastOfRange
+		&& sawPsalm && sawDaniel && !sawStray;
+	if (!exact)
+		printf("      %d scope elements, expected 10\n", count);
+	Check(exact, name);
+}
+
+
+// The conversion half, on its own: a list written in German counting
+// names verses that are numbered differently in a KJV module, so the
+// scope has to be repositioned rather than parsed as-is (#46).
+static void
+TestVerseListScopeConvertsAcrossVersifications()
+{
+	const char* name = "VerseListScope: a German-versified list searched "
+		"against a KJV module is repositioned, not taken at face value";
+
+	ListKey scope = VerseListScope("Psalmen 51:20\n", "German", "KJV");
+	BString only;
+	int count = 0;
+	for (scope = TOP; !scope.popError(); scope++) {
+		if (count == 0)
+			only = scope.getText();
+		count++;
+	}
+
+	// German Psalm 51 has two more verses than KJV's, and the last KJV
+	// verse absorbs both -- so German 51:20 is KJV 51:19. Taken at face
+	// value it would have been KJV 51:20, which does not exist.
+	if (!(count == 1 && only == "Psalms 51:19"))
+		printf("      %d elements, first = \"%s\"\n", count, only.String());
+	Check(count == 1 && only == "Psalms 51:19", name);
+}
+
+
 // The exact conversion "Add to list" depends on to avoid reopening #46:
 // a reference read in one column's counting has to be written into a
 // list in the TARGET list's own counting, not left as displayed.
@@ -1661,6 +1746,8 @@ main()
 	TestVerseListFileAppliesItsNameToTheChain(&manager, moduleA);
 	TestChainDescriptionBelongsToItsOwnChain(&manager, moduleA, moduleB);
 	TestDroppedReferenceGoesIntoTheListNotTheChain(&manager, moduleA);
+	TestVerseListScopeIsExactlyTheListsVerses();
+	TestVerseListScopeConvertsAcrossVersifications();
 	TestFormatVerseRangeInConvertsAcrossVersifications();
 	TestVerseListFileRemovesOneLine();
 	TestListLineForParagraphIndexMatchesSourceLines(moduleA);
