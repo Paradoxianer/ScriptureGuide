@@ -19,6 +19,7 @@
 #include <ListItem.h>
 #include <MenuBar.h>
 #include <MenuItem.h>
+#include <NodeMonitor.h>
 #include <Message.h>
 #include <MessageRunner.h>
 #include <OutlineListView.h>
@@ -229,11 +230,39 @@ private:
 };
 
 
+// The name view at the top of the window (#73): a double-click posts
+// VLIST_RENAME to the window, same not-a-friend reasoning as
+// VerseListRowListView above. A single click does nothing -- this is a
+// label, not a button, so there's no affordance to confuse with one.
+class VerseListNameView : public BStringView {
+public:
+	VerseListNameView(const char* name, const char* text)
+		:
+		BStringView(name, text)
+	{
+	}
+
+	virtual void MouseDown(BPoint where)
+	{
+		BMessage* current = Window() != NULL
+			? Window()->CurrentMessage() : NULL;
+		int32 clicks = 0;
+		if (current != NULL)
+			current->FindInt32("clicks", &clicks);
+		if (clicks >= 2)
+			Window()->PostMessage(VLIST_RENAME);
+		BStringView::MouseDown(where);
+	}
+};
+
+
 SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	:
 	BWindow(frame, "", B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL,
 		B_NOT_ZOOMABLE | B_CLOSE_ON_ESCAPE),
 	fHasOpenFile(false),
+	fWatchingCollection(false),
+	fWatchingRoot(false),
 	fMenuBar(NULL),
 	fNameView(NULL),
 	fSaveItem(NULL),
@@ -264,11 +293,20 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	_BuildFilePanels();
 	_RebuildNavigationMenu();
 	_UpdateTitle();
+	_WatchRoot();
 }
 
 
 SGVerseListWindow::~SGVerseListWindow()
 {
+	// Releases both watches (root and, if any, the open collection) in
+	// one call -- stop_watching(handler) with no explicit node_ref drops
+	// every node monitor registration this window's Handler() has, which
+	// is exactly right at teardown (see _StopWatchingCollection()'s own
+	// comment for why the SAME call would be wrong while switching
+	// collections instead of tearing down entirely).
+	stop_watching(this);
+
 	// Flush any still-pending debounced save before this window (and
 	// with it, the listener it owns) goes away -- the same reasoning
 	// the shelved chain-description strip already had for its own
@@ -307,7 +345,7 @@ SGVerseListWindow::_BuildGUI()
 	// Always visible, regardless of how tall the description/row boxes
 	// below grow -- the one place that answers "which list is this" at
 	// a glance.
-	fNameView = new BStringView("verseListName",
+	fNameView = new VerseListNameView("verseListName",
 		B_TRANSLATE("(No list open)"));
 	fNameView->SetFont(be_bold_font);
 	fNameView->SetAlignment(B_ALIGN_CENTER);
@@ -446,28 +484,38 @@ SGVerseListWindow::_BuildMenuBar()
 }
 
 
-// Minimal name-prompt window for "New Verse List..." -- same idiom as
-// this app's other small utility windows (e.g. SGDictionaryWindow): a
-// non-modal BWindow that posts its result back via BMessenger and closes
-// itself, rather than a blocking dialog (nothing in this app has one).
-// "Save As..." doesn't need this -- a native BFilePanel's B_SAVE_PANEL
-// mode already has its own filename field built in.
+// Minimal name-prompt window for "New Verse List..." and, reused as-is
+// (#73), renaming the open one -- same idiom as this app's other small
+// utility windows (e.g. SGDictionaryWindow): a non-modal BWindow that
+// posts its result back via BMessenger and closes itself, rather than a
+// blocking dialog (nothing in this app has one). "Save As..." doesn't
+// need this -- a native BFilePanel's B_SAVE_PANEL mode already has its
+// own filename field built in.
 static const uint32 kNamePromptOK = 'VLpo';
 
 class VerseListNamePromptWindow : public BWindow {
 public:
-	VerseListNamePromptWindow(BMessenger target, uint32 resultWhat)
+	// `windowTitle`/`buttonLabel`/`initialName` default to the "New
+	// Verse List" shape when NULL/empty -- _StartRename() passes real
+	// ones instead, pre-filling the field with the collection's current
+	// name and selecting it, so typing immediately replaces it (matching
+	// how Tracker's own inline rename already behaves).
+	VerseListNamePromptWindow(BMessenger target, uint32 resultWhat,
+		const char* windowTitle = NULL, const char* initialName = NULL,
+		const char* buttonLabel = NULL)
 		:
-		BWindow(BRect(120, 120, 460, 210), B_TRANSLATE("New Verse List"),
+		BWindow(BRect(120, 120, 460, 210),
+			windowTitle != NULL ? windowTitle
+				: B_TRANSLATE("New Verse List"),
 			B_TITLED_WINDOW_LOOK, B_MODAL_APP_WINDOW_FEEL,
 			B_NOT_ZOOMABLE | B_CLOSE_ON_ESCAPE | B_AUTO_UPDATE_SIZE_LIMITS),
 		fTarget(target),
 		fResultWhat(resultWhat)
 	{
-		fNameControl = new BTextControl("name", B_TRANSLATE("Name:"), "",
-			new BMessage(kNamePromptOK));
-		BButton* okButton = new BButton("ok", B_TRANSLATE("Create"),
-			new BMessage(kNamePromptOK));
+		fNameControl = new BTextControl("name", B_TRANSLATE("Name:"),
+			initialName != NULL ? initialName : "", new BMessage(kNamePromptOK));
+		BButton* okButton = new BButton("ok", buttonLabel != NULL
+			? buttonLabel : B_TRANSLATE("Create"), new BMessage(kNamePromptOK));
 		SetDefaultButton(okButton);
 
 		BLayoutBuilder::Group<>(this, B_VERTICAL)
@@ -480,6 +528,8 @@ public:
 		.End();
 
 		fNameControl->MakeFocus(true);
+		if (initialName != NULL && initialName[0] != '\0')
+			fNameControl->TextView()->SelectAll();
 	}
 
 	virtual void MessageReceived(BMessage* message)
@@ -518,6 +568,18 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			BString name;
 			if (message->FindString("name", &name) == B_OK)
 				_CreateNewList(name.String());
+			break;
+		}
+
+		case VLIST_RENAME:
+			_StartRename();
+			break;
+
+		case VLIST_RENAME_RESULT:
+		{
+			BString name;
+			if (message->FindString("name", &name) == B_OK)
+				_RenameList(name.String());
 			break;
 		}
 
@@ -612,6 +674,10 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			_SaveDescription();
 			break;
 
+		case B_NODE_MONITOR:
+			_HandleNodeMonitorMessage(message);
+			break;
+
 		default:
 			BWindow::MessageReceived(message);
 			break;
@@ -652,6 +718,20 @@ SGVerseListWindow::_NewList()
 
 
 void
+SGVerseListWindow::_StartRename()
+{
+	if (!fHasOpenFile)
+		return;
+
+	BPath current(fCollectionPath.String());
+	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
+		BMessenger(this), VLIST_RENAME_RESULT, B_TRANSLATE("Rename Verse List"),
+		current.Leaf(), B_TRANSLATE("Rename"));
+	prompt->Show();
+}
+
+
+void
 SGVerseListWindow::_CreateNewList(const char* name)
 {
 	// Always created at the top level -- nesting a new collection inside
@@ -666,11 +746,61 @@ SGVerseListWindow::_CreateNewList(const char* name)
 	fCollectionPath = path;
 	fBookmarks.clear();
 	fHasOpenFile = true;
+	_WatchCollection(fCollectionPath.String());
 	_RebuildRows();
 	_RebuildDescription();
 	_UpdateTitle();
 	// A brand-new collection, possibly the first one ever, changes what
 	// the navigation menu has to offer.
+	_RebuildNavigationMenu();
+}
+
+
+void
+SGVerseListWindow::_RenameList(const char* name)
+{
+	if (!fHasOpenFile)
+		return;
+
+	BString sanitized(name);
+	sanitized.Trim();
+	for (int32 i = 0; i < sanitized.Length(); i++) {
+		if (sanitized.ByteAt(i) == '/')
+			sanitized.SetByteAt(i, '-');
+	}
+	if (sanitized.Trim().IsEmpty())
+		return;
+
+	BEntry entry(fCollectionPath.String());
+	if (entry.InitCheck() != B_OK)
+		return;
+
+	BPath parent(fCollectionPath.String());
+	parent.GetParent(&parent);
+
+	// Same numbered-collision handling as CreateCollection()/CreateNew()
+	// -- a rename landing on an existing name gets a number, not a
+	// silent overwrite or a failed, silently-ignored rename.
+	BString candidate(sanitized);
+	int suffix = 2;
+	BPath candidatePath(parent.Path());
+	candidatePath.Append(candidate.String());
+	while (BEntry(candidatePath.Path()).Exists()) {
+		candidate = sanitized;
+		candidate << " " << suffix;
+		candidatePath.SetTo(parent.Path());
+		candidatePath.Append(candidate.String());
+		suffix++;
+	}
+
+	if (entry.Rename(candidate.String()) != B_OK)
+		return;
+
+	BPath renamed(parent.Path());
+	renamed.Append(candidate.String());
+	fCollectionPath = renamed.Path();
+
+	_UpdateTitle();
 	_RebuildNavigationMenu();
 }
 
@@ -693,6 +823,7 @@ SGVerseListWindow::_OpenList(const char* path)
 void
 SGVerseListWindow::_CloseList()
 {
+	_StopWatchingCollection();
 	fCollectionPath = "";
 	fBookmarks.clear();
 	fHasOpenFile = false;
@@ -861,6 +992,7 @@ SGVerseListWindow::_LoadFile(const char* path)
 
 	fCollectionPath = path;
 	fBookmarks.clear();
+	_WatchCollection(fCollectionPath.String());
 
 	std::vector<BString> paths = BookmarkFile::ListBookmarkPaths(path);
 	for (size_t i = 0; i < paths.size(); i++) {
@@ -978,6 +1110,47 @@ SGVerseListWindow::_UpdateTitle()
 }
 
 
+// Adds one item per subfolder of `path` directly into `menu` (#78) --
+// arbitrarily nested, unlike the original one-level-only design
+// (BookmarkFile::ListCollectionNames()'s own scope comment describes
+// that original limit, not this caller's). A folder with no
+// sub-collections of its own becomes a plain leaf item; one that does
+// becomes a submenu, its OWN folder still reachable as that submenu's
+// first item (a plain click on a submenu's title isn't a thing in
+// Haiku's menu model, so this is the equivalent), followed by a
+// separator, then its children recursed the same way. Every submenu
+// created needs its own SetTargetForItems() call -- unlike a plain
+// BView, it does not inherit targeting from its parent menu.
+static void
+PopulateCollectionMenu(BMenu* menu, BHandler* target, const char* path)
+{
+	std::vector<BString> names = BookmarkFile::ListCollectionNames(path);
+	for (size_t i = 0; i < names.size(); i++) {
+		BPath childPath(path);
+		childPath.Append(names[i].String());
+
+		std::vector<BString> grandchildren
+			= BookmarkFile::ListCollectionNames(childPath.Path());
+		if (grandchildren.empty()) {
+			BMessage* select = new BMessage(VLIST_NAV_SELECT);
+			select->AddString("path", childPath.Path());
+			menu->AddItem(new BMenuItem(names[i].String(), select));
+			continue;
+		}
+
+		BMenu* submenu = new BMenu(names[i].String());
+		BMessage* selectSelf = new BMessage(VLIST_NAV_SELECT);
+		selectSelf->AddString("path", childPath.Path());
+		submenu->AddItem(new BMenuItem(
+			B_TRANSLATE("(open this collection)"), selectSelf));
+		submenu->AddSeparatorItem();
+		PopulateCollectionMenu(submenu, target, childPath.Path());
+		submenu->SetTargetForItems(target);
+		menu->AddItem(submenu);
+	}
+}
+
+
 void
 SGVerseListWindow::_RebuildNavigationMenu()
 {
@@ -986,25 +1159,140 @@ SGVerseListWindow::_RebuildNavigationMenu()
 	for (int32 i = fNavigationMenu->CountItems() - 1; i >= 0; i--)
 		delete fNavigationMenu->RemoveItem(i);
 
-	// One item per top-level collection folder -- every collection is a
-	// folder now (#55), so there's no more "loose file vs. collection
-	// subfolder" distinction to show as two tiers the way the old
-	// VerseListFile-backed menu did. A nested sub-collection (a subfolder
-	// of one of these) is reachable through Open's own folder picker,
-	// not this menu -- same one-level-only scope
-	// BookmarkFile::ListCollectionNames() itself documents.
+	// Every collection is a folder now (#55), nested arbitrarily deep --
+	// see PopulateCollectionMenu()'s own comment.
 	BString root = BookmarkFile::RootDirectory();
-	std::vector<BString> names = BookmarkFile::ListCollectionNames();
-	for (size_t i = 0; i < names.size(); i++) {
-		BPath path(root.String());
-		path.Append(names[i].String());
-
-		BMessage* select = new BMessage(VLIST_NAV_SELECT);
-		select->AddString("path", path.Path());
-		fNavigationMenu->AddItem(new BMenuItem(names[i].String(), select));
-	}
+	PopulateCollectionMenu(fNavigationMenu, this, root.String());
 
 	fNavigationMenu->SetTargetForItems(this);
+}
+
+
+void
+SGVerseListWindow::_WatchRoot()
+{
+	if (fWatchingRoot)
+		return;
+
+	BString root = BookmarkFile::RootDirectory();
+	BEntry entry(root.String());
+	if (entry.InitCheck() != B_OK
+		|| entry.GetNodeRef(&fRootNodeRef) != B_OK) {
+		return;
+	}
+
+	// B_WATCH_DIRECTORY: a collection folder appearing, disappearing, or
+	// being renamed directly inside RootDirectory() -- what the "Go to
+	// List" menu's TOP level shows. A collection nested further down
+	// changing is only caught if it's the one currently open (see
+	// _WatchCollection()) -- see the header comment on why this doesn't
+	// try to watch the whole tree recursively.
+	if (watch_node(&fRootNodeRef, B_WATCH_DIRECTORY, this) == B_OK)
+		fWatchingRoot = true;
+}
+
+
+void
+SGVerseListWindow::_WatchCollection(const char* path)
+{
+	_StopWatchingCollection();
+
+	BEntry entry(path);
+	if (entry.InitCheck() != B_OK
+		|| entry.GetNodeRef(&fCollectionNodeRef) != B_OK) {
+		return;
+	}
+
+	if (watch_node(&fCollectionNodeRef, B_WATCH_DIRECTORY, this) == B_OK)
+		fWatchingCollection = true;
+}
+
+
+void
+SGVerseListWindow::_StopWatchingCollection()
+{
+	if (!fWatchingCollection)
+		return;
+
+	// The specific node_ref, not stop_watching(this) -- that call has no
+	// node_ref parameter at all and would drop EVERY watch this window's
+	// Handler() has, including the root one from _WatchRoot(), which is
+	// wrong here: this only means "stop watching the collection that was
+	// open, a different one may be opening next" (see _LoadFile()/
+	// _CreateNewList(), both call _WatchCollection() again right after),
+	// not "tear this window's watches down entirely" (~SGVerseListWindow()
+	// is the one place that actually wants that).
+	watch_node(&fCollectionNodeRef, B_STOP_WATCHING, this);
+	fWatchingCollection = false;
+}
+
+
+void
+SGVerseListWindow::_HandleNodeMonitorMessage(BMessage* message)
+{
+	int32 opcode;
+	if (message->FindInt32("opcode", &opcode) != B_OK)
+		return;
+
+	// B_ENTRY_CREATED/REMOVED report the event's own parent under
+	// "directory"; B_ENTRY_MOVED reports both ends, since a move can
+	// cross from one watched directory into the other (e.g. a
+	// collection dragged into/out of the currently open one in
+	// Tracker). Either side matching either watched node is enough to
+	// know something relevant happened, whether the reference itself
+	// (dev_t, node) points into the watched directory or the entry
+	// underneath it.
+	int32 device;
+	if (message->FindInt32("device", &device) != B_OK)
+		return;
+
+	bool touchesRoot = false;
+	bool touchesCollection = false;
+
+	int64 directory;
+	if (message->FindInt64("directory", &directory) == B_OK) {
+		if (fWatchingRoot && device == fRootNodeRef.device
+			&& directory == fRootNodeRef.node) {
+			touchesRoot = true;
+		}
+		if (fWatchingCollection && device == fCollectionNodeRef.device
+			&& directory == fCollectionNodeRef.node) {
+			touchesCollection = true;
+		}
+	}
+	int64 fromDirectory, toDirectory;
+	if (opcode == B_ENTRY_MOVED
+		&& message->FindInt64("from directory", &fromDirectory) == B_OK
+		&& message->FindInt64("to directory", &toDirectory) == B_OK) {
+		if (fWatchingRoot && device == fRootNodeRef.device
+			&& (fromDirectory == fRootNodeRef.node
+				|| toDirectory == fRootNodeRef.node)) {
+			touchesRoot = true;
+		}
+		if (fWatchingCollection && device == fCollectionNodeRef.device
+			&& (fromDirectory == fCollectionNodeRef.node
+				|| toDirectory == fCollectionNodeRef.node)) {
+			touchesCollection = true;
+		}
+	}
+
+	if (touchesRoot)
+		_RebuildNavigationMenu();
+
+	if (touchesCollection && fHasOpenFile) {
+		// Re-scan rather than a full _LoadFile() -- that would also
+		// reset the description box's own listener dance for no reason;
+		// only the row list needs to follow what changed on disk.
+		fBookmarks.clear();
+		std::vector<BString> paths
+			= BookmarkFile::ListBookmarkPaths(fCollectionPath.String());
+		for (size_t i = 0; i < paths.size(); i++) {
+			BookmarkFile bookmark;
+			if (bookmark.SetTo(paths[i].String()) == B_OK)
+				fBookmarks.push_back(bookmark);
+		}
+		_RebuildRows();
+	}
 }
 
 

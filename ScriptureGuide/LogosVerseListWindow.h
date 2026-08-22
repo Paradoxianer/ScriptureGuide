@@ -2,6 +2,7 @@
 #define VERSE_LIST_WINDOW_H
 
 #include <Messenger.h>
+#include <Node.h>
 #include <String.h>
 #include <Window.h>
 
@@ -39,6 +40,10 @@ class TextDocumentView;
 #define VLIST_ROW_REORDER		'VLrr'
 #define VLIST_REMOVE_ROW		'VLrm'
 #define VLIST_DESCRIPTION_CHANGED	'VLdc'
+// Double-click on fNameView (#73) -- renames the open collection's own
+// folder in place, unlike Save As... (which duplicates it elsewhere).
+#define VLIST_RENAME			'VLrn'
+#define VLIST_RENAME_RESULT	'VLrR'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -116,6 +121,12 @@ private:
 			void			_SaveList();
 			void			_SaveListAs();
 			void			_DeleteList();
+			// Double-click on the name view (#73) -- opens the same
+			// name-prompt window _NewList() uses, pre-filled with the
+			// current name, then renames the collection's own folder in
+			// place once it returns.
+			void			_StartRename();
+			void			_RenameList(const char* name);
 
 			// Loads `path` (a collection FOLDER, one bookmark file per
 			// reference -- see BookmarkFile) into the window (list rows +
@@ -137,11 +148,10 @@ private:
 			BString			_CollectionVersification() const;
 			BString			_DescriptionPath() const;
 
-			// The "Go to list" menu: one item per top-level collection
-			// folder (BookmarkFile::ListCollectionNames()) -- a nested
-			// sub-collection is reachable through Open's folder picker,
-			// not this menu, the same one-level-only scope
-			// ListCollectionNames() itself already documents.
+			// The "Go to list" menu: one item per collection folder
+			// (BookmarkFile::ListCollectionNames()), nested arbitrarily
+			// deep as cascading submenus (#78) -- see
+			// PopulateCollectionMenu() in the .cpp.
 			void			_RebuildNavigationMenu();
 
 			// Single click on a row: posts SG_BIBLE with that row's
@@ -158,6 +168,20 @@ private:
 			void			_DescriptionEdited();
 			void			_SaveDescription();
 
+			// #79: live-reflect filesystem changes made from outside this
+			// window (Tracker, another instance, a script) instead of
+			// only ever refreshing at points this window itself already
+			// triggers a change. Two watches, not one recursive watch on
+			// the whole tree -- Haiku's node monitor is per-directory,
+			// not recursive, and there's no bound on how deep a user's
+			// own collection nesting goes -- see the .cpp for the exact
+			// scope this covers (root + the one currently open
+			// collection, not every nested folder at every depth).
+			void			_WatchRoot();
+			void			_WatchCollection(const char* path);
+			void			_StopWatchingCollection();
+			void			_HandleNodeMonitorMessage(BMessage* message);
+
 private:
 			// The open collection's folder -- empty when none is open.
 			// One BookmarkFile per reference inside it, in Position
@@ -166,6 +190,18 @@ private:
 			BString					fCollectionPath;
 			std::vector<BookmarkFile>	fBookmarks;
 			bool					fHasOpenFile;
+
+			// Which node_ref the currently-active collection watch
+			// (if any) is for -- needed to tell a B_NODE_MONITOR
+			// message's "directory"/"to directory" field apart from
+			// the root watch's, and to stop_watching() this ONE node
+			// specifically when switching to a different collection
+			// (stop_watching(handler) with no node_ref would drop
+			// every watch this window has, including the root one).
+			node_ref				fRootNodeRef;
+			node_ref				fCollectionNodeRef;
+			bool					fWatchingCollection;
+			bool					fWatchingRoot;
 
 			BMenuBar*				fMenuBar;
 			// The list's own name, shown above everything else -- so
