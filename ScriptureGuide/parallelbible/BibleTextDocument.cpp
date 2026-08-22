@@ -853,6 +853,19 @@ BibleTextDocument::_Rebuild()
 
 		if (!linkedToPrevious) {
 			previousKey = iterKey;
+			// VerseKey::operator=() does not carry over the source key's
+			// versification system (confirmed empirically -- previousKey
+			// silently reverts to the default, KJV, even when iterKey is
+			// e.g. "Luther"), which then made isLinked() misidentify
+			// merely ADJACENT verses (N and N-1) as linked whenever the
+			// two keys being compared belonged to different canons --
+			// reproduced live against GerMenge (Luther) and GerSch
+			// (German): every even-numbered verse in 1 Corinthians 6 came
+			// back "linked" to the odd one before it and rendered as an
+			// empty stub, though renderText() called directly for that
+			// same verse returns its own real, distinct text. Re-running
+			// _PrepareKey() restores what the assignment dropped.
+			_PrepareKey(previousKey);
 			havePreviousEntry = true;
 		}
 	}

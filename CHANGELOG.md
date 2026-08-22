@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.3.0 (test release)
+
+### Verse lists
+
+A standalone window for building named collections of references — a
+reading plan, a topical study, whatever grouping makes sense — separate
+from the reading pane: clicking an entry navigates the active chain
+straight to that one verse, rather than rendering the whole collection as
+a composite document. File menu (New, Open, Close, Save, Save As, Delete)
+and Edit menu (move up/down, remove a row, description) cover day-to-day
+list management.
+
+Storage is one small plain-text file per reference, not one file per
+list: a collection is just a folder. That buys a few things for free —
+Tracker becomes a browser for a collection (sortable by Position, Code
+and Tags, which are ordinary BFS attributes), copying a reference between
+collections is a file copy, and double-clicking a bookmark file in
+Tracker navigates the active chain straight to it. Each bookmark records
+the locale it was written in, so a German "Johannes 3:16" round-trips
+correctly regardless of what locale later opens it.
+
+- **Rename in place.** Double-clicking a collection's name renames its
+  own folder, unlike Save As, which duplicates it elsewhere.
+- **Nested collections.** *Go to List* cascades into sub-collections at
+  any depth, not just the top level.
+- **Live sync.** Changes made outside the app — in Tracker, from another
+  instance, by hand — appear without reopening the window, both for which
+  collections exist and for the currently open one's own contents.
+- Storage path simplified to `settings/scriptureguide/verselists/`; a
+  stray `library` segment from an earlier design is gone (nothing had
+  shipped bookmark files under the old path yet).
+
+### Search
+
+- The search window now offers every installed Bible and commentary, not
+  only the ones currently open as columns.
+- Fixed: double-clicking a search result opened a new window instead of
+  navigating the active chain.
+- Fixed: dragging multiple selected search results onto a verse list did
+  nothing.
+
+### Fixed
+
+- Parallel columns of different versifications could silently drop
+  verses.
+- Dragging a reading-pane selection produced the wrong drag bitmap,
+  including under German locale.
+
 ## 1.2.2 (test release)
 
 Same programs as 1.2.1 -- only the documentation differs, so 1.2.1 was

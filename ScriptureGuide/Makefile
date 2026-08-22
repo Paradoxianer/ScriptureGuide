@@ -36,14 +36,17 @@ SRCS = \
 	 LogosApp.cpp  \
 	 LogosMainWindow.cpp  \
 	 LogosSearchWindow.cpp  \
+	 LogosVerseListWindow.cpp  \
 	 Preferences.cpp  \
 	 ResultListView.cpp  \
 	 Spinner.cpp  \
 	 SwordBackend.cpp  \
 	 \
 	 parallelbible/BibleTextDocument.cpp  \
+	 parallelbible/BookmarkFile.cpp  \
 	 parallelbible/PersonalNotesModule.cpp  \
 	 parallelbible/VerseAligner.cpp  \
+	 parallelbible/VerseListFile.cpp  \
 	 parallelbible/ParallelBibleView.cpp  \
 	 \
 	 textview/Bullet.cpp  \
@@ -96,7 +99,7 @@ RSRCS = \
 #	- 	if your library does not follow the standard library naming scheme,
 #		you need to specify the path to the library and it's name.
 #		(e.g. for mylib.a, specify "mylib.a" or "path/mylib.a")
-LIBS = be $(STDCPPLIBS) sword z columnlistview localestub shared
+LIBS = be tracker $(STDCPPLIBS) sword z columnlistview localestub shared
 #	Specify additional paths to directories following the standard libXXX.so
 #	or libXXX.a naming scheme. You can specify full paths or paths relative
 #	to the Makefile. The paths included are not parsed recursively, so

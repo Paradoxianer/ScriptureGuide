@@ -6,6 +6,7 @@
 #define RESULT_LIST_VIEW_H
 
 #include <OutlineListView.h>
+#include <String.h>
 #include <SupportDefs.h>
 
 #define MAX_DRAG_HEIGHT		200.0
@@ -50,7 +51,16 @@ public:
 	virtual			~ResultListView();
 	
 	virtual bool	InitiateDrag(BPoint point, int32 index, bool);
-	
+
+	// Which versification the keys in this list count in -- i.e. the
+	// searched module's. Travels with every drag (see MakeDragMessage())
+	// so whatever receives the drop can reposition the reference into
+	// its own counting instead of assuming the two agree (#46). Without
+	// it a result dragged out of a German-versified module and appended
+	// to a KJV list would be written down as a verse it isn't.
+	void			SetSourceVersification(const char* versification)
+						{ fSourceVersification = versification; }
+
 protected:
 	void			MakeDragMessage(BMessage* message);
 
@@ -58,6 +68,7 @@ protected:
 private:
 	void			Init(void);
 	uint32			fDragCommand;
+	BString			fSourceVersification;
 
 };
 

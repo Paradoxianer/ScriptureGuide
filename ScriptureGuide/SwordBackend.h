@@ -47,6 +47,36 @@ int				UpperVerseFromKey(const char* key);
 bool			ParseVerseReference(const char* input,
 					BString& normalizedKey);
 
+// Parses `key` (a single, unhyphenated verse reference -- a hyphenated
+// range's end has to be split off first, see SplitVerseRangeSuffix())
+// as `sourceLocale`/`sourceVersification`, repositions it into
+// `targetVersification`, and writes the result rendered in
+// `targetLocale` into `outText`. Either locale may be empty, which
+// leaves VerseKey's own locale unset -- its default, which always
+// recognizes/produces English/ASCII book names regardless of what
+// locale (if any) is otherwise active (confirmed empirically). False
+// (leaving `outText` untouched) if `key` doesn't parse at all. Shared
+// by BookmarkFile (#55, converting a bookmark's own stored reference
+// back into a navigable key) and SGVerseListWindow (building a fresh
+// bookmark's own stored content from a dropped reference).
+bool			ConvertVerseReference(const char* key,
+					const char* sourceLocale,
+					const char* sourceVersification,
+					const char* targetLocale,
+					const char* targetVersification, BString& outText);
+
+// Splits a stored range reference ("John 3:12-16") into `base`
+// ("John 3:12") and `suffix` ("-16", including the leading '-'), or
+// leaves `base` as the whole of `reference` and `suffix` empty if it
+// isn't a range at all. ConvertVerseReference() (and VerseKey::setText()
+// generally) only understands a single, unhyphenated reference -- see
+// BibleColumnView::_StartDrag()'s own comment (ParallelBibleView.cpp)
+// on why a drag never hands over a combined "start-end" string for
+// something else to re-split, which is exactly the situation this
+// exists to handle on the read side.
+void			SplitVerseRangeSuffix(const BString& reference,
+					BString& base, BString& suffix);
+
 // One occurrence of a recognized verse reference embedded in a larger
 // block of free text (a commentary's prose, not a whole search/goto
 // field) -- see FindReferencesInText() below. start/length are a byte
@@ -187,7 +217,15 @@ public:
 	SGModule*			CommentaryAt(const int32 &index) const;
 	SGModule*			LexiconAt(const int32 &index) const;
 	SGModule*			GeneralTextAt(const int32 &index) const;
-	
+
+	// Every installed Bible/Commentary module's name (the same two
+	// categories _PopulateModuleMenu() offers as real, key-searchable
+	// text -- Lexicons/GeneralTexts have no book/chapter/verse concept
+	// to search by). What the search window's "Search in" field should
+	// offer: every module the user could search, not just whichever
+	// ones happen to be open as reading-pane columns right now.
+	std::vector<BString>	SearchableModuleNames(void) const;
+
 	SGModule*			FindModule(const char* name);
 	status_t			SetModule(SGModule* mod);
  	SGModule*			CurrentModule(void);

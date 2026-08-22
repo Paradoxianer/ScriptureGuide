@@ -1,57 +1,28 @@
 # Roadmap
 
-Where ScriptureGuide goes after 1.2.2. Ordered by what unlocks what, not
+Where ScriptureGuide goes after 1.3.0. Ordered by what unlocks what, not
 by wishlist size. Each entry says what it needs and what is already known
 about the ground it stands on.
 
 ## The next thing: marking passages
 
-Bookmarks and highlighting are the priority. They look like two features
-and are mostly one: **user data attached to a verse range, kept
-somewhere, listed, and jumped to.** Building them in the right order
-means the second one is small.
+Bookmarks and highlighting were the priority, as two features that are
+mostly one: **user data attached to a verse range, kept somewhere,
+listed, and jumped to.**
 
-Today the app has three separate places for user data, and none of them
-fits:
+Bookmarks shipped in 1.3.0, in a shape richer than [#39](https://github.com/Paradoxianer/ScriptureGuide/issues/39)
+(now closed) originally proposed: named, orderable *collections* of
+references — a standalone Verse List window instead of a single flat
+submenu, one bookmark file per reference rather than one entry in an
+app-wide list — because that is what a real user's own workflow
+described (see #47, #55). It settled the storage question the same way
+#39 would have: a bookmark records a reference and jumps to it via the
+existing `JumpToKey()` path, just organized into folders instead of one
+list.
 
-| what | where |
-|---|---|
-| Notes | a SWORD module of their own (`PersonalNotesModule`) — moving, see [#45](https://github.com/Paradoxianer/ScriptureGuide/issues/45) |
-| Column layout | a `BMessage` in the settings file |
-| Navigation history | memory only, gone on quit |
+Highlighting is next, and its design is unaffected by that shape change:
 
-So the first question is where marks live. Notes are per-verse *text* and
-SWORD handles them well; a highlight is a colour on a range, and a
-bookmark is a name on a reference. Neither is text, and neither belongs
-in a Bible module.
-
-### 1. Bookmarks — [#39](https://github.com/Paradoxianer/ScriptureGuide/issues/39)
-
-The smaller of the two, and worth doing first because it settles the
-storage question and produces the list UI that highlighting then reuses.
-
-Most of the machinery exists: `ChainKey(ActiveColumn())` already answers
-"where am I", `JumpToKey()` already answers "take me there", and the
-navigation history added in 1.2.0 uses both. A bookmark is that pair made
-persistent and given a name.
-
-- Store: one file, app-wide rather than per window. A bookmark you can
-  only reach from the window that made it is a worse bookmark. This
-  answers the issue's first open question.
-- Create: Navigation menu, beside Back/Forward, with a shortcut.
-- Reach: a submenu of saved bookmarks; clicking one navigates the active
-  group.
-- Manage: rename and delete. A small window rather than a context menu,
-  because the same window becomes the annotations list in step 3.
-
-Open, and worth deciding before starting: does a bookmark remember only
-the reference, or also which translations were open? The second is more
-useful and more surprising — restoring a bookmark would rearrange your
-columns.
-
-Risk: low. Almost entirely new code, no changes to the text engine.
-
-### 2. Highlighting verses — needs an issue
+### Highlighting verses — needs an issue
 
 There is no issue for this yet on this repository; the nearest is
 HaikuArchives#8 ("mark text and/or verses, maybe in different colours")
@@ -80,43 +51,29 @@ column at once; a character-level one is meaningful in exactly the
 translation it was drawn in. Sub-verse highlighting is a reasonable
 second step, once it is clear people want it.
 
-### 3. One list of everything marked
+### Then: one list of everything marked
 
 Bookmarks, highlights, and verses that have notes, in a single window —
-HaikuArchives#29. Only worth building after 1 and 2, and cheap once they
-exist, because it is a view over the store rather than a new mechanism.
+HaikuArchives#29. Only worth building once highlighting exists, and cheap
+once it does, because it is a view over the store rather than a new
+mechanism.
 
-## Alongside: notes into SWORD's Personal commentary — [#45](https://github.com/Paradoxianer/ScriptureGuide/issues/45)
+## Right after 1.3.0: importing the real end user's own files
 
-Came out of the 1.2.2 forum feedback, and belongs next to the storage
-question above rather than at the back of a queue: notes currently sit in
-a `RawCom` of our own, outside the SWORD module path and invisible to
-every other SWORD application. SWORD already has the place for this —
-the `Personal` commentary — and putting them there makes notes
-interchangeable with BibleTime and Xiphos, and makes the Personal
-commentary editable here, which is what was actually asked for.
+[#68](https://github.com/Paradoxianer/ScriptureGuide/issues/68) — the
+whole reason verse lists took the shape they did: a real end user's
+existing WORDsearch-style `.LIB` files (bare `GEN 1:1` references, no
+header, hundreds of them in self-chosen subfolders) should drop straight
+into a collection folder as bookmark files, one file read in, one folder
+written out. Planned for 1.3.1 rather than bundled into 1.3.0 itself, so
+the storage format had a release to settle on first.
 
-Decided: where a `Personal` module already has an entry for a verse, our
-note is **appended to it, verse by verse** — nothing is overwritten and
-nothing is discarded. The merge is per verse because that is the unit
-both sides already use.
-
-Open: the driver changes from `RawCom` to `RawFiles`. Also worth settling
-before step 1 above commits to a store, since "where does user data live"
-is the same question twice.
-
-Precondition:
-[#46](https://github.com/Paradoxianer/ScriptureGuide/issues/46). Notes are
-stored under KJV verse keys whatever versification the column uses, and
-nothing converts between them — a note taken on "Ps 51,20" in a
-German-versified Bible is filed under Psalms 52:1. It stays invisible only
-because the same wrong key is built when writing and when reading. Sharing
-the module with BibleTime is precisely what ends that.
-
-One trap recorded in the issue, because it is easy to get wrong:
-`isWritable()` is not a usable test for "may the user edit this" — SWORD
-returns true for plain zText Bibles as well. `ModDrv=RawFiles` is the
-discriminator.
+[#56](https://github.com/Paradoxianer/ScriptureGuide/issues/56) (inline
+"New reference"/"New sub-collection" items in the Go to List menu) and
+[#59](https://github.com/Paradoxianer/ScriptureGuide/issues/59)
+(converting between the old one-file-per-list format and the new
+one-bookmark-per-reference one) sit in 1.4.0, alongside the rest of the
+near-term follow-ons on top of 1.3.0's storage.
 
 ## After that
 
@@ -180,19 +137,23 @@ Small, known, and each one already documented where it bites:
   management is a rare, self-contained task that needs nothing from the
   reading pane.
 
-## Done in 1.2.x, worth closing
+## Done in 1.3.0
 
-[#41](https://github.com/Paradoxianer/ScriptureGuide/issues/41) (sort by
-module type), [#37](https://github.com/Paradoxianer/ScriptureGuide/issues/37)
-(multiple selection),
-[#42](https://github.com/Paradoxianer/ScriptureGuide/issues/42) (two-panel
-install UI),
-[#24](https://github.com/Paradoxianer/ScriptureGuide/issues/24) (saved
-position), [#40](https://github.com/Paradoxianer/ScriptureGuide/issues/40)
-(illustrated manual).
+Verse lists, the whole arc: [#47](https://github.com/Paradoxianer/ScriptureGuide/issues/47)
+(standalone window), [#55](https://github.com/Paradoxianer/ScriptureGuide/issues/55)
+(one bookmark file per reference), [#60](https://github.com/Paradoxianer/ScriptureGuide/issues/60)/[#61](https://github.com/Paradoxianer/ScriptureGuide/issues/61)/[#64](https://github.com/Paradoxianer/ScriptureGuide/issues/64)/[#66](https://github.com/Paradoxianer/ScriptureGuide/issues/66)
+(window polish), [#73](https://github.com/Paradoxianer/ScriptureGuide/issues/73)
+(rename in place), [#78](https://github.com/Paradoxianer/ScriptureGuide/issues/78)
+(nested Go to List), [#79](https://github.com/Paradoxianer/ScriptureGuide/issues/79)
+(live filesystem sync). Also [#62](https://github.com/Paradoxianer/ScriptureGuide/issues/62)
+and [#65](https://github.com/Paradoxianer/ScriptureGuide/issues/65), found
+along the way.
 
-[#33](https://github.com/Paradoxianer/ScriptureGuide/issues/33) and
-[#12](https://github.com/Paradoxianer/ScriptureGuide/issues/12) look
-resolved by column groups but are worth a deliberate check first: #33's
-title claims notes are lost when a second notes column is added, which
-would be data loss, while its body describes the feature that now exists.
+Separately, on `master`: notes now live in SWORD's `Personal` commentary
+rather than a bespoke `RawCom` ([#45](https://github.com/Paradoxianer/ScriptureGuide/issues/45),
+[#46](https://github.com/Paradoxianer/ScriptureGuide/issues/46)), making
+them interchangeable with BibleTime and Xiphos.
+
+[#12](https://github.com/Paradoxianer/ScriptureGuide/issues/12) is left
+open on purpose — it predates column groups and needs a deliberate look,
+not an assumption that column groups already cover it.

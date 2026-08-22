@@ -31,7 +31,6 @@
 
 #include "constants.h"
 #include "LogosApp.h"
-#include "LogosMainWindow.h"
 #include "LogosSearchWindow.h"
 #include "SwordBackend.h"
 #include "Preferences.h"
@@ -171,6 +170,21 @@ SGSearchWindow::_ApplyModuleSelection(int32 selectIndex)
 
 	curModule = fModuleNames[selectIndex];
 	fCurrentModule = myBible->FindModule(curModule.String());
+
+	// Results dragged out of this list carry the counting they were
+	// found in, so a drop can reposition them into its own (#46) --
+	// set here rather than per search, since it is the module choice
+	// that determines it, and it is fixed for as long as that choice
+	// stands.
+	if (searchResults != NULL && fCurrentModule != NULL) {
+		sword::SWModule* module = fCurrentModule->GetModule();
+		const char* versification = module != NULL
+			? module->getConfigEntry("Versification") : NULL;
+		// A module declaring none counts in KJV -- SWORD's own default.
+		searchResults->SetSourceVersification(
+			versification != NULL && versification[0] != '\0'
+				? versification : "KJV");
+	}
 
 	BString title("Find in ");
 	title << fCurrentModule->FullName();
@@ -442,21 +456,15 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 
 		case FIND_LIST_DCLICK:
 		{
-			// an item in the list is double clicked. Open a new window with the selected verse
+			// an item in the list is double clicked. Navigate the active
+			// chain of the window that opened this search, instead of
+			// spawning a brand-new SGMainWindow.
 			BibleItem *item = dynamic_cast<BibleItem*>(searchResults->FullListItemAt(searchResults->FullListCurrentSelection()));
 			if (item)
 			{
-				// TODO: Spawn with a frame obtained from preferences
-				BRect windowRect(50, 50, 599, 399);
-				BLanguage language;
-				BLocale::Default()->GetLanguage(&language);
-				sword::VerseKey myKey = sword::VerseKey();
-				myKey.setLocale(language.Code());
-				myKey.setText(item->GetKey());
-				SGMainWindow* win = new SGMainWindow(windowRect,
-										curModule.String(), myKey,
-										VerseFromKey(myKey), VerseFromKey(myKey));
-				win->Show();
+				BMessage jump(SG_BIBLE);
+				jump.AddString("key", item->GetKey());
+				fMessenger->SendMessage(&jump);
 			}
 			break;
 		}

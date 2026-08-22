@@ -98,6 +98,7 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	fToolBar(NULL),
 	fSearchWindow(NULL),
 	fDictionaryWindow(NULL),
+	fVerseListWindow(NULL),
  	fModManager(NULL),
  	fCurrentModule(NULL),
  	fCurrentChapter(1),
@@ -253,6 +254,8 @@ void SGMainWindow::BuildGUI(void)
 		new BMessage(MENU_PROGRAM_BOOKMANAGER)));
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Dictionary…"),
 		new BMessage(MENU_PROGRAM_DICTIONARY)));
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Verse Lists…"),
+		new BMessage(MENU_PROGRAM_VERSELISTS)));
 	menu->AddSeparatorItem();
 
 	// One verse-aligned table of every open column (+ notes, if any),
@@ -892,6 +895,11 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			EnsureDictionaryWindow();
 			break;
 		}
+		case MENU_PROGRAM_VERSELISTS:
+		{
+			EnsureVerseListWindow();
+			break;
+		}
 		case MENU_PROGRAM_EXPORT_PLAIN:
 		case MENU_PROGRAM_EXPORT_TSV:
 		case MENU_PROGRAM_EXPORT_MARKDOWN:
@@ -1047,6 +1055,13 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			// Activate() on a deleted BWindow (reported: reopening after
 			// closing behaved oddly, exactly this class of bug).
 			fDictionaryWindow = NULL;
+			break;
+		}
+
+		case VLIST_QUIT:
+		{
+			// Same reasoning as DICT_QUIT just above.
+			fVerseListWindow = NULL;
 			break;
 		}
 		case UNIVERSAL_SEARCH:
@@ -1478,12 +1493,12 @@ SGMainWindow::EnsureSearchWindow(void)
 {
 	if (fFindMessenger)
 	{
-		// The module list was otherwise only ever built once, when this
-		// window was first created -- switching a column to a different
-		// translation afterward left it stale (reported: changed a
-		// column to a different translation, but the already-open
-		// window's "Search in" field still only offered the old one).
-		fSearchWindow->RefreshModuleList(fParallelView->ColumnModuleNames());
+		// Refreshed every time regardless -- a module installed/removed
+		// since this window was last opened (SG Manager runs as a
+		// separate app, so this window has no way to know when that
+		// happens) would otherwise leave the "Search in" field stale
+		// until the next restart.
+		fSearchWindow->RefreshModuleList(fModManager->SearchableModuleNames());
 		fFindMessenger->SendMessage(M_ACTIVATE_WINDOW);
 		return;
 	}
@@ -1493,14 +1508,17 @@ SGMainWindow::EnsureSearchWindow(void)
 	r.bottom = r.top + 410;
 	if (!fSearchWindow)
 	{
-		// The reading pane's own open columns, not fCurrentModule --
-		// that field is a leftover from before ParallelBibleView could
-		// hold more than one column and had drifted out of sync with
-		// whatever the columns actually show (reported: search always
-		// used the first-ever-loaded translation regardless of what was
-		// open).
+		// Every installed Bible/Commentary, not just the reading pane's
+		// own open columns -- reported as confusing: search only ever
+		// covered whatever happened to already be open, with no way to
+		// search a translation without first adding it as a column just
+		// for that. fCurrentModule (the very first version of this) had
+		// the same "only one module, and the wrong one" problem in a
+		// different shape; ColumnModuleNames() (what replaced it) fixed
+		// which modules were offered staying in sync with the open
+		// columns, but never widened WHICH modules that could mean.
 		fSearchWindow = new SGSearchWindow(r,
-								fParallelView->ColumnModuleNames(),
+								fModManager->SearchableModuleNames(),
 								new BMessenger(this));
 		fFindMessenger = new BMessenger(fSearchWindow);
 	}
@@ -1524,6 +1542,21 @@ SGMainWindow::EnsureDictionaryWindow(void)
 }
 
 
+void
+SGMainWindow::EnsureVerseListWindow(void)
+{
+	if (!fVerseListWindow)
+	{
+		BRect r(Frame().OffsetByCopy(60, 60));
+		r.right = r.left + 380;
+		r.bottom = r.top + 440;
+		fVerseListWindow = new SGVerseListWindow(r, new BMessenger(this));
+	}
+	fVerseListWindow->Show();
+	fVerseListWindow->Activate(true);
+}
+
+
 bool SGMainWindow::QuitRequested()
 {
 	if (fFindMessenger)
@@ -1541,6 +1574,11 @@ bool SGMainWindow::QuitRequested()
 	{
 		if (fDictionaryWindow->LockLooper())
 			fDictionaryWindow->Quit();
+	}
+	if (fVerseListWindow)
+	{
+		if (fVerseListWindow->LockLooper())
+			fVerseListWindow->Quit();
 	}
 	if (fFontPanel)
 	{

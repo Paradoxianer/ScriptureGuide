@@ -8,7 +8,7 @@ Read several translations side by side, verse aligned, with your own notes
 in a column of their own — and a Book Manager for downloading the Bibles,
 commentaries and dictionaries CrossWire publishes.
 
-**Current release: 1.2.2** (test release) — [download the
+**Current release: 1.3.0** (test release) — [download the
 package](https://github.com/Paradoxianer/ScriptureGuide/releases/latest) ·
 [changelog](CHANGELOG.md)
 
@@ -50,6 +50,16 @@ books, made case-sensitive, or given a regular expression.
 clipping, or into another application — and drag a reference back in to
 navigate there.
 
+**Verse lists.** Build named collections of references — a reading plan, a
+topical study, whatever grouping makes sense — in their own window;
+clicking an entry jumps the reading pane straight to it. A collection is
+just a folder, one small file per reference, so Tracker browses and sorts
+it for free: tags and position are ordinary attributes, and a bookmark file
+dropped on or double-clicked in Tracker navigates there directly.
+Collections can nest, *Go to List* reaches into them at any depth, and a
+change made outside the app — in Tracker, from another instance — shows up
+without reopening the window.
+
 **Copy Comparison.** Every open column's text for the current chapter, as a
 verse-by-verse table, on the clipboard as plain text, tab-separated,
 Markdown or HTML.
@@ -72,13 +82,13 @@ dictionaries are findable among several hundred Bibles.
 **A package**, from the
 [releases page](https://github.com/Paradoxianer/ScriptureGuide/releases/latest):
 
-    pkgman install scriptureguide-1.2.2-1-x86_64.hpkg
+    pkgman install scriptureguide-1.3.0-1-x86_64.hpkg
 
 **Build your own package.** A prebuilt `.hpkg` records the Haiku version it
 was built on and may refuse to install on another. `package.sh` builds one
 that matches your machine, and needs nothing present but itself:
 
-    sh package.sh v1.2.2
+    sh package.sh v1.3.0
 
 It installs the build dependencies, fetches the source, builds both
 applications, writes the `.hpkg` into the current directory and removes what
@@ -110,7 +120,8 @@ Diagnostics are off unless asked for:
 
 ## Where it's going
 
-[ROADMAP.md](ROADMAP.md) — bookmarks and passage highlighting are next.
+[ROADMAP.md](ROADMAP.md) — verse lists shipped in 1.3.0; passage
+highlighting is next.
 
 ## Documentation
 

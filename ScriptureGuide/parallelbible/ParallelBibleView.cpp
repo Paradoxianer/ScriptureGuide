@@ -13,6 +13,7 @@
 #include <Bitmap.h>
 #include <Button.h>
 #include <Catalog.h>
+#include <ControlLook.h>
 #include <Cursor.h>
 #include <Entry.h>
 #include <File.h>
@@ -26,7 +27,6 @@
 #include <MessageRunner.h>
 #include <OS.h>
 #include <PopUpMenu.h>
-#include <Screen.h>
 #include <ScrollBar.h>
 #include <ScrollView.h>
 #include <StringView.h>
@@ -447,13 +447,22 @@ private:
 		// selection, not repeated per column.
 		int32 dragStart, dragEnd;
 		GetSelection(dragStart, dragEnd);
-		BString reference = _ReferenceFor(dragStart, dragEnd);
+		BString startKey, endKey;
+		BString reference = _ReferenceFor(dragStart, dragEnd, &startKey,
+			&endKey);
 
 		const std::vector<TextDocumentView*>& columns = fOwner->_ColumnViews();
 
 		BString clipText(reference);
 		clipText << "\n\n";
 		int32 partCount = 0;
+
+		// One row per participating column for the drag bitmap below --
+		// bold "<reference> (<translation>)" label plus a one-line
+		// excerpt of its selected text, gathered in the same pass as
+		// clipText so the text doesn't need re-fetching.
+		std::vector<BString> dragLabels;
+		std::vector<BString> dragExcerpts;
 
 		for (size_t i = 0; i < columns.size(); i++) {
 			BibleColumnView* column
@@ -474,6 +483,17 @@ private:
 				clipText << "\n\n";
 			clipText << column->fTranslationName << ":\n" << text;
 
+			BString label(reference);
+			label << " (" << column->fTranslationName << ")";
+			dragLabels.push_back(label);
+
+			BString excerpt(text);
+			int32 newline = excerpt.FindFirst("\n");
+			if (newline >= 0)
+				excerpt.Truncate(newline);
+			excerpt.Trim();
+			dragExcerpts.push_back(excerpt);
+
 			partCount++;
 		}
 
@@ -489,26 +509,61 @@ private:
 		BString clipName(reference);
 		clipName.ReplaceAll("/", "-");
 
-		// B_MIME_DATA, not B_SIMPLE_DATA -- this is the "what" a BTextView
-		// itself puts on its own drag messages, and the one text drop
-		// targets (StyledEdit and friends) actually recognize. B_SIMPLE_DATA
-		// is the convention for file-ref drags (Tracker), not text.
+		// B_MIME_DATA, not B_SIMPLE_DATA -- B_SIMPLE_DATA is the
+		// convention for file-ref drags (Tracker), not text; B_MIME_DATA
+		// is what BTextView itself constructs for its own outgoing drags.
+		// Doesn't actually gate whether an external target (StyledEdit
+		// and friends) accepts the drop either way -- confirmed against
+		// BTextView::AcceptsDrop(), which checks only for "text/plain"
+		// data -- but matching it is also what makes this drag and
+		// ResultListView's own (search results, see MakeDragMessage())
+		// carry the same shape, so a drop target only has one format to
+		// understand rather than two.
 		BMessage drag(B_MIME_DATA);
 		drag.AddData("text/plain", B_MIME_TYPE, clipText.String(),
 			clipText.Length());
 		drag.AddString("be:clip_name", clipName);
-		// Not consumed by anything yet -- for a future drop target (see
-		// issue #23) that wants the reference/translation without having
-		// to re-parse them back out of the plain-text clipping. Only the
-		// dragging column's own translation when more than one
+		// Only the dragging column's own translation when more than one
 		// participated -- there's no single "the" translation once
 		// several columns are involved.
 		if (partCount == 1)
 			drag.AddString("scriptureguide:translation", fTranslationName);
-		drag.AddString("scriptureguide:reference", reference);
+		// "key", not a ScriptureGuide-specific field name -- the same
+		// one ResultListView::MakeDragMessage() uses (there, one per
+		// selected search result; here, always exactly one, since the
+		// reference is the same across every participating column no
+		// matter its translation). A drop target that wants "the
+		// reference(s) being dropped" only ever has to look in one
+		// place regardless of which of the two drag sources it came
+		// from.
+		//
+		// Deliberately `startKey`, not the human-formatted `reference`
+		// ("Genesis 1:1-3") -- VerseKey::setText() silently truncates a
+		// hyphenated range to its start with no error (confirmed
+		// empirically), so handing that combined string to a receiver
+		// as "key" would have looked fine and quietly dropped every
+		// verse after the first the moment anything tried to parse it
+		// back. `endKey`, present only for an actual multi-verse
+		// selection, is what lets a receiver that wants the whole range
+		// (see SGVerseListWindow::_AppendDroppedReferences()) reconstruct
+		// it correctly instead of only ever getting the first verse.
+		drag.AddString("key", startKey);
+		if (endKey != startKey)
+			drag.AddString("endKey", endKey);
+		// Same reasoning as ResultListView::SetSourceVersification():
+		// `reference` is built from this column's own module, so it
+		// counts in that module's versification -- whatever receives
+		// the drop needs this to reposition it correctly rather than
+		// assume its own counting matches (#46).
+		if (fBibleDocument != NULL && fBibleDocument->Module() != NULL) {
+			const char* versification
+				= fBibleDocument->Module()->getConfigEntry("Versification");
+			drag.AddString("scriptureguide:versification",
+				versification != NULL && versification[0] != '\0'
+					? versification : "KJV");
+		}
 
-		BPoint dragScreenPoint = ConvertToScreen(fDragStartPoint);
-		BBitmap* dragBitmap = _CreateDragBitmap(dragScreenPoint);
+		BBitmap* dragBitmap = _CreateDragBitmap(dragLabels, dragExcerpts);
 		if (dragBitmap != NULL && dragBitmap->IsValid()) {
 			BRect bounds = dragBitmap->Bounds();
 			BPoint hotspot(bounds.Width() / 2.0f, bounds.Height() / 2.0f);
@@ -522,39 +577,128 @@ private:
 		}
 	}
 
-	// A small screenshot excerpt centered on the drag point -- just
-	// enough to show the user what they're carrying, not the whole
-	// selection. Ownership passes to DragMessage() once called; the
-	// caller must not delete the returned bitmap itself.
-	BBitmap* _CreateDragBitmap(BPoint screenPoint) const
+	// One rendered row per label/excerpt pair -- bold label, plain
+	// excerpt after it, black frame, fading past kMaxHeight -- the
+	// same look ResultListView::InitiateDrag() already gives a
+	// dragged search result (see BibleItem::DrawItem() there),
+	// instead of a literal screenshot excerpt of whatever pixels
+	// happened to be under the cursor. Ownership passes to
+	// DragMessage() once called; the caller must not delete the
+	// returned bitmap itself.
+	BBitmap* _CreateDragBitmap(const std::vector<BString>& labels,
+		const std::vector<BString>& excerpts) const
 	{
-		const float kHalfWidth = 90.0f;
-		const float kHalfHeight = 24.0f;
-
-		BScreen screen(Window());
-		if (!screen.IsValid())
+		if (labels.empty())
 			return NULL;
 
-		BRect screenRect(screenPoint.x - kHalfWidth,
-			screenPoint.y - kHalfHeight, screenPoint.x + kHalfWidth,
-			screenPoint.y + kHalfHeight);
-		screenRect = screenRect & screen.Frame();
-		if (!screenRect.IsValid())
-			return NULL;
+		const float kMaxWidth = 280.0f;
+		const float kMaxHeight = 200.0f;
+		const uint8 kAlpha = 170;
+		const float kPadding = be_control_look->DefaultLabelSpacing();
 
-		BBitmap* bitmap = new BBitmap(screenRect, B_RGB32);
-		if (!bitmap->IsValid()
-			|| screen.ReadBitmap(bitmap, false, &screenRect) != B_OK) {
+		BFont font;
+		GetFont(&font);
+		BFont boldFont(font);
+		boldFont.SetFace(B_BOLD_FACE);
+
+		font_height fheight;
+		font.GetHeight(&fheight);
+		float rowHeight = ceilf(fheight.ascent) + ceilf(fheight.descent)
+			+ ceilf(fheight.leading) + 4.0f;
+		float baseline = 2.0f + ceilf(fheight.ascent + fheight.leading / 2.0f);
+
+		bool fade = false;
+		size_t rowCount = 0;
+		for (; rowCount < labels.size(); rowCount++) {
+			if ((rowCount + 1) * rowHeight > kMaxHeight) {
+				fade = true;
+				break;
+			}
+		}
+		if (rowCount == 0)
+			rowCount = 1;
+
+		BRect dragRect(0.0f, 0.0f, kMaxWidth,
+			std::min(rowCount * rowHeight, kMaxHeight));
+
+		BBitmap* bitmap = new BBitmap(dragRect, B_RGB32, true);
+		if (!bitmap->IsValid()) {
 			delete bitmap;
 			return NULL;
 		}
 
+		BView* helper = new BView(bitmap->Bounds(), "helper",
+			B_FOLLOW_NONE, B_WILL_DRAW);
+		bitmap->AddChild(helper);
+		bitmap->Lock();
+
+		helper->SetLowColor(ui_color(B_LIST_BACKGROUND_COLOR));
+		helper->FillRect(helper->Bounds(), B_SOLID_LOW);
+
+		float top = 0.0f;
+		for (size_t i = 0; i < rowCount; i++) {
+			helper->MovePenTo(kPadding, top + baseline);
+			helper->SetFont(&boldFont);
+			helper->DrawString(labels[i].String());
+			float labelWidth = boldFont.StringWidth(labels[i].String());
+
+			if (!excerpts[i].IsEmpty()) {
+				helper->MovePenBy(kPadding, 0.0f);
+				helper->SetFont(&font);
+				float remaining = kMaxWidth - kPadding - labelWidth
+					- kPadding - kPadding;
+				BString excerpt(excerpts[i]);
+				font.TruncateString(&excerpt, B_TRUNCATE_END,
+					std::max(remaining, 0.0f));
+				helper->DrawString(excerpt.String());
+			}
+			top += rowHeight;
+		}
+
+		helper->SetHighColor(0, 0, 0, 255);
+		helper->StrokeRect(helper->Bounds());
+		helper->Sync();
+
+		uint8* bits = (uint8*)bitmap->Bits();
+		int32 height = (int32)bitmap->Bounds().Height() + 1;
+		int32 width = (int32)bitmap->Bounds().Width() + 1;
+		int32 bpr = bitmap->BytesPerRow();
+
+		if (fade) {
+			for (int32 y = 0; y < height - kAlpha / 2; y++, bits += bpr) {
+				uint8* line = bits + 3;
+				for (uint8* end = line + 4 * width; line < end; line += 4)
+					*line = kAlpha;
+			}
+			for (int32 y = height - kAlpha / 2; y < height; y++, bits += bpr) {
+				uint8* line = bits + 3;
+				for (uint8* end = line + 4 * width; line < end; line += 4)
+					*line = (height - y) << 1;
+			}
+		} else {
+			for (int32 y = 0; y < height; y++, bits += bpr) {
+				uint8* line = bits + 3;
+				for (uint8* end = line + 4 * width; line < end; line += 4)
+					*line = kAlpha;
+			}
+		}
+
+		bitmap->Unlock();
 		return bitmap;
 	}
 
 	// "<Book> <Chapter>:<StartVerse>[-<EndVerse>]" for the given text
-	// offset range, e.g. "Genesis 1:1-3".
-	BString _ReferenceFor(int32 start, int32 end) const
+	// offset range, e.g. "Genesis 1:1-3" -- for display/clipping text
+	// only. `startKey`/`endKey`, if given, are filled with the SAME
+	// range's two ends as plain, unhyphenated single-verse references
+	// ("Genesis 1:1"/"Genesis 1:3") -- what a drag message needs instead
+	// (see _StartDrag()): VerseKey::setText() silently truncates a
+	// hyphenated range to its start and reports no error doing so
+	// (confirmed empirically, not assumed), so a receiver reconstructing
+	// a range has to be handed its two ends already separate, not
+	// re-parse them back out of the combined, human-formatted string.
+	BString _ReferenceFor(int32 start, int32 end, BString* startKey = NULL,
+		BString* endKey = NULL) const
 	{
 		int32 paragraphOffset;
 		int32 startParagraph = fBibleDocument->ParagraphIndexFor(start,
@@ -567,19 +711,49 @@ private:
 		int endVerse = fBibleDocument->VerseForParagraphIndex(endParagraph);
 
 		// German convention uses a comma between chapter and verse
-		// ("Epheser 6, 9"), not a colon -- ParseVerseReference() already
-		// accepts both on input, so this stays round-trip safe when the
-		// reference gets dropped back into the app.
+		// ("Epheser 6, 9"), not a colon -- fine for `reference`, which
+		// only ever reaches VerseKey::setText() through
+		// ParseVerseReference() (see _HandleReferenceDrop()'s plain-text
+		// fallback), and that function normalizes the comma back to a
+		// colon before parsing.
 		BLanguage language;
 		BLocale::Default()->GetLanguage(&language);
 		const char* separator
 			= strcmp(language.Code(), "de") == 0 ? ", " : ":";
 
-		BString reference(fBibleDocument->BookName());
-		reference << " " << fBibleDocument->Chapter() << separator
-			<< startVerse;
+		BString bookAndChapter(fBibleDocument->BookName());
+		bookAndChapter << " " << fBibleDocument->Chapter() << separator;
+
+		BString reference(bookAndChapter);
+		reference << startVerse;
 		if (endVerse > startVerse)
 			reference << "-" << endVerse;
+
+		// `startKey`/`endKey`, unlike `reference` above, are consumed
+		// directly by VerseKey::setText() with no ParseVerseReference()
+		// normalization in between (see ConvertVerseReference() in
+		// LogosVerseListWindow.cpp and _HandleReferenceDrop()'s "key"
+		// branch just below) -- so they always need the unambiguous ':'
+		// separator, regardless of locale. Confirmed empirically: under
+		// German locale, setText("Johannes 3, 12") reports no error but
+		// silently returns chapter 3 *verse 1*, treating the comma as
+		// SWORD's own list separator and discarding "12" as a second,
+		// ignored list element -- the exact bug ParseVerseReference()'s
+		// own comma-to-colon normalization exists to prevent, just hit
+		// through a path that skips it.
+		if (startKey != NULL || endKey != NULL) {
+			BString keyBookAndChapter(fBibleDocument->BookName());
+			keyBookAndChapter << " " << fBibleDocument->Chapter() << ":";
+			if (startKey != NULL) {
+				*startKey = keyBookAndChapter;
+				*startKey << startVerse;
+			}
+			if (endKey != NULL) {
+				*endKey = keyBookAndChapter;
+				*endKey << endVerse;
+			}
+		}
+
 		return reference;
 	}
 
@@ -639,20 +813,22 @@ private:
 
 
 	// True if `message` carried a Bible reference to navigate to --
-	// "scriptureguide:reference" if this came from our own drag source
-	// (see _StartDrag()), otherwise falling back to parsing whatever
-	// plain text was dropped so drops from outside the app work too.
-	// Only the first line matters for the fallback case, since our own
-	// multi-column clippings put the reference alone on the first line
-	// with each translation's own text following it.
+	// "key" if this came from one of our own drag sources (_StartDrag()
+	// below, or ResultListView's own search-result drag -- both build
+	// the same shape, see _StartDrag()'s own comment on why), otherwise
+	// falling back to parsing whatever plain text was dropped so drops
+	// from outside the app work too. Only the first "key" and only the
+	// first line of the plain-text fallback matter here -- multiple
+	// dropped references (a multi-select search-result drag) navigate
+	// to the first only; see SGVerseListWindow::_AppendDroppedReferences()
+	// for the one place that DOES want all of them.
 	bool _HandleReferenceDrop(BMessage* message)
 	{
 		if (fOwner == NULL)
 			return false;
 
 		BString reference;
-		if (message->FindString("scriptureguide:reference", &reference)
-				!= B_OK) {
+		if (message->FindString("key", &reference) != B_OK) {
 			BString firstLine;
 			const char* text;
 			ssize_t length;

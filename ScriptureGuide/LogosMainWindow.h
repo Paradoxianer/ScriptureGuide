@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "DictionaryWindow.h"
+#include "LogosVerseListWindow.h"
 #include "LogosSearchWindow.h"
 #include "SwordBackend.h"
 #include "parallelbible/ParallelBibleView.h"
@@ -106,6 +107,9 @@ private:
 	// Program menu's "Dictionary..." entry and a clicked Strong's
 	// number (#27, PARALLEL_STRONGS_CLICKED).
 	void EnsureDictionaryWindow(void);
+	// Same idea for the verse list window (#47 v2) -- shared by the
+	// Program menu's "Verse Lists..." entry.
+	void EnsureVerseListWindow(void);
 
 	// Navigation history, in the same two-stack shape a web browser uses:
 	// fBackStack holds where we came from, fForwardStack where Back has
@@ -158,6 +162,7 @@ private:
 
 	SGSearchWindow	*fSearchWindow;
 	SGDictionaryWindow	*fDictionaryWindow;
+	SGVerseListWindow	*fVerseListWindow;
 
 
 	SwordBackend	*fModManager;
