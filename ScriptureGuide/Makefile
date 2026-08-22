@@ -43,6 +43,7 @@ SRCS = \
 	 SwordBackend.cpp  \
 	 \
 	 parallelbible/BibleTextDocument.cpp  \
+	 parallelbible/BookmarkFile.cpp  \
 	 parallelbible/PersonalNotesModule.cpp  \
 	 parallelbible/VerseAligner.cpp  \
 	 parallelbible/VerseListFile.cpp  \

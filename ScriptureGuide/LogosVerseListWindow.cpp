@@ -5,8 +5,12 @@
 #include <Button.h>
 #include <ControlLook.h>
 #include <Catalog.h>
+#include <Directory.h>
 #include <Entry.h>
+#include <File.h>
 #include <FilePanel.h>
+#include <fs_attr.h>
+#include <StorageDefs.h>
 #include <Language.h>
 #include <Locale.h>
 #include <GroupLayout.h>
@@ -27,6 +31,7 @@
 #include <TextControl.h>
 
 #include <algorithm>
+#include <ctype.h>
 #include <utility>
 #include <vector>
 
@@ -54,11 +59,25 @@ SetVerseKeyLocale(sword::VerseKey& key)
 // BibleColumnView::_StartDrag()'s own comment on why a drag never hands
 // over a combined "start-end" string for this to re-split) in
 // `sourceVersification`, repositions it into `targetVersification`, and
-// writes the localized result into `outText`. False (leaving `outText`
-// untouched) if `key` doesn't parse at all.
+// writes the result into `outText`, localized to the current system
+// locale if `localizeOutput` is true, or left in VerseKey's own
+// no-locale-set default (always English/ASCII book names, confirmed
+// empirically -- see the class comment on BookmarkFile) if false. False
+// (leaving `outText` untouched) if `key` doesn't parse at all.
+//
+// `localizeOutput` matters for anything that gets WRITTEN TO A FILE
+// (see _AppendDroppedReferences() below): a bookmark's stored reference
+// needs to stay parseable on a system running under a DIFFERENT locale
+// than the one that wrote it -- confirmed empirically that
+// VerseKey::setText() fails outright on a localized book name with no
+// locale set (English is the one form every system recognizes
+// regardless of its own current locale), so storing anything other than
+// the English form would silently strand the reference the moment it's
+// read back under a different locale, or a plain attribute (which
+// doesn't survive off BFS at all) tried to record which locale it was.
 static bool
 ConvertVerseReference(const char* key, const char* sourceVersification,
-	const char* targetVersification, BString& outText)
+	const char* targetVersification, bool localizeOutput, BString& outText)
 {
 	sword::VerseKey source;
 	SetVerseKeyLocale(source);
@@ -68,19 +87,21 @@ ConvertVerseReference(const char* key, const char* sourceVersification,
 		return false;
 
 	sword::VerseKey target;
-	// Locale on target too, not just source -- getText() below renders
-	// in whatever locale is set (or none, which is English), completely
-	// independent of source's own locale. Missing this left every
-	// appended reference stored as its English name even under a
-	// non-English locale (confirmed against the same "no locale set =
-	// English" behavior measured for VerseKey earlier this session).
-	SetVerseKeyLocale(target);
+	if (localizeOutput)
+		SetVerseKeyLocale(target);
 	target.setVersificationSystem(targetVersification);
 	target.positionFrom(source);
 
 	outText = target.getText();
 	return true;
 }
+
+// Defined further down, alongside _DeleteList() -- forward-declared here
+// so MessageReceived()'s VLIST_SAVE_AS_RESULT case (textually earlier in
+// this file) can use them too.
+static status_t CopyFile(const char* fromPath, const char* toPath);
+static status_t CopyCollectionInto(const char* sourceDir,
+	const char* destDir);
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "VerseListWindow"
@@ -576,11 +597,20 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			entry_ref dirRef;
 			BString name;
 			if (message->FindRef("directory", &dirRef) == B_OK
-				&& message->FindString("name", &name) == B_OK) {
+				&& message->FindString("name", &name) == B_OK
+				&& fHasOpenFile) {
 				BPath dirPath(&dirRef);
-				if (fFile.SaveAs(dirPath.Path(), name.String()) == B_OK) {
-					fHasOpenFile = true;
-					_UpdateTitle();
+				// A fresh collection folder, then every bookmark (plus
+				// Description.txt) copied into it byte-for-byte,
+				// attributes included -- the original at fCollectionPath
+				// is left untouched, same "Save As..." contract
+				// VerseListFile::SaveAs() had.
+				BString newPath = BookmarkFile::CreateCollection(
+					dirPath.Path(), name.String());
+				if (!newPath.IsEmpty()) {
+					CopyCollectionInto(fCollectionPath.String(),
+						newPath.String());
+					_LoadFile(newPath.String());
 					_RebuildNavigationMenu();
 				}
 			}
@@ -630,15 +660,21 @@ void
 SGVerseListWindow::_BuildFilePanels()
 {
 	entry_ref dirRef;
-	BEntry dirEntry(VerseListFile::ListsDirectory().String());
+	BEntry dirEntry(BookmarkFile::RootDirectory().String());
 	dirEntry.GetRef(&dirRef);
 
+	// B_DIRECTORY_NODE, not B_FILE_NODE -- a collection is a folder now
+	// (#55), so both panels browse and select folders instead of files.
+	// The result messages' own shape (VLIST_OPEN_RESULT's "refs",
+	// VLIST_SAVE_AS_RESULT's "directory"+"name") is unaffected either
+	// way -- that comes from B_OPEN_PANEL/B_SAVE_PANEL mode, not the node
+	// flavor.
 	fOpenPanel = new BFilePanel(B_OPEN_PANEL, new BMessenger(this), &dirRef,
-		B_FILE_NODE, false, new BMessage(VLIST_OPEN_RESULT));
+		B_DIRECTORY_NODE, false, new BMessage(VLIST_OPEN_RESULT));
 	fOpenPanel->SetButtonLabel(B_DEFAULT_BUTTON, B_TRANSLATE("Open"));
 
 	fSaveAsPanel = new BFilePanel(B_SAVE_PANEL, new BMessenger(this), &dirRef,
-		B_FILE_NODE, false, new BMessage(VLIST_SAVE_AS_RESULT));
+		B_DIRECTORY_NODE, false, new BMessage(VLIST_SAVE_AS_RESULT));
 	fSaveAsPanel->SetButtonLabel(B_DEFAULT_BUTTON, B_TRANSLATE("Save"));
 }
 
@@ -655,14 +691,23 @@ SGVerseListWindow::_NewList()
 void
 SGVerseListWindow::_CreateNewList(const char* name)
 {
-	if (fFile.CreateNew(name, "", "KJV") != B_OK)
+	// Always created at the top level -- nesting a new collection inside
+	// whichever one happens to be open would be surprising, and "New"
+	// inside an open collection isn't offered anywhere in the menu (the
+	// way to grow a nested structure is Tracker itself, or a future
+	// "New Sub-Collection" -- issue #56).
+	BString path = BookmarkFile::CreateCollection(NULL, name);
+	if (path.IsEmpty())
 		return;
+
+	fCollectionPath = path;
+	fBookmarks.clear();
 	fHasOpenFile = true;
 	_RebuildRows();
 	_RebuildDescription();
 	_UpdateTitle();
-	// A brand-new list, possibly the first one ever, changes what the
-	// navigation menu has to offer.
+	// A brand-new collection, possibly the first one ever, changes what
+	// the navigation menu has to offer.
 	_RebuildNavigationMenu();
 }
 
@@ -685,7 +730,8 @@ SGVerseListWindow::_OpenList(const char* path)
 void
 SGVerseListWindow::_CloseList()
 {
-	fFile = VerseListFile();
+	fCollectionPath = "";
+	fBookmarks.clear();
 	fHasOpenFile = false;
 	_RebuildRows();
 	_RebuildDescription();
@@ -698,7 +744,13 @@ SGVerseListWindow::_SaveList()
 {
 	if (!fHasOpenFile)
 		return;
-	fFile.Save();
+	// Every bookmark file already writes itself immediately on creation,
+	// removal and reorder (see _AppendDroppedReferences()/_RemoveRow()/
+	// _MoveRow()) -- the one thing that CAN still be sitting unflushed is
+	// the description, if the debounce timer (_DescriptionEdited()) hasn't
+	// fired yet. "Save" means "don't wait for it".
+	if (fDescriptionSaveRunner != NULL)
+		_SaveDescription();
 }
 
 
@@ -707,29 +759,131 @@ SGVerseListWindow::_SaveListAs()
 {
 	if (fSaveAsPanel == NULL)
 		return;
-	fSaveAsPanel->SetSaveText(fFile.Name()[0] != '\0' ? fFile.Name()
-		: "Untitled list");
+	BPath current(fCollectionPath.String());
+	fSaveAsPanel->SetSaveText(fHasOpenFile && current.Leaf() != NULL
+		? current.Leaf() : "Untitled list");
 	fSaveAsPanel->Show();
+}
+
+
+// Copies one bookmark (or the description) file's raw bytes AND its BFS
+// attributes -- no BFS "copy a file" call exists in the Storage Kit
+// outside of Tracker's own private implementation, so this is the same
+// manual open/read/write a handful of small files needs regardless.
+// Attributes matter here specifically for Position/Tags (see
+// BookmarkFile) -- a byte-only copy would silently reset every bookmark
+// to "no position" (sorts last) and "no tags" in the new collection,
+// which "Save As..." copying the SAME collection under a new name should
+// never do.
+static status_t
+CopyFile(const char* fromPath, const char* toPath)
+{
+	BFile from(fromPath, B_READ_ONLY);
+	status_t status = from.InitCheck();
+	if (status != B_OK)
+		return status;
+
+	BFile to(toPath, B_READ_WRITE | B_CREATE_FILE | B_ERASE_FILE);
+	status = to.InitCheck();
+	if (status != B_OK)
+		return status;
+
+	off_t size = 0;
+	from.GetSize(&size);
+	if (size > 0) {
+		char* buffer = new(std::nothrow) char[size];
+		if (buffer == NULL)
+			return B_NO_MEMORY;
+		ssize_t bytesRead = from.Read(buffer, size);
+		if (bytesRead > 0)
+			to.Write(buffer, bytesRead);
+		delete[] buffer;
+	}
+
+	char attrName[B_ATTR_NAME_LENGTH];
+	while (from.GetNextAttrName(attrName) == B_OK) {
+		attr_info info;
+		if (from.GetAttrInfo(attrName, &info) != B_OK)
+			continue;
+		char* attrBuffer = new(std::nothrow) char[info.size];
+		if (attrBuffer == NULL)
+			continue;
+		ssize_t bytesRead = from.ReadAttr(attrName, info.type, 0, attrBuffer,
+			info.size);
+		if (bytesRead > 0) {
+			to.WriteAttr(attrName, info.type, 0, attrBuffer,
+				(size_t)bytesRead);
+		}
+		delete[] attrBuffer;
+	}
+
+	return B_OK;
+}
+
+
+// Copies every file directly inside `sourceDir` (bookmarks plus
+// Description.txt, if present) into `destDir`, which CreateCollection()
+// has already created -- what "Save As..." needs: the same content,
+// under a new name/location, the original left untouched (matching how
+// VerseListFile::SaveAs() behaved before it). Not recursive -- a
+// collection is deliberately flat (see _DeleteList()'s own comment).
+static status_t
+CopyCollectionInto(const char* sourceDir, const char* destDir)
+{
+	BDirectory dir(sourceDir);
+	if (dir.InitCheck() != B_OK)
+		return B_ERROR;
+
+	BEntry entry;
+	while (dir.GetNextEntry(&entry) == B_OK) {
+		if (entry.IsDirectory())
+			continue;
+		char name[B_FILE_NAME_LENGTH];
+		if (entry.GetName(name) != B_OK)
+			continue;
+
+		BPath fromPath;
+		entry.GetPath(&fromPath);
+		BPath toPath(destDir);
+		toPath.Append(name);
+		CopyFile(fromPath.Path(), toPath.Path());
+	}
+	return B_OK;
 }
 
 
 void
 SGVerseListWindow::_DeleteList()
 {
-	if (!fHasOpenFile || fFile.Path()[0] == '\0')
+	if (!fHasOpenFile || fCollectionPath.IsEmpty())
 		return;
 
-	// A real, if lightweight, confirmation -- deleting a file (unlike
-	// closing this window on it) cannot be undone by reopening it.
+	// A real, if lightweight, confirmation -- deleting a collection
+	// (unlike closing this window on it) cannot be undone by reopening
+	// it. Warns about the whole folder now, not a single file, since
+	// that's what's actually about to disappear (#55).
 	BAlert* alert = new BAlert(B_TRANSLATE("Delete Verse List"),
-		B_TRANSLATE("Delete this verse list file? This cannot be undone."),
+		B_TRANSLATE("Delete this entire collection and everything in it? "
+			"This cannot be undone."),
 		B_TRANSLATE("Cancel"), B_TRANSLATE("Delete"), NULL,
 		B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 	alert->SetShortcut(0, B_ESCAPE);
 	if (alert->Go() != 1)
 		return;
 
-	BEntry(fFile.Path()).Remove();
+	// A collection is deliberately flat (no bookmark is itself a
+	// directory -- nesting is expressed as a SEPARATE, sibling
+	// collection, not as content of this one), so removing every entry
+	// directly inside it, then the now-empty folder itself, is enough;
+	// no recursive descent needed.
+	BDirectory dir(fCollectionPath.String());
+	if (dir.InitCheck() == B_OK) {
+		BEntry entry;
+		while (dir.GetNextEntry(&entry) == B_OK)
+			entry.Remove();
+	}
+	BEntry(fCollectionPath.String()).Remove();
+
 	_CloseList();
 	_RebuildNavigationMenu();
 }
@@ -738,11 +892,20 @@ SGVerseListWindow::_DeleteList()
 void
 SGVerseListWindow::_LoadFile(const char* path)
 {
-	VerseListFile file;
-	if (file.SetTo(path) != B_OK)
+	BEntry entry(path);
+	if (entry.InitCheck() != B_OK || !entry.IsDirectory())
 		return;
 
-	fFile = file;
+	fCollectionPath = path;
+	fBookmarks.clear();
+
+	std::vector<BString> paths = BookmarkFile::ListBookmarkPaths(path);
+	for (size_t i = 0; i < paths.size(); i++) {
+		BookmarkFile bookmark;
+		if (bookmark.SetTo(paths[i].String()) == B_OK)
+			fBookmarks.push_back(bookmark);
+	}
+
 	fHasOpenFile = true;
 	_RebuildRows();
 	_RebuildDescription();
@@ -750,26 +913,73 @@ SGVerseListWindow::_LoadFile(const char* path)
 }
 
 
+// A bookmark's own Reference() is always the portable, English/ASCII
+// form (see ConvertVerseReference()'s own comment) -- this re-renders it
+// into whatever locale is CURRENTLY active for display, the same way a
+// fresh drop would have under that locale. Recomputed every time rather
+// than cached, so the row list automatically follows a locale change
+// instead of staying frozen in whatever locale happened to be active
+// when each bookmark was created.
+static BString
+DisplayReference(const BookmarkFile& bookmark)
+{
+	BString reference(bookmark.Reference());
+
+	// A stored range ("John 3:12-16") has its trailing "-<verse>" split
+	// off first -- ConvertVerseReference() only understands a single,
+	// unhyphenated reference (same reasoning _AppendDroppedReferences()
+	// already has for why a range can't be handed to VerseKey::setText()
+	// whole).
+	BString suffix;
+	int32 dash = reference.FindLast('-');
+	if (dash >= 0) {
+		bool isRangeEnd = dash + 1 < reference.Length();
+		for (int32 i = dash + 1; i < reference.Length() && isRangeEnd; i++) {
+			if (!isdigit((unsigned char)reference.ByteAt(i)))
+				isRangeEnd = false;
+		}
+		if (isRangeEnd) {
+			reference.CopyInto(suffix, dash, reference.Length() - dash);
+			reference.Truncate(dash);
+		}
+	}
+
+	BString displayText;
+	if (!ConvertVerseReference(reference.String(), bookmark.Versification(),
+			bookmark.Versification(), true, displayText)) {
+		return BString(bookmark.Reference());
+	}
+	displayText << suffix;
+	return displayText;
+}
+
+
 void
 SGVerseListWindow::_RebuildRows()
 {
 	fRowList->MakeEmpty();
+	for (size_t i = 0; i < fBookmarks.size(); i++)
+		fRowList->AddItem(new BStringItem(DisplayReference(fBookmarks[i])));
+}
 
-	BString remaining(fFile.ReferenceText());
-	while (remaining.Length() > 0) {
-		BString line;
-		int32 breakAt = remaining.FindFirst("\n");
-		if (breakAt < 0) {
-			line = remaining;
-			remaining = "";
-		} else {
-			remaining.CopyInto(line, 0, breakAt);
-			remaining.Remove(0, breakAt + 1);
-		}
-		line.Trim();
-		if (!line.IsEmpty())
-			fRowList->AddItem(new BStringItem(line));
-	}
+
+BString
+SGVerseListWindow::_CollectionVersification() const
+{
+	if (!fBookmarks.empty() && fBookmarks[0].Versification()[0] != '\0')
+		return BString(fBookmarks[0].Versification());
+	return BString("KJV");
+}
+
+
+BString
+SGVerseListWindow::_DescriptionPath() const
+{
+	if (fCollectionPath.IsEmpty())
+		return BString();
+	BPath path(fCollectionPath.String());
+	path.Append(BookmarkFile::kDescriptionFileName);
+	return BString(path.Path());
 }
 
 
@@ -784,7 +994,31 @@ SGVerseListWindow::_RebuildDescription()
 	int32 length = fDescriptionDocument->Length();
 	if (length > 0)
 		fDescriptionDocument->Remove(0, length);
-	BString description(fFile.Description());
+
+	// A plain sibling text file, not a bookmark with no reference set
+	// (see BookmarkFile::kDescriptionFileName's own comment on that
+	// design choice) -- read directly rather than through BookmarkFile,
+	// since it deliberately isn't one.
+	BString description;
+	BString descriptionPath = _DescriptionPath();
+	if (!descriptionPath.IsEmpty()) {
+		BFile file(descriptionPath.String(), B_READ_ONLY);
+		if (file.InitCheck() == B_OK) {
+			off_t size = 0;
+			file.GetSize(&size);
+			if (size > 0) {
+				char* buffer = new(std::nothrow) char[size + 1];
+				if (buffer != NULL) {
+					ssize_t bytesRead = file.Read(buffer, size);
+					if (bytesRead > 0) {
+						buffer[bytesRead] = '\0';
+						description = buffer;
+					}
+					delete[] buffer;
+				}
+			}
+		}
+	}
 	if (!description.IsEmpty())
 		fDescriptionDocument->Insert(0, description);
 
@@ -802,9 +1036,10 @@ SGVerseListWindow::_RebuildDescription()
 void
 SGVerseListWindow::_UpdateTitle()
 {
-	if (fHasOpenFile && fFile.Name()[0] != '\0') {
-		SetTitle(fFile.Name());
-		fNameView->SetText(fFile.Name());
+	BPath current(fCollectionPath.String());
+	if (fHasOpenFile && current.Leaf() != NULL) {
+		SetTitle(current.Leaf());
+		fNameView->SetText(current.Leaf());
 	} else {
 		SetTitle(B_TRANSLATE("Verse Lists"));
 		fNameView->SetText(B_TRANSLATE("(No list open)"));
@@ -827,62 +1062,22 @@ SGVerseListWindow::_RebuildNavigationMenu()
 	for (int32 i = fNavigationMenu->CountItems() - 1; i >= 0; i--)
 		delete fNavigationMenu->RemoveItem(i);
 
-	// Uncategorized: files directly under ListsDirectory(), as plain
-	// items -- same shape _PopulateModuleMenu() uses for the flat
-	// "Notes" entry alongside its category submenus.
-	std::vector<BString> loosePaths = VerseListFile::ListPaths();
-	std::vector<std::pair<BString, BString> > looseEntries;
-	for (size_t i = 0; i < loosePaths.size(); i++) {
-		VerseListFile probe;
-		if (probe.SetTo(loosePaths[i].String()) == B_OK) {
-			looseEntries.push_back(
-				std::make_pair(BString(probe.Name()), loosePaths[i]));
-		}
-	}
-	std::sort(looseEntries.begin(), looseEntries.end());
-	for (size_t i = 0; i < looseEntries.size(); i++) {
+	// One item per top-level collection folder -- every collection is a
+	// folder now (#55), so there's no more "loose file vs. collection
+	// subfolder" distinction to show as two tiers the way the old
+	// VerseListFile-backed menu did. A nested sub-collection (a subfolder
+	// of one of these) is reachable through Open's own folder picker,
+	// not this menu -- same one-level-only scope
+	// BookmarkFile::ListCollectionNames() itself documents.
+	BString root = BookmarkFile::RootDirectory();
+	std::vector<BString> names = BookmarkFile::ListCollectionNames();
+	for (size_t i = 0; i < names.size(); i++) {
+		BPath path(root.String());
+		path.Append(names[i].String());
+
 		BMessage* select = new BMessage(VLIST_NAV_SELECT);
-		select->AddString("path", looseEntries[i].second);
-		fNavigationMenu->AddItem(
-			new BMenuItem(looseEntries[i].first.String(), select));
-	}
-
-	if (!looseEntries.empty())
-		fNavigationMenu->AddSeparatorItem();
-
-	// One submenu per collection subfolder, its files sorted by name --
-	// mirrors _PopulateModuleMenu()'s "Biblical Texts"/"Commentaries"
-	// category submenus, just fed from VerseListFile::
-	// ListCollectionNames()/ListCollectionPaths() instead of
-	// fManager->getModules().
-	std::vector<BString> collections = VerseListFile::ListCollectionNames();
-	for (size_t c = 0; c < collections.size(); c++) {
-		BMenu* collectionMenu = new BMenu(collections[c].String());
-
-		std::vector<BString> paths
-			= VerseListFile::ListCollectionPaths(collections[c].String());
-		std::vector<std::pair<BString, BString> > entries;
-		for (size_t i = 0; i < paths.size(); i++) {
-			VerseListFile probe;
-			if (probe.SetTo(paths[i].String()) == B_OK) {
-				entries.push_back(
-					std::make_pair(BString(probe.Name()), paths[i]));
-			}
-		}
-		std::sort(entries.begin(), entries.end());
-
-		for (size_t i = 0; i < entries.size(); i++) {
-			BMessage* select = new BMessage(VLIST_NAV_SELECT);
-			select->AddString("path", entries[i].second);
-			collectionMenu->AddItem(
-				new BMenuItem(entries[i].first.String(), select));
-		}
-		collectionMenu->SetTargetForItems(this);
-
-		if (collectionMenu->CountItems() > 0)
-			fNavigationMenu->AddItem(collectionMenu);
-		else
-			delete collectionMenu;
+		select->AddString("path", path.Path());
+		fNavigationMenu->AddItem(new BMenuItem(names[i].String(), select));
 	}
 
 	fNavigationMenu->SetTargetForItems(this);
@@ -892,10 +1087,18 @@ SGVerseListWindow::_RebuildNavigationMenu()
 void
 SGVerseListWindow::_NavigateToRow(int32 index)
 {
-	BStringItem* item = dynamic_cast<BStringItem*>(fRowList->ItemAt(index));
-	if (item == NULL || fMessenger == NULL)
+	if (index < 0 || index >= (int32)fBookmarks.size() || fMessenger == NULL)
 		return;
 
+	// The bookmark's own Reference() (always English/ASCII -- see
+	// ConvertVerseReference()'s comment), not the row's displayed,
+	// locale-rendered text (see DisplayReference()) -- BookFromKey()/
+	// ChapterFromKey()/VerseFromKey() (what JumpToKey() below actually
+	// calls) always parse under the CURRENT system locale, so handing
+	// them anything other than the universally-recognized English form
+	// would only work by coincidence, when the display locale and the
+	// system's current locale happen to still match.
+	//
 	// Exactly the path a dropped reference or the universal search box
 	// already take (see BibleColumnView::_HandleReferenceDrop() and
 	// SGMainWindow::MessageReceived()'s own SG_BIBLE case) -- no new
@@ -903,7 +1106,7 @@ SGVerseListWindow::_NavigateToRow(int32 index)
 	// It reaches the OWNING window's active chain, not necessarily
 	// whichever SGMainWindow currently has focus.
 	BMessage jump(SG_BIBLE);
-	jump.AddString("key", item->Text());
+	jump.AddString("key", fBookmarks[index].Reference());
 	fMessenger->SendMessage(&jump);
 }
 
@@ -912,44 +1115,50 @@ void
 SGVerseListWindow::_MoveRow(int32 from, int32 to)
 {
 	if (from == to || from < 0 || to < 0
-		|| from >= fRowList->CountItems() || to >= fRowList->CountItems()) {
+		|| from >= (int32)fBookmarks.size() || to >= (int32)fBookmarks.size()) {
 		return;
 	}
 
 	fRowList->MoveItem(from, to);
 	fRowList->Select(to);
 
-	// The list view is now the source of truth for order -- rebuild the
-	// stored reference text to match it exactly, rather than trying to
-	// replicate the same reorder arithmetic on a separate copy of the
-	// lines that could drift out of sync with what's on screen.
-	BString text;
-	for (int32 i = 0; i < fRowList->CountItems(); i++) {
-		BStringItem* item = dynamic_cast<BStringItem*>(fRowList->ItemAt(i));
-		if (item == NULL)
-			continue;
-		if (!text.IsEmpty())
-			text << "\n";
-		text << item->Text();
+	// The row list is now the source of truth for order -- move the same
+	// element within fBookmarks to match, then renumber every bookmark's
+	// Position attribute (and save each) rather than trying to patch just
+	// the two affected files. A collection is small enough that a full
+	// renumber is cheap, and it's the only approach that can't drift out
+	// of sync with what's on screen -- a partial update has to get the
+	// shift direction right for every index between `from` and `to`,
+	// which a full renumber sidesteps entirely.
+	BookmarkFile moved = fBookmarks[from];
+	fBookmarks.erase(fBookmarks.begin() + from);
+	fBookmarks.insert(fBookmarks.begin() + to, moved);
+
+	for (size_t i = 0; i < fBookmarks.size(); i++) {
+		fBookmarks[i].SetPosition((int32)i);
+		fBookmarks[i].Save();
 	}
-	fFile.SetReferenceText(text.String());
-	fFile.Save();
 }
 
 
 // Removes exactly one row (#66) -- the Delete key or the row list's own
 // right-click "Remove" item, unlike File > Delete File..., which removes
-// the whole list. VerseListFile::RemoveLine() already does the file half
-// of this (and already saves immediately); this is just the row-list
-// side plus keeping the selection somewhere sensible afterward.
+// the whole collection. Deletes that one bookmark's own file (#55; used
+// to be VerseListFile::RemoveLine() rewriting one shared file); this is
+// just the row-list side plus keeping the selection somewhere sensible
+// afterward. Positions are deliberately left as they are on the
+// remaining bookmarks -- a gap in the sequence is harmless, sorting by
+// Position only needs the relative order to stay correct, not a
+// contiguous range.
 void
 SGVerseListWindow::_RemoveRow(int32 index)
 {
-	if (!fHasOpenFile || index < 0 || index >= fRowList->CountItems())
+	if (!fHasOpenFile || index < 0 || index >= (int32)fBookmarks.size())
 		return;
 
-	if (fFile.RemoveLine(index) != B_OK)
+	if (fBookmarks[index].Remove() != B_OK)
 		return;
+	fBookmarks.erase(fBookmarks.begin() + index);
 
 	_RebuildRows();
 
@@ -978,21 +1187,17 @@ SGVerseListWindow::_AppendDroppedReferences(BMessage* message)
 	if (!fHasOpenFile)
 		return;
 
+	BString targetVersification = _CollectionVersification();
+
 	BString sourceVersification;
 	message->FindString("scriptureguide:versification", &sourceVersification);
 	if (sourceVersification.IsEmpty()) {
 		// Nothing outside the app declares one (a Tracker clipping, a
-		// plain-text drag) -- this list's own counting is the best
+		// plain-text drag) -- this collection's own counting is the best
 		// available guess, the same fallback AppendDroppedReferences()
 		// already established on the chain-drop side of #52.
-		sourceVersification = fFile.Versification();
+		sourceVersification = targetVersification;
 	}
-	if (sourceVersification.IsEmpty())
-		sourceVersification = "KJV";
-
-	BString targetVersification(fFile.Versification());
-	if (targetVersification.IsEmpty())
-		targetVersification = "KJV";
 
 	// One "key" per reference regardless of which drag source this came
 	// from -- ResultListView's own search-result drag and
@@ -1010,8 +1215,12 @@ SGVerseListWindow::_AppendDroppedReferences(BMessage* message)
 	const char* key;
 	for (int32 i = 0; message->FindString("key", i, &key) == B_OK; i++) {
 		BString startText;
+		// false: this is what gets written to the bookmark file's own
+		// content (see BookmarkFile::CreateNew() below), which has to
+		// stay parseable regardless of which locale eventually reads it
+		// back -- see ConvertVerseReference()'s own comment on why.
 		if (!ConvertVerseReference(key, sourceVersification.String(),
-				targetVersification.String(), startText)) {
+				targetVersification.String(), false, startText)) {
 			continue;
 		}
 
@@ -1020,7 +1229,7 @@ SGVerseListWindow::_AppendDroppedReferences(BMessage* message)
 			BString endText;
 			if (ConvertVerseReference(endKey.String(),
 					sourceVersification.String(),
-					targetVersification.String(), endText)
+					targetVersification.String(), false, endText)
 				&& endText != startText) {
 				// `startText`/`endText` are both "<Book> <Chapter>:<Verse>"
 				// -- VerseKey::getText() always uses ':', regardless of
@@ -1057,8 +1266,13 @@ SGVerseListWindow::_AppendDroppedReferences(BMessage* message)
 			}
 		}
 
-		if (fFile.AppendReference(line.String()) == B_OK)
+		BookmarkFile bookmark;
+		if (bookmark.CreateNew(fCollectionPath.String(), line.String(),
+				targetVersification.String(), (int32)fBookmarks.size())
+				== B_OK) {
+			fBookmarks.push_back(bookmark);
 			appendedAny = true;
+		}
 	}
 
 	if (appendedAny)
@@ -1088,15 +1302,18 @@ SGVerseListWindow::_SaveDescription()
 	if (!fHasOpenFile)
 		return;
 
-	BString text(fDescriptionDocument->Text());
-	// A description is one line in the file's header (see VerseListFile's
-	// own comment); an embedded newline would end that line and turn the
-	// rest into what reads as a reference.
-	text.ReplaceAll('\n', ' ');
-	text.Trim();
-	if (BString(fFile.Description()) == text)
+	BString descriptionPath = _DescriptionPath();
+	if (descriptionPath.IsEmpty())
 		return;
 
-	fFile.SetDescription(text.String());
-	fFile.Save();
+	// A plain sibling file now (see BookmarkFile::kDescriptionFileName),
+	// not one line in a shared file's header -- an embedded newline is
+	// completely fine, unlike the old VerseListFile-backed version, which
+	// had to collapse them to keep the description on its own header
+	// line.
+	BString text(fDescriptionDocument->Text());
+	BFile file(descriptionPath.String(),
+		B_READ_WRITE | B_CREATE_FILE | B_ERASE_FILE);
+	if (file.InitCheck() == B_OK)
+		file.Write(text.String(), text.Length());
 }

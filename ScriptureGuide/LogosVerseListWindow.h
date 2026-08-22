@@ -9,7 +9,7 @@
 
 #include "TextDocument.h"
 
-#include "parallelbible/VerseListFile.h"
+#include "parallelbible/BookmarkFile.h"
 
 class BFilePanel;
 class BMenu;
@@ -42,8 +42,11 @@ class TextDocumentView;
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
-// references kept in its own VerseListFile, one per reading plan/topic/
-// study. Modeled directly on SGSearchWindow (LogosSearchWindow.h/.cpp):
+// references kept as one BookmarkFile per reference in its own folder
+// (#55; the first version of this window kept the whole collection in a
+// single VerseListFile, since replaced), one folder per reading plan/
+// topic/study. Modeled directly on SGSearchWindow (LogosSearchWindow.h/
+// .cpp):
 // same owner-BMessenger shape, same lazy-create-and-Show() lifecycle
 // from SGMainWindow.
 //
@@ -104,7 +107,8 @@ private:
 
 			// File menu handlers.
 			void			_NewList();
-			// Called once VerseListNamePromptWindow reports a chosen name.
+			// Called once VerseListNamePromptWindow reports a chosen
+			// collection name.
 			void			_CreateNewList(const char* name);
 			void			_OpenList(const char* path);
 			void			_OpenPanel();
@@ -113,22 +117,31 @@ private:
 			void			_SaveListAs();
 			void			_DeleteList();
 
-			// Loads `path` into the window (list rows + description),
-			// replacing whatever was open. Shared by _OpenList(),
-			// startup restore, and the navigation menu.
+			// Loads `path` (a collection FOLDER, one bookmark file per
+			// reference -- see BookmarkFile) into the window (list rows +
+			// description), replacing whatever was open. Shared by
+			// _OpenList(), startup restore, and the navigation menu.
 			void			_LoadFile(const char* path);
-			// Rebuilds the row list from fFile.ReferenceText().
+			// Rebuilds the row list from fBookmarks.
 			void			_RebuildRows();
 			// Pushes the current description text into the (quiet, not
 			// user-edit-triggering) TextDocument.
 			void			_RebuildDescription();
 			void			_UpdateTitle();
+			// The versification new bookmarks in the currently open
+			// collection should be written in: the first already-loaded
+			// bookmark's own, or "KJV" for a still-empty collection. Each
+			// bookmark file remembers its own versification independently
+			// (see BookmarkFile), so this is only a default for what's
+			// about to be created, not a stored collection-level setting.
+			BString			_CollectionVersification() const;
+			BString			_DescriptionPath() const;
 
-			// The cascading "Go to list" menu: one submenu per
-			// VerseListFile::ListCollectionNames() entry, plus the
-			// uncategorized files directly in ListsDirectory() as plain
-			// items -- same shape as ParallelBibleView::
-			// _PopulateModuleMenu()'s category-submenu pattern.
+			// The "Go to list" menu: one item per top-level collection
+			// folder (BookmarkFile::ListCollectionNames()) -- a nested
+			// sub-collection is reachable through Open's folder picker,
+			// not this menu, the same one-level-only scope
+			// ListCollectionNames() itself already documents.
 			void			_RebuildNavigationMenu();
 
 			// Single click on a row: posts SG_BIBLE with that row's
@@ -139,13 +152,19 @@ private:
 
 			// Debounced write-back for the description TextDocument --
 			// same idea as ParallelBibleView's NotesSaveListener, just
-			// targeting VerseListFile::SetDescription() instead of a
+			// targeting the collection's sibling Description.txt (see
+			// BookmarkFile::kDescriptionFileName) instead of a
 			// PersonalNotesModule.
 			void			_DescriptionEdited();
 			void			_SaveDescription();
 
 private:
-			VerseListFile			fFile;
+			// The open collection's folder -- empty when none is open.
+			// One BookmarkFile per reference inside it, in Position
+			// order (see _RebuildRows()/_MoveRow()); replaces the single
+			// VerseListFile the first version of this window used (#55).
+			BString					fCollectionPath;
+			std::vector<BookmarkFile>	fBookmarks;
 			bool					fHasOpenFile;
 
 			BMenuBar*				fMenuBar;

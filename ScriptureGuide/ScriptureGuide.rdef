@@ -71,3 +71,17 @@ resource(11, "forward_nav") #'VICN' array {
 	$"00000000000040A32442FFFF42FD7201178322040A0201000240A32D00000000"
 	$"000040A32442FFFF42FD72"
 };
+
+// The tilted ribbon-bookmark icon (resources/icons/Bookmark.hvif),
+// embedded verbatim -- same reasoning as back_nav/forward_nav above:
+// a MIME type's icon has to be set programmatically at runtime (see
+// BookmarkFile::EnsureMimeTypeRegistered()), and reading it out of the
+// app's own resources is the only way to do that without shipping the
+// raw .hvif file separately and hoping it's still next to the binary.
+resource(12, "bookmark_icon") #'VICN' array {
+	$"6E6369660501391311FF01802925FF01B0443AFF01FFE405FF01E8BD4AFF040605AA02"
+	$"243450564B485C4A30280604AA243450564B472B2D04020A2E303E3C04020A2F393830"
+	$"040A0001001240000000000000000040000000000000000001178300040A0201000240"
+	$"00000000000000004000000000000000000A0101010240000000000000000040000000"
+	$"00000000000A03020203124000000000000000004000000000000000000117820004"
+};

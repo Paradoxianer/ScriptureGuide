@@ -1,0 +1,475 @@
+/*
+ * Copyright 2026, ScriptureGuide contributors.
+ * All rights reserved. Distributed under the terms of the GPL v2 license.
+ */
+#include "BookmarkFile.h"
+
+#include <algorithm>
+#include <stdio.h>
+
+#include <AppFileInfo.h>
+#include <Application.h>
+#include <Directory.h>
+#include <Entry.h>
+#include <File.h>
+#include <FindDirectory.h>
+#include <InterfaceDefs.h>
+#include <Language.h>
+#include <Locale.h>
+#include <MimeType.h>
+#include <NodeInfo.h>
+#include <Path.h>
+#include <Resources.h>
+#include <Roster.h>
+
+#include <versekey.h>
+
+#include "../constants.h"
+
+const char* BookmarkFile::kMimeType
+	= "text/x-scriptureguide-bookmark";
+const char* BookmarkFile::kDescriptionFileName = "Description.txt";
+
+// Namespaced the same way VerseListFile's own attributes are.
+static const char* kAttrPosition = "SG:position";
+static const char* kAttrCode = "SG:code";
+static const char* kAttrTags = "SG:tags";
+
+static const char* kHeaderVersification = "# Versification: ";
+
+
+BookmarkFile::BookmarkFile()
+	:
+	fPosition(-1)
+{
+}
+
+
+BString
+BookmarkFile::RootDirectory()
+{
+	BPath path;
+	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path, true) != B_OK)
+		return BString();
+	path.Append("scriptureguide");
+	path.Append("library");
+	path.Append("verselists");
+	create_directory(path.Path(), 0755);
+	return BString(path.Path());
+}
+
+
+// Same idea as VerseListFile's own header-comment reasoning: content is
+// authoritative, an attribute is a cache. Unlike VerseListFile though,
+// there is no "fall back to attribute" step for the reference itself --
+// a bookmark file with no parseable reference in its content is not a
+// bookmark, no matter what an attribute claims.
+status_t
+BookmarkFile::SetTo(const char* path)
+{
+	BFile file(path, B_READ_ONLY);
+	status_t status = file.InitCheck();
+	if (status != B_OK)
+		return status;
+
+	fPath = path;
+
+	off_t size = 0;
+	file.GetSize(&size);
+	BString body;
+	if (size > 0) {
+		char* buffer = new(std::nothrow) char[size + 1];
+		if (buffer != NULL) {
+			ssize_t bytesRead = file.Read(buffer, size);
+			if (bytesRead > 0) {
+				buffer[bytesRead] = '\0';
+				body = buffer;
+			}
+			delete[] buffer;
+		}
+	}
+
+	fVersification = "";
+	fReference = "";
+
+	int32 lineStart = 0;
+	while (lineStart <= body.Length()) {
+		int32 lineEnd = body.FindFirst("\n", lineStart);
+		if (lineEnd < 0)
+			lineEnd = body.Length();
+
+		BString line;
+		body.CopyInto(line, lineStart, lineEnd - lineStart);
+
+		if (line.StartsWith(kHeaderVersification))
+			fVersification = line.String() + strlen(kHeaderVersification);
+		else {
+			BString trimmed(line);
+			trimmed.Trim();
+			if (!trimmed.IsEmpty() && trimmed.ByteAt(0) != '#')
+				fReference = trimmed;
+		}
+
+		if (lineEnd >= body.Length())
+			break;
+		lineStart = lineEnd + 1;
+	}
+
+	if (fReference.IsEmpty())
+		return B_BAD_DATA;
+
+	fPosition = -1;
+	int32 position;
+	if (file.ReadAttr(kAttrPosition, B_INT32_TYPE, 0, &position,
+			sizeof(position)) == (ssize_t)sizeof(position)) {
+		fPosition = position;
+	}
+
+	BString tags;
+	if (file.ReadAttrString(kAttrTags, &tags) == B_OK)
+		fTags = tags;
+
+	return B_OK;
+}
+
+
+static BString
+_SanitizeBookmarkName(const char* name)
+{
+	BString sanitized(name);
+	sanitized.Trim();
+	if (sanitized.IsEmpty())
+		sanitized = "Reference";
+
+	// BFS forbids '/' outright and is otherwise permissive -- same
+	// reasoning and fallback VerseListFile::_SanitizeFileName() already
+	// has for its own file/collection names.
+	for (int32 i = 0; i < sanitized.Length(); i++) {
+		if (sanitized.ByteAt(i) == '/')
+			sanitized.SetByteAt(i, '-');
+	}
+	if (sanitized.Trim().IsEmpty())
+		sanitized = "Reference";
+
+	return sanitized;
+}
+
+
+status_t
+BookmarkFile::CreateNew(const char* collectionPath, const char* referenceLine,
+	const char* versification, int32 position)
+{
+	EnsureMimeTypeRegistered();
+
+	if (collectionPath == NULL || collectionPath[0] == '\0'
+		|| referenceLine == NULL || referenceLine[0] == '\0') {
+		return B_BAD_VALUE;
+	}
+	create_directory(collectionPath, 0755);
+
+	BString baseName = _SanitizeBookmarkName(referenceLine);
+	BString fileName(baseName);
+	fileName << ".sgvb";
+	BPath path(collectionPath);
+	path.Append(fileName.String());
+
+	// A second bookmark with the same reference text gets a number
+	// rather than silently overwriting the first -- same convention
+	// VerseListFile::CreateNew() already uses (dragging the same verse
+	// in twice is a real, unremarkable thing to do -- a reading plan
+	// revisits a passage on purpose).
+	int suffix = 2;
+	while (BEntry(path.Path()).Exists()) {
+		fileName = baseName;
+		fileName << " " << suffix << ".sgvb";
+		path.SetTo(collectionPath);
+		path.Append(fileName.String());
+		suffix++;
+	}
+
+	fPath = path.Path();
+	fReference = referenceLine;
+	fVersification = versification != NULL ? versification : "";
+	fPosition = position;
+	fTags = "";
+
+	return Save();
+}
+
+
+void
+BookmarkFile::SetReference(const char* referenceLine)
+{
+	fReference = referenceLine != NULL ? referenceLine : "";
+}
+
+
+void
+BookmarkFile::SetPosition(int32 position)
+{
+	fPosition = position;
+}
+
+
+void
+BookmarkFile::SetTags(const char* tags)
+{
+	fTags = tags != NULL ? tags : "";
+}
+
+
+// Testament(1 digit) + book-within-testament(2 digits) + chapter(3
+// digits) + verse(3 digits), all zero-padded -- a plain lexicographic
+// sort of this string equals Bible order, independent of Position (see
+// the class comment). The testament digit is an addition to the 2+3+3
+// digit widths #55 itself quotes: without it, Genesis (testament 1) and
+// Matthew (testament 2), both "book 1" of their own testament, would
+// collide on the same code -- confirmed by inspection of VerseKey's own
+// getBook(), which numbers books WITHIN a testament, not across both.
+static BString
+ComputeBookmarkCode(const char* reference, const char* versification)
+{
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+
+	sword::VerseKey key;
+	key.setLocale(language.Code());
+	key.setVersificationSystem(
+		versification != NULL && versification[0] != '\0'
+			? versification : "KJV");
+	key.setText(reference);
+	if (key.popError() != 0)
+		return BString();
+
+	char code[16];
+	snprintf(code, sizeof(code), "%01d%02d%03d%03d",
+		(int)key.getTestament(), (int)key.getBook(), key.getChapter(),
+		key.getVerse());
+	return BString(code);
+}
+
+
+status_t
+BookmarkFile::Save()
+{
+	if (fPath.IsEmpty() || fReference.IsEmpty())
+		return B_NO_INIT;
+
+	EnsureMimeTypeRegistered();
+
+	BFile file(fPath.String(), B_READ_WRITE | B_CREATE_FILE | B_ERASE_FILE);
+	status_t status = file.InitCheck();
+	if (status != B_OK)
+		return status;
+
+	BString body;
+	body << "# Versification: "
+		<< (fVersification.IsEmpty() ? "KJV" : fVersification) << "\n";
+	body << fReference;
+	file.Write(body.String(), body.Length());
+
+	file.WriteAttr(kAttrPosition, B_INT32_TYPE, 0, &fPosition,
+		sizeof(fPosition));
+	BString code = ComputeBookmarkCode(fReference.String(),
+		fVersification.String());
+	file.WriteAttrString(kAttrCode, &code);
+	file.WriteAttrString(kAttrTags, &fTags);
+
+	BNodeInfo info(&file);
+	info.SetType(kMimeType);
+
+	return B_OK;
+}
+
+
+status_t
+BookmarkFile::Remove()
+{
+	if (fPath.IsEmpty())
+		return B_NO_INIT;
+	return BEntry(fPath.String()).Remove();
+}
+
+
+std::vector<BString>
+BookmarkFile::ListBookmarkPaths(const char* collectionPath)
+{
+	std::vector<std::pair<int32, BString> > ordered;
+	if (collectionPath == NULL || collectionPath[0] == '\0')
+		return std::vector<BString>();
+
+	BDirectory dir(collectionPath);
+	if (dir.InitCheck() != B_OK)
+		return std::vector<BString>();
+
+	BEntry entry;
+	while (dir.GetNextEntry(&entry) == B_OK) {
+		if (entry.IsDirectory())
+			continue;
+		char name[B_FILE_NAME_LENGTH];
+		if (entry.GetName(name) == B_OK
+			&& BString(name) == kDescriptionFileName) {
+			continue;
+		}
+
+		BPath path;
+		if (entry.GetPath(&path) != B_OK)
+			continue;
+
+		// A cheap attribute read, not a full SetTo() -- sorting a
+		// folder's worth of bookmarks shouldn't have to parse every
+		// file's content just to order them. A file missing the
+		// attribute entirely (dropped in from outside BFS, say) sorts
+		// after every file that has one, via INT32_MAX, then by
+		// filename -- see the sort comparator below.
+		BNode node(&entry);
+		int32 position = 0x7fffffff;
+		node.ReadAttr(kAttrPosition, B_INT32_TYPE, 0, &position,
+			sizeof(position));
+
+		ordered.push_back(std::make_pair(position, BString(path.Path())));
+	}
+
+	std::sort(ordered.begin(), ordered.end());
+
+	std::vector<BString> paths;
+	paths.reserve(ordered.size());
+	for (size_t i = 0; i < ordered.size(); i++)
+		paths.push_back(ordered[i].second);
+	return paths;
+}
+
+
+std::vector<BString>
+BookmarkFile::ListCollectionNames(const char* parentPath)
+{
+	BString root = parentPath != NULL && parentPath[0] != '\0'
+		? BString(parentPath) : RootDirectory();
+
+	std::vector<BString> names;
+	BDirectory dir(root.String());
+	if (dir.InitCheck() != B_OK)
+		return names;
+
+	BEntry entry;
+	while (dir.GetNextEntry(&entry) == B_OK) {
+		if (!entry.IsDirectory())
+			continue;
+		char name[B_FILE_NAME_LENGTH];
+		if (entry.GetName(name) == B_OK)
+			names.push_back(BString(name));
+	}
+	std::sort(names.begin(), names.end());
+	return names;
+}
+
+
+BString
+BookmarkFile::CreateCollection(const char* parentPath, const char* name)
+{
+	BString root = parentPath != NULL && parentPath[0] != '\0'
+		? BString(parentPath) : RootDirectory();
+	if (root.IsEmpty())
+		return BString();
+
+	BString baseName = _SanitizeBookmarkName(name);
+	BPath path(root.String());
+	path.Append(baseName.String());
+
+	int suffix = 2;
+	while (BEntry(path.Path()).Exists()) {
+		BString numbered(baseName);
+		numbered << " " << suffix;
+		path.SetTo(root.String());
+		path.Append(numbered.String());
+		suffix++;
+	}
+
+	if (create_directory(path.Path(), 0755) != B_OK)
+		return BString();
+	return BString(path.Path());
+}
+
+
+void
+BookmarkFile::EnsureMimeTypeRegistered()
+{
+	BMimeType mime(kMimeType);
+	bool alreadyInstalled = mime.IsInstalled();
+	if (!alreadyInstalled) {
+		mime.Install();
+		mime.SetShortDescription("ScriptureGuide bookmark");
+		mime.SetLongDescription("A single Bible reference (ScriptureGuide)");
+		mime.SetPreferredApp(SG_APP_SIGNATURE);
+
+		BMessage extensions;
+		extensions.AddString("extensions", "sgvb");
+		mime.SetFileExtensions(&extensions);
+	}
+
+	// Icon and attribute info are refreshed on EVERY call, even when the
+	// type was already installed -- unlike the block above, which only
+	// needs to run once. Confirmed the hard way: an earlier build of
+	// this app installed this type with incomplete attribute info
+	// (missing "attr:width"/"attr:alignment" -- see the comment below),
+	// and the IsInstalled() guard alone left that system stuck with the
+	// gap permanently, since nothing short of manually clearing the MIME
+	// database entry could ever re-run the block that fixes it. A future
+	// icon/attribute fix should not require that.
+	//
+	// The tilted ribbon-bookmark icon (see ScriptureGuide.rdef's
+	// "bookmark_icon" resource) -- read out of this app's own resources
+	// at runtime, same technique LogosMainWindow.cpp's _LoadVectorIcon()
+	// already uses for the toolbar's back/forward arrows, just handed
+	// straight to SetIcon() as raw HVIF bytes instead of being decoded
+	// into a BBitmap first (SetIcon(const uint8*, size_t) takes the
+	// vector data directly -- no bitmap needed for a MIME type's icon).
+	app_info info;
+	if (be_app->GetAppInfo(&info) == B_OK) {
+		BFile appFile(&info.ref, B_READ_ONLY);
+		BResources resources(&appFile);
+		if (resources.InitCheck() == B_OK) {
+			size_t dataSize = 0;
+			const void* data = resources.LoadResource(B_VECTOR_ICON_TYPE,
+				"bookmark_icon", &dataSize);
+			if (data != NULL && dataSize > 0)
+				mime.SetIcon((const uint8*)data, dataSize);
+		}
+	}
+
+	// Gives Tracker real columns for these, matching VerseListFile's own
+	// EnsureMimeTypeRegistered() pattern -- "attr:width"/"attr:alignment"
+	// are undocumented in BMimeType::SetAttrInfo()'s own public API
+	// (only name/public_name/type/viewable/editable are), but confirmed
+	// against Tracker's own source (BContainerWindow::AddMimeMenu(),
+	// src/kits/tracker/ContainerWindow.cpp) that it silently skips any
+	// attribute missing either one when building the Attributes menu --
+	// VerseListFile's own four attributes have the exact same gap, which
+	// is why none of them show up there either.
+	BMessage attrInfo;
+	attrInfo.AddString("attr:name", kAttrPosition);
+	attrInfo.AddString("attr:public_name", "Position");
+	attrInfo.AddInt32("attr:type", B_INT32_TYPE);
+	attrInfo.AddBool("attr:viewable", true);
+	attrInfo.AddBool("attr:editable", false);
+	attrInfo.AddInt32("attr:width", 50);
+	attrInfo.AddInt32("attr:alignment", B_ALIGN_RIGHT);
+
+	attrInfo.AddString("attr:name", kAttrCode);
+	attrInfo.AddString("attr:public_name", "Bible Order");
+	attrInfo.AddInt32("attr:type", B_STRING_TYPE);
+	attrInfo.AddBool("attr:viewable", true);
+	attrInfo.AddBool("attr:editable", false);
+	attrInfo.AddInt32("attr:width", 80);
+	attrInfo.AddInt32("attr:alignment", B_ALIGN_LEFT);
+
+	attrInfo.AddString("attr:name", kAttrTags);
+	attrInfo.AddString("attr:public_name", "Tags");
+	attrInfo.AddInt32("attr:type", B_STRING_TYPE);
+	attrInfo.AddBool("attr:viewable", true);
+	attrInfo.AddBool("attr:editable", true);
+	attrInfo.AddInt32("attr:width", 120);
+	attrInfo.AddInt32("attr:alignment", B_ALIGN_LEFT);
+
+	mime.SetAttrInfo(&attrInfo);
+}
