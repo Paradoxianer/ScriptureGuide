@@ -33,9 +33,53 @@ const char* BookmarkFile::kDescriptionFileName = "Description.txt";
 static const char* kAttrPosition = "SG:position";
 static const char* kAttrCode = "SG:code";
 static const char* kAttrTags = "SG:tags";
+static const char* kAttrReference = "SG:reference";
+static const char* kAttrVersification = "SG:versification";
+static const char* kAttrLocale = "SG:locale";
 
+static const char* kMirrorNote
+	= "# Mirror of this file's own attributes -- not authoritative; see"
+		" SG:reference/SG:versification/SG:locale.";
 static const char* kHeaderVersification = "# Versification: ";
 static const char* kHeaderLocale = "# Locale: ";
+
+
+// Shared by SetTo()'s content-fallback path -- pulls reference,
+// versification and locale back out of the plain-text mirror the same
+// way the original content-first design always did.
+static void
+ParseMirrorContent(const BString& body, BString& reference,
+	BString& versification, BString& locale)
+{
+	reference = "";
+	versification = "";
+	locale = "";
+
+	int32 lineStart = 0;
+	while (lineStart <= body.Length()) {
+		int32 lineEnd = body.FindFirst("\n", lineStart);
+		if (lineEnd < 0)
+			lineEnd = body.Length();
+
+		BString line;
+		body.CopyInto(line, lineStart, lineEnd - lineStart);
+
+		if (line.StartsWith(kHeaderVersification))
+			versification = line.String() + strlen(kHeaderVersification);
+		else if (line.StartsWith(kHeaderLocale))
+			locale = line.String() + strlen(kHeaderLocale);
+		else {
+			BString trimmed(line);
+			trimmed.Trim();
+			if (!trimmed.IsEmpty() && trimmed.ByteAt(0) != '#')
+				reference = trimmed;
+		}
+
+		if (lineEnd >= body.Length())
+			break;
+		lineStart = lineEnd + 1;
+	}
+}
 
 
 BookmarkFile::BookmarkFile()
@@ -58,11 +102,14 @@ BookmarkFile::RootDirectory()
 }
 
 
-// Same idea as VerseListFile's own header-comment reasoning: content is
-// authoritative, an attribute is a cache. Unlike VerseListFile though,
-// there is no "fall back to attribute" step for the reference itself --
-// a bookmark file with no parseable reference in its content is not a
-// bookmark, no matter what an attribute claims.
+// Attributes first (see the class comment) -- only reads the plain-text
+// mirror at all when SG:reference is missing or empty, i.e. this file's
+// attributes didn't survive getting here (a copy off BFS). When that
+// fallback fires, the recovered values are written back as attributes
+// immediately, so the file is healed and the next SetTo() won't need
+// the fallback again -- best-effort: on a read-only volume the write
+// just silently doesn't stick, and the fallback simply runs again next
+// time, which is still correct, only slower.
 status_t
 BookmarkFile::SetTo(const char* path)
 {
@@ -73,49 +120,45 @@ BookmarkFile::SetTo(const char* path)
 
 	fPath = path;
 
-	off_t size = 0;
-	file.GetSize(&size);
-	BString body;
-	if (size > 0) {
-		char* buffer = new(std::nothrow) char[size + 1];
-		if (buffer != NULL) {
-			ssize_t bytesRead = file.Read(buffer, size);
-			if (bytesRead > 0) {
-				buffer[bytesRead] = '\0';
-				body = buffer;
+	BString reference, versification, locale;
+	bool haveReference = file.ReadAttrString(kAttrReference, &reference) == B_OK
+		&& !reference.IsEmpty();
+	file.ReadAttrString(kAttrVersification, &versification);
+	file.ReadAttrString(kAttrLocale, &locale);
+
+	if (!haveReference) {
+		off_t size = 0;
+		file.GetSize(&size);
+		BString body;
+		if (size > 0) {
+			char* buffer = new(std::nothrow) char[size + 1];
+			if (buffer != NULL) {
+				ssize_t bytesRead = file.Read(buffer, size);
+				if (bytesRead > 0) {
+					buffer[bytesRead] = '\0';
+					body = buffer;
+				}
+				delete[] buffer;
 			}
-			delete[] buffer;
+		}
+		ParseMirrorContent(body, reference, versification, locale);
+
+		if (!reference.IsEmpty()) {
+			BFile writable(path, B_READ_WRITE);
+			if (writable.InitCheck() == B_OK) {
+				writable.WriteAttrString(kAttrReference, &reference);
+				BString ver = versification.IsEmpty()
+					? BString("KJV") : versification;
+				writable.WriteAttrString(kAttrVersification, &ver);
+				if (!locale.IsEmpty())
+					writable.WriteAttrString(kAttrLocale, &locale);
+			}
 		}
 	}
 
-	fVersification = "";
-	fLocale = "";
-	fReference = "";
-
-	int32 lineStart = 0;
-	while (lineStart <= body.Length()) {
-		int32 lineEnd = body.FindFirst("\n", lineStart);
-		if (lineEnd < 0)
-			lineEnd = body.Length();
-
-		BString line;
-		body.CopyInto(line, lineStart, lineEnd - lineStart);
-
-		if (line.StartsWith(kHeaderVersification))
-			fVersification = line.String() + strlen(kHeaderVersification);
-		else if (line.StartsWith(kHeaderLocale))
-			fLocale = line.String() + strlen(kHeaderLocale);
-		else {
-			BString trimmed(line);
-			trimmed.Trim();
-			if (!trimmed.IsEmpty() && trimmed.ByteAt(0) != '#')
-				fReference = trimmed;
-		}
-
-		if (lineEnd >= body.Length())
-			break;
-		lineStart = lineEnd + 1;
-	}
+	fReference = reference;
+	fVersification = versification;
+	fLocale = locale;
 
 	if (fReference.IsEmpty())
 		return B_BAD_DATA;
@@ -285,9 +328,20 @@ BookmarkFile::Save()
 	if (status != B_OK)
 		return status;
 
+	BString versification = fVersification.IsEmpty()
+		? BString("KJV") : fVersification;
+
+	// Attributes are the source of truth (see the class comment); the
+	// content written below is only ever a readable mirror of these
+	// three, regenerated in full on every save.
+	file.WriteAttrString(kAttrReference, &fReference);
+	file.WriteAttrString(kAttrVersification, &versification);
+	if (!fLocale.IsEmpty())
+		file.WriteAttrString(kAttrLocale, &fLocale);
+
 	BString body;
-	body << "# Versification: "
-		<< (fVersification.IsEmpty() ? "KJV" : fVersification) << "\n";
+	body << kMirrorNote << "\n";
+	body << "# Versification: " << versification << "\n";
 	// Omitted when empty (English/no locale -- VerseKey's own default
 	// needs no explicit marker to round-trip correctly), same convention
 	// VerseListFile's own optional "# Description:" line already uses.
@@ -475,6 +529,30 @@ BookmarkFile::EnsureMimeTypeRegistered()
 	// VerseListFile's own four attributes have the exact same gap, which
 	// is why none of them show up there either.
 	BMessage attrInfo;
+	attrInfo.AddString("attr:name", kAttrReference);
+	attrInfo.AddString("attr:public_name", "Reference");
+	attrInfo.AddInt32("attr:type", B_STRING_TYPE);
+	attrInfo.AddBool("attr:viewable", true);
+	attrInfo.AddBool("attr:editable", false);
+	attrInfo.AddInt32("attr:width", 140);
+	attrInfo.AddInt32("attr:alignment", B_ALIGN_LEFT);
+
+	attrInfo.AddString("attr:name", kAttrVersification);
+	attrInfo.AddString("attr:public_name", "Versification");
+	attrInfo.AddInt32("attr:type", B_STRING_TYPE);
+	attrInfo.AddBool("attr:viewable", true);
+	attrInfo.AddBool("attr:editable", false);
+	attrInfo.AddInt32("attr:width", 90);
+	attrInfo.AddInt32("attr:alignment", B_ALIGN_LEFT);
+
+	attrInfo.AddString("attr:name", kAttrLocale);
+	attrInfo.AddString("attr:public_name", "Locale");
+	attrInfo.AddInt32("attr:type", B_STRING_TYPE);
+	attrInfo.AddBool("attr:viewable", true);
+	attrInfo.AddBool("attr:editable", false);
+	attrInfo.AddInt32("attr:width", 60);
+	attrInfo.AddInt32("attr:alignment", B_ALIGN_LEFT);
+
 	attrInfo.AddString("attr:name", kAttrPosition);
 	attrInfo.AddString("attr:public_name", "Position");
 	attrInfo.AddInt32("attr:type", B_INT32_TYPE);

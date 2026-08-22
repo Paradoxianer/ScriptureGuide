@@ -32,14 +32,17 @@
 // collections is a file copy; tags are BFS attributes Tracker's own Find
 // panel already understands, once each reference has its own file to tag.
 //
-// Content vs. attributes follows VerseListFile's own established split:
-// the reference, its declared versification AND its declared locale live
-// in the file's content (portable off BFS, matching the same #46-safety
-// reasoning VerseListFile's own header comment already gives);
-// Position/Code/Tags are attribute-only -- none of the three are needed
-// to know WHAT reference this is, only how to sort/find it within its
-// collection, so losing them on a non-BFS copy is an acceptable
-// degradation the actual reference text never has.
+// Attributes are authoritative -- reference, versification and locale
+// (SG:reference/SG:versification/SG:locale) are read from there first,
+// same as Position/Code/Tags always have been. The file's plain-text
+// content is a human-readable *mirror* of those same attributes, kept
+// in sync on every Save() but never itself trusted while the attributes
+// are present. It exists for exactly the case attributes can't cover:
+// a copy off BFS (git, a zip, another filesystem) loses every
+// attribute, so SetTo() falls back to parsing the content when
+// SG:reference is missing or empty -- and then writes the attributes
+// back from what it just recovered, so a file only needs that fallback
+// once.
 //
 // The reference is stored in whatever locale was active when it was
 // written (e.g. German "Johannes 3:12-16"), NOT forced into English --
