@@ -82,6 +82,23 @@ public:
 									{ return fLocale.String(); }
 			int32			Position() const
 									{ return fPosition; }
+
+			// Reference(), re-parsed under this bookmark's OWN recorded
+			// Locale() and re-rendered with none set at all (English/
+			// ASCII, recognized regardless of whatever locale is
+			// CURRENTLY active -- confirmed empirically). What a
+			// navigation message (SG_BIBLE) should carry, never
+			// Reference() directly: BookFromKey()/ChapterFromKey()/
+			// VerseFromKey() (LogosMainWindow.cpp's JumpToKey(), what
+			// SG_BIBLE ultimately calls) always parse under the CURRENT
+			// system locale, with no way to pass a different one in, so
+			// this is the one form guaranteed to still work regardless
+			// of whether that matches the locale this bookmark was
+			// actually written in. Reference() itself if it doesn't
+			// parse at all (should not normally happen -- Reference()
+			// is exactly what CreateNew()/Save() wrote in the first
+			// place).
+			BString			NavigationKey() const;
 			// Comma-separated -- deliberately a plain string, not a
 			// std::vector<BString>, since the tag-management/filter UI
 			// (separate issue) that would need structured access doesn't

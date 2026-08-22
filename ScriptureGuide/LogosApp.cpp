@@ -19,6 +19,7 @@
 #include "LogosMainWindow.h"
 #include "Preferences.h"
 #include "SwordBackend.h"
+#include "parallelbible/BookmarkFile.h"
 
 
 // Global containing the startup path. Accessed via GetAppPath()
@@ -66,9 +67,9 @@ SGApp::~SGApp(void)
 }
 
 
-void SGApp::MessageReceived(BMessage* message) 
+void SGApp::MessageReceived(BMessage* message)
 {
-	switch (message->what) 
+	switch (message->what)
 	{
 	case M_WINDOW_CLOSED:{
 		if (CountWindows()<2)
@@ -78,6 +79,57 @@ void SGApp::MessageReceived(BMessage* message)
 	default:
 		BApplication::MessageReceived(message);
 	break;
+	}
+}
+
+
+// Double-clicking a bookmark file in Tracker (or dragging one onto the
+// app icon) delivers it here -- this app is B_SINGLE_LAUNCH (see
+// ScriptureGuide.rdef), so an already-running instance gets this same
+// message again rather than a second instance starting. Non-bookmark
+// refs (anything BookmarkFile::SetTo() can't parse) are silently
+// ignored -- Tracker can hand this app any file type it's merely
+// registered as viewable for, not just ones this handler understands.
+void
+SGApp::RefsReceived(BMessage* message)
+{
+	entry_ref ref;
+	for (int32 i = 0; message->FindRef("refs", i, &ref) == B_OK; i++) {
+		BPath path(&ref);
+		if (path.InitCheck() != B_OK)
+			continue;
+
+		BookmarkFile bookmark;
+		if (bookmark.SetTo(path.Path()) != B_OK)
+			continue;
+
+		// Whichever SGMainWindow is currently active, or the first one
+		// if none is (e.g. Tracker had focus at the moment of the
+		// double-click) -- "the active chain" this feature is about
+		// navigating is a property of ONE window, not the app as a
+		// whole, and every other navigation source (a dropped
+		// reference, the universal search box, a click in the verse
+		// list window) already resolves that the same way: whichever
+		// window it actually reached.
+		SGMainWindow* target = NULL;
+		for (int32 w = 0; w < CountWindows(); w++) {
+			SGMainWindow* win = dynamic_cast<SGMainWindow*>(WindowAt(w));
+			if (win == NULL)
+				continue;
+			if (target == NULL)
+				target = win;
+			if (win->IsActive()) {
+				target = win;
+				break;
+			}
+		}
+		if (target == NULL)
+			continue;
+
+		BMessage jump(SG_BIBLE);
+		jump.AddString("key", bookmark.NavigationKey());
+		target->PostMessage(&jump);
+		target->Activate(true);
 	}
 }
 

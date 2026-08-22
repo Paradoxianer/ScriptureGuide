@@ -31,7 +31,6 @@
 #include <TextControl.h>
 
 #include <algorithm>
-#include <ctype.h>
 #include <utility>
 #include <vector>
 
@@ -41,22 +40,7 @@
 #include "TextListener.h"
 
 #include "constants.h"
-
-// See the identical helper in BibleTextDocument.cpp/ParallelBibleView.cpp:
-// VerseKey::setText() only recognizes localized book names (e.g. German
-// "1. Mose") if the key's locale has been set first, otherwise it fails
-// silently and the key is left unchanged. An empty `locale` deliberately
-// leaves it unset -- VerseKey's own default, which always recognizes
-// English/ASCII book names regardless of what locale (if any) is
-// otherwise active (confirmed empirically), so "no locale" is itself a
-// meaningful, portable choice here, not just "not implemented yet".
-static void
-SetVerseKeyLocale(sword::VerseKey& key, const char* locale)
-{
-	if (locale != NULL && locale[0] != '\0')
-		key.setLocale(locale);
-}
-
+#include "SwordBackend.h"
 
 // The current system locale's BLanguage::Code() (e.g. "de") -- what a
 // fresh drag-drop reference gets written in (see
@@ -74,35 +58,6 @@ CurrentLocaleCode()
 	return BString(language.Code());
 }
 
-
-// Parses `key` (a single, unhyphenated verse reference -- see
-// BibleColumnView::_StartDrag()'s own comment on why a drag never hands
-// over a combined "start-end" string for this to re-split) as
-// `sourceLocale`/`sourceVersification`, repositions it into
-// `targetVersification`, and writes the result rendered in
-// `targetLocale` into `outText`. Either locale may be empty (English/
-// no locale, see SetVerseKeyLocale()'s own comment). False (leaving
-// `outText` untouched) if `key` doesn't parse at all.
-static bool
-ConvertVerseReference(const char* key, const char* sourceLocale,
-	const char* sourceVersification, const char* targetLocale,
-	const char* targetVersification, BString& outText)
-{
-	sword::VerseKey source;
-	SetVerseKeyLocale(source, sourceLocale);
-	source.setVersificationSystem(sourceVersification);
-	source.setText(key);
-	if (source.popError() != 0)
-		return false;
-
-	sword::VerseKey target;
-	SetVerseKeyLocale(target, targetLocale);
-	target.setVersificationSystem(targetVersification);
-	target.positionFrom(source);
-
-	outText = target.getText();
-	return true;
-}
 
 // Defined further down, alongside _DeleteList() -- forward-declared here
 // so MessageReceived()'s VLIST_SAVE_AS_RESULT case (textually earlier in
@@ -921,58 +876,6 @@ SGVerseListWindow::_LoadFile(const char* path)
 }
 
 
-// A stored range ("John 3:12-16") has its trailing "-<verse>" split off
-// -- ConvertVerseReference() only understands a single, unhyphenated
-// reference (same reasoning _AppendDroppedReferences() already has for
-// why a range can't be handed to VerseKey::setText() whole). `suffix`
-// comes back including the leading "-", or empty if `reference` isn't a
-// range at all.
-static void
-SplitRangeSuffix(const BString& reference, BString& base, BString& suffix)
-{
-	base = reference;
-	suffix = "";
-
-	int32 dash = reference.FindLast('-');
-	if (dash < 0)
-		return;
-	bool isRangeEnd = dash + 1 < reference.Length();
-	for (int32 i = dash + 1; i < reference.Length() && isRangeEnd; i++) {
-		if (!isdigit((unsigned char)reference.ByteAt(i)))
-			isRangeEnd = false;
-	}
-	if (!isRangeEnd)
-		return;
-
-	reference.CopyInto(suffix, dash, reference.Length() - dash);
-	base.Truncate(dash);
-}
-
-
-// The universally-parseable ("key") form of a bookmark's own reference
-// -- re-parsed under the bookmark's OWN recorded locale (see
-// BookmarkFile::Locale()'s own comment), then re-rendered with no locale
-// set at all (English/ASCII, recognized regardless of whatever locale is
-// CURRENTLY active -- confirmed empirically). What _NavigateToRow() below
-// hands to SG_BIBLE: BookFromKey()/ChapterFromKey()/VerseFromKey()
-// always parse under the current system locale, with no way to pass a
-// different one in, so this is the one form guaranteed to still work
-// regardless of whether that matches the locale the bookmark was
-// actually written in.
-static BString
-NavigationKey(const BookmarkFile& bookmark)
-{
-	BString base, suffix;
-	SplitRangeSuffix(BString(bookmark.Reference()), base, suffix);
-
-	BString key;
-	if (!ConvertVerseReference(base.String(), bookmark.Locale(),
-			bookmark.Versification(), "", bookmark.Versification(), key)) {
-		return BString(bookmark.Reference());
-	}
-	key << suffix;
-	return key;
-}
 
 
 void
@@ -1111,7 +1014,7 @@ SGVerseListWindow::_NavigateToRow(int32 index)
 	if (index < 0 || index >= (int32)fBookmarks.size() || fMessenger == NULL)
 		return;
 
-	// NavigationKey(), not the bookmark's own Reference() directly --
+	// BookmarkFile::NavigationKey(), not Reference() directly --
 	// BookFromKey()/ChapterFromKey()/VerseFromKey() (what JumpToKey()
 	// below actually calls) always parse under the CURRENT system
 	// locale, so handing them the reference's own (possibly different)
@@ -1125,7 +1028,7 @@ SGVerseListWindow::_NavigateToRow(int32 index)
 	// It reaches the OWNING window's active chain, not necessarily
 	// whichever SGMainWindow currently has focus.
 	BMessage jump(SG_BIBLE);
-	jump.AddString("key", NavigationKey(fBookmarks[index]));
+	jump.AddString("key", fBookmarks[index].NavigationKey());
 	fMessenger->SendMessage(&jump);
 }
 

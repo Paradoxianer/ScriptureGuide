@@ -23,6 +23,7 @@
 #include <versekey.h>
 
 #include "../constants.h"
+#include "../SwordBackend.h"
 
 const char* BookmarkFile::kMimeType
 	= "text/x-scriptureguide-bookmark";
@@ -218,6 +219,22 @@ void
 BookmarkFile::SetTags(const char* tags)
 {
 	fTags = tags != NULL ? tags : "";
+}
+
+
+BString
+BookmarkFile::NavigationKey() const
+{
+	BString base, suffix;
+	SplitVerseRangeSuffix(fReference, base, suffix);
+
+	BString key;
+	if (!ConvertVerseReference(base.String(), fLocale.String(),
+			fVersification.String(), "", fVersification.String(), key)) {
+		return fReference;
+	}
+	key << suffix;
+	return key;
 }
 
 

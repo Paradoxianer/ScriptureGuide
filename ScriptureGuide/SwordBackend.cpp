@@ -858,6 +858,52 @@ bool ParseVerseReference(const char* input, BString& normalizedKey)
 }
 
 
+bool
+ConvertVerseReference(const char* key, const char* sourceLocale,
+	const char* sourceVersification, const char* targetLocale,
+	const char* targetVersification, BString& outText)
+{
+	VerseKey source;
+	if (sourceLocale != NULL && sourceLocale[0] != '\0')
+		source.setLocale(sourceLocale);
+	source.setVersificationSystem(sourceVersification);
+	source.setText(key);
+	if (source.popError() != 0)
+		return false;
+
+	VerseKey target;
+	if (targetLocale != NULL && targetLocale[0] != '\0')
+		target.setLocale(targetLocale);
+	target.setVersificationSystem(targetVersification);
+	target.positionFrom(source);
+
+	outText = target.getText();
+	return true;
+}
+
+
+void
+SplitVerseRangeSuffix(const BString& reference, BString& base, BString& suffix)
+{
+	base = reference;
+	suffix = "";
+
+	int32 dash = reference.FindLast('-');
+	if (dash < 0)
+		return;
+	bool isRangeEnd = dash + 1 < reference.Length();
+	for (int32 i = dash + 1; i < reference.Length() && isRangeEnd; i++) {
+		if (!isdigit((unsigned char)reference.ByteAt(i)))
+			isRangeEnd = false;
+	}
+	if (!isRangeEnd)
+		return;
+
+	reference.CopyInto(suffix, dash, reference.Length() - dash);
+	base.Truncate(dash);
+}
+
+
 std::vector<TextReference>
 FindReferencesInText(const char* text)
 {
