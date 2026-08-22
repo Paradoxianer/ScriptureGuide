@@ -14,8 +14,6 @@
 #include <File.h>
 #include <FindDirectory.h>
 #include <InterfaceDefs.h>
-#include <Language.h>
-#include <Locale.h>
 #include <MimeType.h>
 #include <NodeInfo.h>
 #include <Path.h>
@@ -36,6 +34,7 @@ static const char* kAttrCode = "SG:code";
 static const char* kAttrTags = "SG:tags";
 
 static const char* kHeaderVersification = "# Versification: ";
+static const char* kHeaderLocale = "# Locale: ";
 
 
 BookmarkFile::BookmarkFile()
@@ -90,6 +89,7 @@ BookmarkFile::SetTo(const char* path)
 	}
 
 	fVersification = "";
+	fLocale = "";
 	fReference = "";
 
 	int32 lineStart = 0;
@@ -103,6 +103,8 @@ BookmarkFile::SetTo(const char* path)
 
 		if (line.StartsWith(kHeaderVersification))
 			fVersification = line.String() + strlen(kHeaderVersification);
+		else if (line.StartsWith(kHeaderLocale))
+			fLocale = line.String() + strlen(kHeaderLocale);
 		else {
 			BString trimmed(line);
 			trimmed.Trim();
@@ -157,7 +159,7 @@ _SanitizeBookmarkName(const char* name)
 
 status_t
 BookmarkFile::CreateNew(const char* collectionPath, const char* referenceLine,
-	const char* versification, int32 position)
+	const char* versification, const char* locale, int32 position)
 {
 	EnsureMimeTypeRegistered();
 
@@ -190,6 +192,7 @@ BookmarkFile::CreateNew(const char* collectionPath, const char* referenceLine,
 	fPath = path.Path();
 	fReference = referenceLine;
 	fVersification = versification != NULL ? versification : "";
+	fLocale = locale != NULL ? locale : "";
 	fPosition = position;
 	fTags = "";
 
@@ -227,13 +230,17 @@ BookmarkFile::SetTags(const char* tags)
 // collide on the same code -- confirmed by inspection of VerseKey's own
 // getBook(), which numbers books WITHIN a testament, not across both.
 static BString
-ComputeBookmarkCode(const char* reference, const char* versification)
+ComputeBookmarkCode(const char* reference, const char* versification,
+	const char* locale)
 {
-	BLanguage language;
-	BLocale::Default()->GetLanguage(&language);
-
 	sword::VerseKey key;
-	key.setLocale(language.Code());
+	// The bookmark's OWN recorded locale, not whatever the system's
+	// current one happens to be -- Save() runs again on every reorder
+	// (see SGVerseListWindow::_MoveRow()), long after the reference was
+	// first written, so the current locale at THAT moment has no reason
+	// to still match the one the reference's own book name is in.
+	if (locale != NULL && locale[0] != '\0')
+		key.setLocale(locale);
 	key.setVersificationSystem(
 		versification != NULL && versification[0] != '\0'
 			? versification : "KJV");
@@ -265,13 +272,18 @@ BookmarkFile::Save()
 	BString body;
 	body << "# Versification: "
 		<< (fVersification.IsEmpty() ? "KJV" : fVersification) << "\n";
+	// Omitted when empty (English/no locale -- VerseKey's own default
+	// needs no explicit marker to round-trip correctly), same convention
+	// VerseListFile's own optional "# Description:" line already uses.
+	if (!fLocale.IsEmpty())
+		body << "# Locale: " << fLocale << "\n";
 	body << fReference;
 	file.Write(body.String(), body.Length());
 
 	file.WriteAttr(kAttrPosition, B_INT32_TYPE, 0, &fPosition,
 		sizeof(fPosition));
 	BString code = ComputeBookmarkCode(fReference.String(),
-		fVersification.String());
+		fVersification.String(), fLocale.String());
 	file.WriteAttrString(kAttrCode, &code);
 	file.WriteAttrString(kAttrTags, &fTags);
 

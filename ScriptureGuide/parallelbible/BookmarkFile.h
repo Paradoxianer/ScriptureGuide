@@ -33,13 +33,25 @@
 // panel already understands, once each reference has its own file to tag.
 //
 // Content vs. attributes follows VerseListFile's own established split:
-// the reference and its declared versification live in the file's
-// content (portable off BFS, matching the same #46-safety reasoning
-// VerseListFile's own header comment already gives), Position/Code/Tags
-// are attribute-only -- none of the three are needed to know WHAT
-// reference this is, only how to sort/find it within its collection, so
-// losing them on a non-BFS copy is an acceptable degradation the actual
-// reference text never has.
+// the reference, its declared versification AND its declared locale live
+// in the file's content (portable off BFS, matching the same #46-safety
+// reasoning VerseListFile's own header comment already gives);
+// Position/Code/Tags are attribute-only -- none of the three are needed
+// to know WHAT reference this is, only how to sort/find it within its
+// collection, so losing them on a non-BFS copy is an acceptable
+// degradation the actual reference text never has.
+//
+// The reference is stored in whatever locale was active when it was
+// written (e.g. German "Johannes 3:12-16"), NOT forced into English --
+// a real user's own point: a German reader should see German book names
+// on disk, in Tracker, everywhere, not an English-only canonical form.
+// Locale is recorded alongside specifically so that stays portable: a
+// bookmark's own reference has to be re-parsed with ITS OWN locale, not
+// whatever locale happens to be active on whichever system opens it
+// later (confirmed empirically that VerseKey::setText() fails outright
+// on a localized book name under the wrong locale, or none at all) --
+// see SGVerseListWindow::_NavigateToRow(), the one place this actually
+// gets re-parsed back into a key.
 class BookmarkFile {
 public:
 							BookmarkFile();
@@ -50,10 +62,14 @@ public:
 			// Creates a new bookmark file inside `collectionPath`, named
 			// after the sanitized reference text, with a numbered-
 			// collision fallback identical to VerseListFile::CreateNew()'s
-			// own. Writes immediately.
+			// own. Writes immediately. `locale` is whatever produced
+			// `referenceLine`'s own book name (a BLanguage::Code(), e.g.
+			// "de") -- empty means English/no locale, VerseKey's own
+			// default.
 			status_t		CreateNew(const char* collectionPath,
 										const char* referenceLine,
 										const char* versification,
+										const char* locale,
 										int32 position);
 
 			const char*		Path() const
@@ -62,6 +78,8 @@ public:
 									{ return fReference.String(); }
 			const char*		Versification() const
 									{ return fVersification.String(); }
+			const char*		Locale() const
+									{ return fLocale.String(); }
 			int32			Position() const
 									{ return fPosition; }
 			// Comma-separated -- deliberately a plain string, not a
@@ -138,6 +156,7 @@ private:
 			BString			fPath;
 			BString			fReference;
 			BString			fVersification;
+			BString			fLocale;
 			int32			fPosition;
 			BString			fTags;
 };
