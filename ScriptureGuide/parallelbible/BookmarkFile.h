@@ -120,10 +120,13 @@ public:
 			// instead of a line within a shared file.
 			status_t		Remove();
 
-			// settings/scriptureguide/library/verselists/ -- same
-			// physical directory VerseListFile::ListsDirectory() already
-			// used, kept as-is so a user's existing collection folders
-			// keep working rather than needing to move anything.
+			// settings/scriptureguide/verselists/ -- deliberately one
+			// level shallower than VerseListFile::ListsDirectory()'s own
+			// settings/scriptureguide/library/verselists/: nothing has
+			// shipped with real bookmark files under the old path yet
+			// (#55 hadn't reached any real user before this changed), so
+			// there was nothing to preserve by keeping the extra
+			// "library" segment around.
 			static BString	RootDirectory();
 
 			// Every bookmark file directly inside `collectionPath` (NOT

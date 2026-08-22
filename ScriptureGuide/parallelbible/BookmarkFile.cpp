@@ -52,7 +52,6 @@ BookmarkFile::RootDirectory()
 	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path, true) != B_OK)
 		return BString();
 	path.Append("scriptureguide");
-	path.Append("library");
 	path.Append("verselists");
 	create_directory(path.Path(), 0755);
 	return BString(path.Path());
