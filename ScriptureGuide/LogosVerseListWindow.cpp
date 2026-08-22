@@ -1,5 +1,7 @@
 #include "LogosVerseListWindow.h"
 
+#include <ctype.h>
+
 #include <Alert.h>
 #include <Box.h>
 #include <Button.h>
@@ -277,6 +279,7 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fRowScroll(NULL),
 	fOpenPanel(NULL),
 	fSaveAsPanel(NULL),
+	fImportPanel(NULL),
 	fDescriptionSaveRunner(NULL),
 	fMessenger(owner)
 {
@@ -325,6 +328,7 @@ SGVerseListWindow::~SGVerseListWindow()
 
 	delete fOpenPanel;
 	delete fSaveAsPanel;
+	delete fImportPanel;
 	delete fMessenger;
 }
 
@@ -450,6 +454,9 @@ SGVerseListWindow::_BuildMenuBar()
 		new BMessage(VLIST_NEW), 'N'));
 	fileMenu->AddItem(new BMenuItem(B_TRANSLATE("Open Verse List" B_UTF8_ELLIPSIS),
 		new BMessage(VLIST_OPEN_PANEL), 'O'));
+	fileMenu->AddItem(new BMenuItem(
+		B_TRANSLATE("Import Text List" B_UTF8_ELLIPSIS),
+		new BMessage(VLIST_IMPORT_PANEL)));
 	fileMenu->AddItem(new BMenuItem(B_TRANSLATE("Close Verse List"),
 		new BMessage(VLIST_CLOSE), 'W'));
 	fileMenu->AddSeparatorItem();
@@ -597,6 +604,20 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case VLIST_IMPORT_PANEL:
+			_ImportPanel();
+			break;
+
+		case VLIST_IMPORT_RESULT:
+		{
+			entry_ref ref;
+			if (message->FindRef("refs", &ref) == B_OK) {
+				BPath path(&ref);
+				_ImportTextFile(path.Path());
+			}
+			break;
+		}
+
 		case VLIST_NAV_SELECT:
 		{
 			BString path;
@@ -705,6 +726,12 @@ SGVerseListWindow::_BuildFilePanels()
 	fSaveAsPanel = new BFilePanel(B_SAVE_PANEL, new BMessenger(this), &dirRef,
 		B_DIRECTORY_NODE, false, new BMessage(VLIST_SAVE_AS_RESULT));
 	fSaveAsPanel->SetButtonLabel(B_DEFAULT_BUTTON, B_TRANSLATE("Save"));
+
+	// B_FILE_NODE here, unlike the two panels above -- picking the
+	// plain-text file to import, not a collection folder.
+	fImportPanel = new BFilePanel(B_OPEN_PANEL, new BMessenger(this), NULL,
+		B_FILE_NODE, false, new BMessage(VLIST_IMPORT_RESULT));
+	fImportPanel->SetButtonLabel(B_DEFAULT_BUTTON, B_TRANSLATE("Import"));
 }
 
 
@@ -817,6 +844,111 @@ void
 SGVerseListWindow::_OpenList(const char* path)
 {
 	_LoadFile(path);
+}
+
+
+void
+SGVerseListWindow::_ImportPanel()
+{
+	if (fImportPanel != NULL)
+		fImportPanel->Show();
+}
+
+
+// Title-cases each word of a filename-derived collection name
+// ("JONATHAN LEVITE" -> "Jonathan Levite") -- the real end user's own
+// sample files are all-caps, a DOS-era naming habit that would
+// otherwise become the collection's visible name verbatim.
+static BString
+TitleCaseWords(const BString& raw)
+{
+	BString result(raw);
+	bool startOfWord = true;
+	for (int32 i = 0; i < result.Length(); i++) {
+		char c = result.ByteAt(i);
+		if (c == ' ' || c == '_' || c == '-') {
+			startOfWord = true;
+			continue;
+		}
+		result.SetByteAt(i, startOfWord ? toupper(c) : tolower(c));
+		startOfWord = false;
+	}
+	return result;
+}
+
+
+// #68: imports a plain-text file, one reference per line, no header --
+// the shape confirmed against a real sample (AARON.TXT) from the same
+// legacy program that inspired #47/#55, one line per reference like
+// "EXO 4:14". Each line is parsed directly by sword::VerseKey::setText(),
+// which -- confirmed empirically on a full set of sample lines spanning
+// Genesis through Hebrews -- already accepts this exact abbreviation
+// style with no normalization needed. A line that doesn't parse is
+// skipped rather than aborting the whole import; there's no header line
+// declaring a versification, so KJV (this format's own numbering) is
+// assumed throughout, the same default _CollectionVersification() uses
+// for a brand-new, still-empty collection.
+void
+SGVerseListWindow::_ImportTextFile(const char* path)
+{
+	BFile file(path, B_READ_ONLY);
+	if (file.InitCheck() != B_OK)
+		return;
+
+	off_t size = 0;
+	file.GetSize(&size);
+	if (size <= 0)
+		return;
+
+	BString content;
+	char* buffer = content.LockBuffer((int32)size);
+	ssize_t bytesRead = file.Read(buffer, (size_t)size);
+	content.UnlockBuffer(bytesRead > 0 ? bytesRead : 0);
+	if (content.IsEmpty())
+		return;
+
+	BPath sourcePath(path);
+	BString name(sourcePath.Leaf());
+	int32 dot = name.FindLast('.');
+	if (dot > 0)
+		name.Truncate(dot);
+	name = TitleCaseWords(name);
+	if (name.IsEmpty())
+		return;
+
+	BString collectionPath = BookmarkFile::CreateCollection(NULL,
+		name.String());
+	if (collectionPath.IsEmpty())
+		return;
+
+	int32 position = 0;
+	int32 lineStart = 0;
+	while (lineStart <= content.Length()) {
+		int32 lineEnd = content.FindFirst('\n', lineStart);
+		if (lineEnd < 0)
+			lineEnd = content.Length();
+
+		BString line;
+		content.CopyInto(line, lineStart, lineEnd - lineStart);
+		line.Trim(); // also strips a trailing \r from a CRLF export
+
+		if (!line.IsEmpty()) {
+			sword::VerseKey key;
+			key.setVersificationSystem("KJV");
+			key.setText(line.String());
+			if (key.popError() == 0) {
+				BookmarkFile bookmark;
+				bookmark.CreateNew(collectionPath.String(), key.getText(),
+					"KJV", "", position);
+				position++;
+			}
+		}
+
+		lineStart = lineEnd + 1;
+	}
+
+	_LoadFile(collectionPath.String());
+	_RebuildNavigationMenu();
 }
 
 

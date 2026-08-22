@@ -44,6 +44,15 @@ class TextDocumentView;
 // folder in place, unlike Save As... (which duplicates it elsewhere).
 #define VLIST_RENAME			'VLrn'
 #define VLIST_RENAME_RESULT	'VLrR'
+// File > Import Text List... (#68) -- one reference per line, no header,
+// same shape as the real end user's own WORDsearch/QuickVerse-style
+// exports (confirmed against real sample files: AARON.TXT, one OSIS-
+// style abbreviation like "EXO 4:14" per line). See _ImportTextFile()
+// in the .cpp for why this needed no format-specific parsing beyond
+// splitting lines -- sword::VerseKey::setText() already accepts these
+// abbreviations directly.
+#define VLIST_IMPORT_PANEL		'VLip'
+#define VLIST_IMPORT_RESULT	'VLir'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -117,6 +126,12 @@ private:
 			void			_CreateNewList(const char* name);
 			void			_OpenList(const char* path);
 			void			_OpenPanel();
+			// #68: a plain-text file, one reference per line (no
+			// header) -- creates a new top-level collection named after
+			// the file and opens it. See the .cpp for the exact parsing
+			// and what happens to a line that doesn't parse.
+			void			_ImportPanel();
+			void			_ImportTextFile(const char* path);
 			void			_CloseList();
 			void			_SaveList();
 			void			_SaveListAs();
@@ -228,6 +243,10 @@ private:
 
 			BFilePanel*				fOpenPanel;
 			BFilePanel*				fSaveAsPanel;
+			// B_FILE_NODE, unlike the two above -- an import source is
+			// an actual file (the plain-text export), not a collection
+			// folder.
+			BFilePanel*				fImportPanel;
 
 			class DescriptionSaveListener;
 			// Kept as the ref-counted wrapper (not just the raw listener
