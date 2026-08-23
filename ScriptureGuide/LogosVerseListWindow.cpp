@@ -171,6 +171,41 @@ public:
 		BOutlineListView::KeyDown(bytes, numBytes);
 	}
 
+	// A real end user's own testing feedback: an empty list gives no
+	// hint at all that dragging a reference in is how it's filled, or
+	// that Edit > Add Reference... exists as the alternative. Two
+	// short, centered lines drawn directly onto the empty background,
+	// same idiom as a placeholder in an empty search-results list would
+	// use -- nothing to clean up, they just stop being drawn once
+	// CountItems() > 0.
+	virtual void Draw(BRect updateRect)
+	{
+		BOutlineListView::Draw(updateRect);
+		if (CountItems() > 0)
+			return;
+
+		BString line1(B_TRANSLATE("Drag a Bible reference here,"));
+		BString line2(B_TRANSLATE(
+			"or use Edit > Add Reference" B_UTF8_ELLIPSIS));
+
+		SetHighColor(tint_color(ViewColor(), B_DARKEN_2_TINT));
+		SetLowColor(ViewColor());
+		font_height fh;
+		GetFontHeight(&fh);
+		float lineHeight = fh.ascent + fh.descent + fh.leading;
+		BRect bounds = Bounds();
+		float y = bounds.Height() / 2 - lineHeight / 2 + fh.ascent;
+
+		float width1 = StringWidth(line1.String());
+		DrawString(line1.String(),
+			BPoint(std::max(4.0f, (bounds.Width() - width1) / 2), y));
+
+		float width2 = StringWidth(line2.String());
+		DrawString(line2.String(),
+			BPoint(std::max(4.0f, (bounds.Width() - width2) / 2),
+				y + lineHeight));
+	}
+
 	virtual void MessageReceived(BMessage* message)
 	{
 		if (message->what == VLIST_REMOVE_ROW) {
@@ -178,6 +213,14 @@ public:
 			if (message->FindInt32("index", &index) == B_OK
 				&& fOwner != NULL) {
 				fOwner->_RemoveRow(index);
+			}
+			return;
+		}
+		if (message->what == VLIST_EDIT_REFERENCE) {
+			int32 index;
+			if (message->FindInt32("index", &index) == B_OK
+				&& fOwner != NULL) {
+				fOwner->_StartEditReference(index);
 			}
 			return;
 		}
@@ -220,6 +263,11 @@ private:
 	void _ShowRemoveMenu(int32 index, BPoint screenPoint)
 	{
 		BPopUpMenu* menu = new BPopUpMenu("removeRow", false, false);
+		BMessage* edit = new BMessage(VLIST_EDIT_REFERENCE);
+		edit->AddInt32("index", index);
+		menu->AddItem(new BMenuItem(
+			B_TRANSLATE("Edit Reference" B_UTF8_ELLIPSIS), edit));
+		menu->AddSeparatorItem();
 		BMessage* remove = new BMessage(VLIST_REMOVE_ROW);
 		remove->AddInt32("index", index);
 		menu->AddItem(new BMenuItem(B_TRANSLATE("Remove"), remove));
@@ -270,6 +318,7 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fSaveItem(NULL),
 	fSaveAsItem(NULL),
 	fDeleteItem(NULL),
+	fAddReferenceItem(NULL),
 	fMoveUpItem(NULL),
 	fMoveDownItem(NULL),
 	fNavigationMenu(NULL),
@@ -475,6 +524,11 @@ SGVerseListWindow::_BuildMenuBar()
 	menuBar->AddItem(fileMenu);
 
 	BMenu* editMenu = new BMenu(B_TRANSLATE("Edit"));
+	fAddReferenceItem = new BMenuItem(
+		B_TRANSLATE("Add Reference" B_UTF8_ELLIPSIS),
+		new BMessage(VLIST_ADD_REFERENCE), 'R');
+	editMenu->AddItem(fAddReferenceItem);
+	editMenu->AddSeparatorItem();
 	fMoveUpItem = new BMenuItem(B_TRANSLATE("Move Up"),
 		new BMessage(VLIST_MOVE_UP), B_UP_ARROW);
 	editMenu->AddItem(fMoveUpItem);
@@ -502,14 +556,19 @@ static const uint32 kNamePromptOK = 'VLpo';
 
 class VerseListNamePromptWindow : public BWindow {
 public:
-	// `windowTitle`/`buttonLabel`/`initialName` default to the "New
-	// Verse List" shape when NULL/empty -- _StartRename() passes real
-	// ones instead, pre-filling the field with the collection's current
-	// name and selecting it, so typing immediately replaces it (matching
-	// how Tracker's own inline rename already behaves).
+	// `windowTitle`/`buttonLabel`/`initialName`/`fieldLabel` default to
+	// the "New Verse List" shape when NULL/empty -- _StartRename() and
+	// _AddReference()/_StartEditReference() pass real ones instead,
+	// pre-filling the field with whatever it's replacing and selecting
+	// it, so typing immediately replaces it (matching how Tracker's own
+	// inline rename already behaves). `index`, when not negative, rides
+	// along in the result message as-is -- _EditReference() needs to
+	// know which row it's rewriting, which row list.MouseDown() gave to
+	// the context menu that opened this window in the first place.
 	VerseListNamePromptWindow(BMessenger target, uint32 resultWhat,
 		const char* windowTitle = NULL, const char* initialName = NULL,
-		const char* buttonLabel = NULL)
+		const char* buttonLabel = NULL, const char* fieldLabel = NULL,
+		int32 index = -1)
 		:
 		BWindow(BRect(120, 120, 460, 210),
 			windowTitle != NULL ? windowTitle
@@ -517,9 +576,11 @@ public:
 			B_TITLED_WINDOW_LOOK, B_MODAL_APP_WINDOW_FEEL,
 			B_NOT_ZOOMABLE | B_CLOSE_ON_ESCAPE | B_AUTO_UPDATE_SIZE_LIMITS),
 		fTarget(target),
-		fResultWhat(resultWhat)
+		fResultWhat(resultWhat),
+		fIndex(index)
 	{
-		fNameControl = new BTextControl("name", B_TRANSLATE("Name:"),
+		fNameControl = new BTextControl("name",
+			fieldLabel != NULL ? fieldLabel : B_TRANSLATE("Name:"),
 			initialName != NULL ? initialName : "", new BMessage(kNamePromptOK));
 		BButton* okButton = new BButton("ok", buttonLabel != NULL
 			? buttonLabel : B_TRANSLATE("Create"), new BMessage(kNamePromptOK));
@@ -547,6 +608,8 @@ public:
 			if (!name.IsEmpty()) {
 				BMessage result(fResultWhat);
 				result.AddString("name", name);
+				if (fIndex >= 0)
+					result.AddInt32("index", fIndex);
 				fTarget.SendMessage(&result);
 				Quit();
 			}
@@ -558,6 +621,7 @@ public:
 private:
 	BMessenger		fTarget;
 	uint32			fResultWhat;
+	int32			fIndex;
 	BTextControl*	fNameControl;
 };
 
@@ -614,6 +678,29 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			if (message->FindRef("refs", &ref) == B_OK) {
 				BPath path(&ref);
 				_ImportTextFile(path.Path());
+			}
+			break;
+		}
+
+		case VLIST_ADD_REFERENCE:
+			_AddReference();
+			break;
+
+		case VLIST_ADD_REFERENCE_RESULT:
+		{
+			BString text;
+			if (message->FindString("name", &text) == B_OK)
+				_CreateReference(text.String());
+			break;
+		}
+
+		case VLIST_EDIT_REFERENCE_RESULT:
+		{
+			BString text;
+			int32 index;
+			if (message->FindString("name", &text) == B_OK
+				&& message->FindInt32("index", &index) == B_OK) {
+				_EditReference(index, text.String());
 			}
 			break;
 		}
@@ -829,6 +916,106 @@ SGVerseListWindow::_RenameList(const char* name)
 
 	_UpdateTitle();
 	_RebuildNavigationMenu();
+}
+
+
+void
+SGVerseListWindow::_AddReference()
+{
+	if (!fHasOpenFile)
+		return;
+
+	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
+		BMessenger(this), VLIST_ADD_REFERENCE_RESULT,
+		B_TRANSLATE("Add Reference"), NULL, B_TRANSLATE("Add"),
+		B_TRANSLATE("Reference:"));
+	prompt->Show();
+}
+
+
+// Shared by _CreateReference()/_EditReference(): the typed text is
+// whatever the user just wrote in their own current locale (the same
+// universal Go to / Search box already accepts, e.g. English "John
+// 3:16" or German "Johannes 3, 16") -- ConvertVerseReference() with the
+// same locale/versification on both sides both validates it (false if
+// it doesn't parse as a reference at all) and re-renders it in
+// VerseKey's own canonical form, the same normalization a dropped
+// reference already gets.
+static bool
+_NormalizeTypedReference(const char* text, BString& versification,
+	BString& locale, BString& normalized)
+{
+	locale = CurrentLocaleCode();
+	return ConvertVerseReference(text, locale.String(), versification.String(),
+		locale.String(), versification.String(), normalized);
+}
+
+
+void
+SGVerseListWindow::_CreateReference(const char* text)
+{
+	if (!fHasOpenFile)
+		return;
+
+	BString versification = _CollectionVersification();
+	BString locale, normalized;
+	if (!_NormalizeTypedReference(text, versification, locale, normalized)) {
+		BString message(B_TRANSLATE("\"%text%\" isn't a Bible reference "
+			"ScriptureGuide recognizes. Try something like \"John 3:16\" "
+			"or \"Genesis 1:1-3\"."));
+		message.ReplaceFirst("%text%", text);
+		BAlert* alert = new BAlert(B_TRANSLATE("Add Reference"),
+			message.String(), B_TRANSLATE("OK"));
+		alert->Go();
+		return;
+	}
+
+	BookmarkFile bookmark;
+	if (bookmark.CreateNew(fCollectionPath.String(), normalized.String(),
+			versification.String(), locale.String(),
+			(int32)fBookmarks.size()) == B_OK) {
+		fBookmarks.push_back(bookmark);
+		_RebuildRows();
+	}
+}
+
+
+void
+SGVerseListWindow::_StartEditReference(int32 index)
+{
+	if (!fHasOpenFile || index < 0 || index >= (int32)fBookmarks.size())
+		return;
+
+	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
+		BMessenger(this), VLIST_EDIT_REFERENCE_RESULT,
+		B_TRANSLATE("Edit Reference"), fBookmarks[index].Reference(),
+		B_TRANSLATE("Save"), B_TRANSLATE("Reference:"), index);
+	prompt->Show();
+}
+
+
+void
+SGVerseListWindow::_EditReference(int32 index, const char* text)
+{
+	if (!fHasOpenFile || index < 0 || index >= (int32)fBookmarks.size())
+		return;
+
+	BString versification = _CollectionVersification();
+	BString locale, normalized;
+	if (!_NormalizeTypedReference(text, versification, locale, normalized)) {
+		BString message(B_TRANSLATE("\"%text%\" isn't a Bible reference "
+			"ScriptureGuide recognizes. Try something like \"John 3:16\" "
+			"or \"Genesis 1:1-3\"."));
+		message.ReplaceFirst("%text%", text);
+		BAlert* alert = new BAlert(B_TRANSLATE("Edit Reference"),
+			message.String(), B_TRANSLATE("OK"));
+		alert->Go();
+		return;
+	}
+
+	fBookmarks[index].SetReference(normalized.String());
+	if (fBookmarks[index].Save() == B_OK)
+		_RebuildRows();
 }
 
 
@@ -1237,6 +1424,7 @@ SGVerseListWindow::_UpdateTitle()
 	fSaveItem->SetEnabled(onList);
 	fSaveAsItem->SetEnabled(onList);
 	fDeleteItem->SetEnabled(onList);
+	fAddReferenceItem->SetEnabled(onList);
 	fMoveUpItem->SetEnabled(onList);
 	fMoveDownItem->SetEnabled(onList);
 }

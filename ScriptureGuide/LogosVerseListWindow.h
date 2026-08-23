@@ -53,6 +53,17 @@ class TextDocumentView;
 // abbreviations directly.
 #define VLIST_IMPORT_PANEL		'VLip'
 #define VLIST_IMPORT_RESULT	'VLir'
+// Edit > Add Reference... and a row's own right-click "Edit Reference..."
+// -- a real end user's own testing feedback: drag-and-drop is the only
+// way in today, and nothing in the window says so. Both open the same
+// prompt window (typed text, not a book/chapter/verse picker -- reuses
+// the exact validation the universal Go to / Search box already has,
+// see _CreateReference()/_EditReference() in the .cpp), just with
+// different titles/pre-filled text and a different result handler.
+#define VLIST_ADD_REFERENCE		'VLar'
+#define VLIST_ADD_REFERENCE_RESULT	'VLaR'
+#define VLIST_EDIT_REFERENCE		'VLer'
+#define VLIST_EDIT_REFERENCE_RESULT	'VLeR'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -113,6 +124,11 @@ public:
 			// unlike File > Delete File..., which removes the whole
 			// list.
 			void			_RemoveRow(int32 index);
+			// Same not-a-friend reasoning: the row list's own right-click
+			// "Edit Reference..." item. Opens the prompt window;
+			// _EditReference() (private, called once the prompt returns
+			// a result) does the actual rewrite.
+			void			_StartEditReference(int32 index);
 
 private:
 			void			_BuildGUI();
@@ -142,6 +158,18 @@ private:
 			// place once it returns.
 			void			_StartRename();
 			void			_RenameList(const char* name);
+
+			// Edit > Add Reference... and (via the public
+			// _StartEditReference() above) a row's own right-click "Edit
+			// Reference...". Both open the same prompt window;
+			// _CreateReference() appends a new bookmark at the end,
+			// _EditReference() rewrites an existing row in place without
+			// moving it. Either shows an alert instead, rather than
+			// silently doing nothing, when the typed text doesn't parse
+			// as a reference.
+			void			_AddReference();
+			void			_CreateReference(const char* text);
+			void			_EditReference(int32 index, const char* text);
 
 			// Loads `path` (a collection FOLDER, one bookmark file per
 			// reference -- see BookmarkFile) into the window (list rows +
@@ -226,6 +254,7 @@ private:
 			BMenuItem*				fSaveItem;
 			BMenuItem*				fSaveAsItem;
 			BMenuItem*				fDeleteItem;
+			BMenuItem*				fAddReferenceItem;
 			BMenuItem*				fMoveUpItem;
 			BMenuItem*				fMoveDownItem;
 			BMenu*					fNavigationMenu;
