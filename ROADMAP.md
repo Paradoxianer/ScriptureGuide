@@ -58,15 +58,23 @@ HaikuArchives#29. Only worth building once highlighting exists, and cheap
 once it does, because it is a view over the store rather than a new
 mechanism.
 
-## Right after 1.3.0: importing the real end user's own files
+## Done in 1.3.1
 
 [#68](https://github.com/Paradoxianer/ScriptureGuide/issues/68) — the
 whole reason verse lists took the shape they did: a real end user's
-existing WORDsearch-style `.LIB` files (bare `GEN 1:1` references, no
-header, hundreds of them in self-chosen subfolders) should drop straight
-into a collection folder as bookmark files, one file read in, one folder
-written out. Planned for 1.3.1 rather than bundled into 1.3.0 itself, so
-the storage format had a release to settle on first.
+existing library files, a plain-text export from the source program
+(QuickVerse/Bible Research Systems), one reference per line, no header.
+File > Import Text List... reads that straight into a new collection.
+The program's own *binary* `.lib` format stays unreverse-engineered, but
+isn't blocking anything now that the text-export path works.
+
+Also landed alongside it, from the real end user's own testing:
+bookmark storage now reads reference/versification/locale from
+attributes first (Tracker-visible columns), falling back to -- and
+self-healing from -- the plain-text mirror only when those attributes
+are missing.
+
+## Next up: 1.4.0
 
 [#56](https://github.com/Paradoxianer/ScriptureGuide/issues/56) (inline
 "New reference"/"New sub-collection" items in the Go to List menu) and

@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.3.1 (test release)
+
+### Import a plain-text reference list
+
+File > Import Text List... in the verse list window reads a plain-text
+file, one reference per line, no header, and creates a new collection
+named after the file. Confirmed against a real sample from a QuickVerse/
+Bible Research Systems export (OSIS-style abbreviations like
+`EXO 4:14`) -- `sword::VerseKey` already accepts that abbreviation style
+directly, no conversion needed. A line that fails to parse is skipped
+rather than aborting the whole import.
+
+### Bookmark storage: attributes are now the source of truth
+
+Reference, versification and locale are read from `SG:reference`/
+`SG:versification`/`SG:locale` attributes first, matching how Position/
+Code/Tags already worked -- and, new this release, all three are visible
+as real Tracker columns. The file's plain-text content survives as a
+mirror (clearly labeled as such), regenerated on every save; it is only
+ever read back if the attributes themselves are missing, e.g. a bookmark
+file copied in from outside BFS -- and once that fallback runs, the
+recovered values are written back as attributes so it only has to happen
+once per file.
+
 ## 1.3.0 (test release)
 
 ### Verse lists
