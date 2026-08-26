@@ -559,11 +559,20 @@ SGVerseListWindow::_BuildMenuBar()
 // utility windows (e.g. SGDictionaryWindow): a non-modal BWindow that
 // posts its result back via BMessenger and closes itself, rather than a
 // blocking dialog (nothing in this app has one).
+// Forward declaration -- defined further down, alongside its other user
+// (_RebuildNavigationMenu()'s "Go to List" menu), but VerseListNamePromptWindow
+// below needs it too, for its own location-picker popup.
+static void PopulateCollectionMenu(BMenu* menu, BHandler* target,
+	const char* path, uint32 what, const char* selfLabel);
+
+
 static const uint32 kNamePromptOK = 'VLpo';
-// #97: the optional location row's own "Choose..." button and the
-// B_DIRECTORY_NODE BFilePanel it opens.
+// #97: the optional location row's own "Choose..." button, which pops up
+// a cascading collection menu (same idiom as "Go to List", see
+// PopulateCollectionMenu()) rather than a file panel -- direct selection
+// from the same tree the user already navigates the app with.
 static const uint32 kLocationChoose = 'VLlc';
-static const uint32 kLocationResult = 'VLlr';
+static const uint32 kLocationMenuSelect = 'VLlm';
 
 class VerseListNamePromptWindow : public BWindow {
 public:
@@ -578,13 +587,12 @@ public:
 	// the context menu that opened this window in the first place.
 	//
 	// `showLocation` (#97) adds a second row: a read-only path display
-	// plus a "Choose..." button opening a native B_DIRECTORY_NODE
-	// BFilePanel, rooted at the verse-list tree -- Haiku's own file
-	// panel already has a "New Folder" button, so this covers both
-	// "put it in an existing sub-collection" and "put it in one that
-	// doesn't exist yet" without this window needing to reinvent
-	// either. Only _NewList() and the "nothing open" half of Import
-	// pass true; renaming/editing a reference has no location to pick.
+	// plus a "Choose..." button that pops up a cascading collection
+	// menu -- the same PopulateCollectionMenu() tree "Go to List" shows,
+	// so picking a destination is direct selection from the existing
+	// folder structure, not a separate file-panel dialog. Only
+	// _NewList() and the "nothing open" half of Import pass true;
+	// renaming/editing a reference has no location to pick.
 	VerseListNamePromptWindow(BMessenger target, uint32 resultWhat,
 		const char* windowTitle = NULL, const char* initialName = NULL,
 		const char* buttonLabel = NULL, const char* fieldLabel = NULL,
@@ -599,8 +607,7 @@ public:
 		fResultWhat(resultWhat),
 		fIndex(index),
 		fLocationPath(BookmarkFile::RootDirectory()),
-		fLocationView(NULL),
-		fLocationPanel(NULL)
+		fLocationView(NULL)
 	{
 		fNameControl = new BTextControl("name",
 			fieldLabel != NULL ? fieldLabel : B_TRANSLATE("Name:"),
@@ -658,37 +665,41 @@ public:
 			return;
 		}
 		if (message->what == kLocationChoose) {
-			if (fLocationPanel == NULL) {
-				entry_ref rootRef;
-				BEntry rootEntry(fLocationPath.String());
-				rootEntry.GetRef(&rootRef);
-				fLocationPanel = new BFilePanel(B_OPEN_PANEL,
-					new BMessenger(this), &rootRef, B_DIRECTORY_NODE, false,
-					new BMessage(kLocationResult));
-				fLocationPanel->SetButtonLabel(B_DEFAULT_BUTTON,
-					B_TRANSLATE("Select"));
+			BPopUpMenu* menu = new BPopUpMenu("chooseLocation", false, false);
+			BString root = BookmarkFile::RootDirectory();
+			BMessage* selectRoot = new BMessage(kLocationMenuSelect);
+			selectRoot->AddString("path", root);
+			menu->AddItem(new BMenuItem(
+				B_TRANSLATE("Verse Lists (top level)"), selectRoot));
+			menu->AddSeparatorItem();
+			PopulateCollectionMenu(menu, this, root.String(),
+				kLocationMenuSelect, B_TRANSLATE("(use this collection)"));
+			menu->SetTargetForItems(this);
+			menu->SetAsyncAutoDestruct(true);
+
+			BButton* chooseButton
+				= (BButton*)FindView("chooseLocation");
+			BPoint screenPoint(0, 0);
+			if (chooseButton != NULL) {
+				screenPoint = chooseButton->Frame().LeftBottom();
+				chooseButton->ConvertToScreen(&screenPoint);
 			}
-			fLocationPanel->Show();
+			menu->Go(screenPoint, true, true, true);
 			return;
 		}
-		if (message->what == kLocationResult) {
-			entry_ref ref;
-			if (message->FindRef("refs", &ref) == B_OK) {
-				BPath path(&ref);
-				fLocationPath = path.Path();
+		if (message->what == kLocationMenuSelect) {
+			BString path;
+			if (message->FindString("path", &path) == B_OK) {
+				fLocationPath = path;
 				if (fLocationView != NULL) {
-					fLocationView->SetText(path.Leaf() != NULL
-						? path.Leaf() : fLocationPath.String());
+					BPath bpath(path.String());
+					fLocationView->SetText(bpath.Leaf() != NULL
+						? bpath.Leaf() : fLocationPath.String());
 				}
 			}
 			return;
 		}
 		BWindow::MessageReceived(message);
-	}
-
-	virtual ~VerseListNamePromptWindow()
-	{
-		delete fLocationPanel;
 	}
 
 private:
@@ -698,7 +709,6 @@ private:
 	BTextControl*	fNameControl;
 	BString			fLocationPath;
 	BStringView*	fLocationView;
-	BFilePanel*		fLocationPanel;
 };
 
 
@@ -1535,8 +1545,15 @@ SGVerseListWindow::_UpdateRowActionState()
 // separator, then its children recursed the same way. Every submenu
 // created needs its own SetTargetForItems() call -- unlike a plain
 // BView, it does not inherit targeting from its parent menu.
+//
+// `what`/`selfLabel` are parameterized (#97) so this same tree-walk
+// builds both "Go to List" (VLIST_NAV_SELECT, "open this collection")
+// and the New-List/Import location picker's popup (a different message
+// so the two don't collide, "use this collection" reads better for a
+// destination pick than a navigation).
 static void
-PopulateCollectionMenu(BMenu* menu, BHandler* target, const char* path)
+PopulateCollectionMenu(BMenu* menu, BHandler* target, const char* path,
+	uint32 what, const char* selfLabel)
 {
 	std::vector<BString> names = BookmarkFile::ListCollectionNames(path);
 	for (size_t i = 0; i < names.size(); i++) {
@@ -1546,19 +1563,19 @@ PopulateCollectionMenu(BMenu* menu, BHandler* target, const char* path)
 		std::vector<BString> grandchildren
 			= BookmarkFile::ListCollectionNames(childPath.Path());
 		if (grandchildren.empty()) {
-			BMessage* select = new BMessage(VLIST_NAV_SELECT);
+			BMessage* select = new BMessage(what);
 			select->AddString("path", childPath.Path());
 			menu->AddItem(new BMenuItem(names[i].String(), select));
 			continue;
 		}
 
 		BMenu* submenu = new BMenu(names[i].String());
-		BMessage* selectSelf = new BMessage(VLIST_NAV_SELECT);
+		BMessage* selectSelf = new BMessage(what);
 		selectSelf->AddString("path", childPath.Path());
-		submenu->AddItem(new BMenuItem(
-			B_TRANSLATE("(open this collection)"), selectSelf));
+		submenu->AddItem(new BMenuItem(selfLabel, selectSelf));
 		submenu->AddSeparatorItem();
-		PopulateCollectionMenu(submenu, target, childPath.Path());
+		PopulateCollectionMenu(submenu, target, childPath.Path(), what,
+			selfLabel);
 		submenu->SetTargetForItems(target);
 		menu->AddItem(submenu);
 	}
@@ -1576,7 +1593,8 @@ SGVerseListWindow::_RebuildNavigationMenu()
 	// Every collection is a folder now (#55), nested arbitrarily deep --
 	// see PopulateCollectionMenu()'s own comment.
 	BString root = BookmarkFile::RootDirectory();
-	PopulateCollectionMenu(fNavigationMenu, this, root.String());
+	PopulateCollectionMenu(fNavigationMenu, this, root.String(),
+		VLIST_NAV_SELECT, B_TRANSLATE("(open this collection)"));
 
 	fNavigationMenu->SetTargetForItems(this);
 }
