@@ -107,7 +107,7 @@ private:
 	int					fSearchStart;
 	int					fSearchEnd;
 	BString				fSearchString;
-	vector<const char*>	verseList;
+	vector<BString>	verseList;
 	
 	BMessenger			*fMessenger;
 };

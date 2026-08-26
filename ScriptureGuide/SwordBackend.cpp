@@ -262,48 +262,56 @@ void percentUpdate(char percent, void *userData)
 // searchText: the text to search for
 // scopeFrom: book name to search from
 // scopeTo: book name to search to
-vector<const char*> SGModule::SearchModule(int searchType, int flags, 
+vector<BString> SGModule::SearchModule(int searchType, int flags,
 						const char* searchText, const char* startbook,
 						const char* endbook, BStatusBar* statusBar)
 {
-	vector<const char*> results;
-	
-	
+	vector<BString> results;
+
+
 	int chapter = ChaptersInBook(endbook);
 	int verse = VersesInChapter(endbook, chapter);
-	
+
 	BString searchstr;
 	searchstr << startbook << " 1:1-" << endbook << " " << chapter << ":" << verse;
 	VerseKey parse = "Gen 1:1";
 	BLanguage language;
-	BLocale::Default()->GetLanguage(&language);	
+	BLocale::Default()->GetLanguage(&language);
 	parse.setLocale(language.Code());
 
 	ListKey scope = parse.parseVerseList(searchstr.String(), parse, true);
 	ListKey &listkey = fModule->search(searchText, searchType, flags,
 								&scope, 0, &percentUpdate, statusBar);
-	
+
 	listkey.setPersist(true);
 	fModule->setKey(listkey);
 
+	// BString copies the text immediately -- (const char*)listkey points
+	// into one of a small, rotating pool of buffers SWORD's ListKey/
+	// VerseKey reuses across every hit in this loop, so holding onto the
+	// raw pointer instead of an owned copy means later iterations
+	// silently overwrite earlier hits' text (confirmed empirically: an
+	// "Adam" search's own results shifted and repeated once the pool
+	// wrapped around, well before the caller ever reads the vector back).
 	for (listkey = TOP; !listkey.popError(); listkey++)
-		results.push_back((const char*) listkey);
+		results.push_back(BString((const char*) listkey));
 
 	return results;
 }
 
 
-vector<const char*> SGModule::SearchEntries(const char* searchText)
+vector<BString> SGModule::SearchEntries(const char* searchText)
 {
-	vector<const char*> results;
+	vector<BString> results;
 
 	ListKey &listkey = fModule->search(searchText, -2 /* multiword */,
 		REG_ICASE);
 	listkey.setPersist(true);
 	fModule->setKey(listkey);
 
+	// See SearchModule()'s own comment -- same buffer-reuse bug, same fix.
 	for (listkey = TOP; !listkey.popError(); listkey++)
-		results.push_back((const char*) listkey);
+		results.push_back(BString((const char*) listkey));
 
 	return results;
 }

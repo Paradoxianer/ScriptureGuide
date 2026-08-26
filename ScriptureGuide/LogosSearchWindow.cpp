@@ -435,9 +435,9 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 				BLocale::Default()->GetLanguage(&language);
 				for (uint32 i = 0; i < verseList.size(); i++)
        			{
-					sword::VerseKey myKey = sword::VerseKey(verseList[i]);
+					sword::VerseKey myKey = sword::VerseKey(verseList[i].String());
 					myKey.setLocale(language.Code());
-					BString tmpstr(fCurrentModule->GetVerse(verseList[i]));
+					BString tmpstr(fCurrentModule->GetVerse(verseList[i].String()));
 					searchResults->AddItem(new BibleItem(myKey.getText(), tmpstr.String(), fSearchString.String()));
        			}
 				findButton->SetEnabled(true);

@@ -163,7 +163,17 @@ public:
 
 	void				SetVerse(const char* book, int chapter, int verse);
 	
-	std::vector<const char*>	SearchModule(int searchType, int flags,
+	// Returns owned BStrings, not raw const char*: SWORD's ListKey/
+	// VerseKey text conversion ((const char*)listkey) returns a pointer
+	// into a small, rotating pool of internal buffers shared by every
+	// hit -- confirmed empirically (SG_LOG at both push time and after
+	// the loop showed correct text at push time but shifted/repeated/
+	// garbled text once the pool wrapped around and later hits reused
+	// an earlier hit's buffer). Copying into a BString immediately,
+	// inside the loop, is the fix; a vector<const char*> returned from
+	// this function can never be safe to read after the loop that filled
+	// it has finished.
+	std::vector<BString>	SearchModule(int searchType, int flags,
 								const char* searchText, const char* scopeFrom,
 								const char* scopeTo, BStatusBar* statusBar);
 
@@ -174,8 +184,9 @@ public:
 	// parameter already defaults to "search the whole module" when
 	// omitted. Multiword, case-insensitive; returns each matching
 	// entry's own raw key (suitable for GetEntry()), not the matched
-	// text itself.
-	std::vector<const char*>	SearchEntries(const char* searchText);
+	// text itself. Owned BStrings, same reasoning as SearchModule()
+	// above -- this had the identical buffer-reuse bug.
+	std::vector<BString>	SearchEntries(const char* searchText);
 
 	bool				IsGreek(void);
 	bool				IsHebrew(void);

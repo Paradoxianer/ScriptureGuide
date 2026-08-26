@@ -210,9 +210,9 @@ SGDictionaryWindow::_LookupKey(const char* key)
 	while (fResultList->CountItems() > 0)
 		delete fResultList->RemoveItem((int32)0);
 
-	std::vector<const char*> matches = fCurrentLexicon->SearchEntries(key);
+	std::vector<BString> matches = fCurrentLexicon->SearchEntries(key);
 	for (size_t i = 0; i < matches.size(); i++)
-		fResultList->AddItem(new BStringItem(matches[i]));
+		fResultList->AddItem(new BStringItem(matches[i].String()));
 
 	if (matches.empty()) {
 		_ShowResultsList(false);
