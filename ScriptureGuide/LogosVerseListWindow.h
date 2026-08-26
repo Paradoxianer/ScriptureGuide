@@ -26,11 +26,7 @@ class TextDocumentView;
 // they live here rather than in constants.h.
 #define VLIST_QUIT				'VLqu'
 #define VLIST_NEW				'VLnw'
-#define VLIST_OPEN_PANEL		'VLop'
-#define VLIST_OPEN_RESULT		'VLor'
 #define VLIST_SAVE				'VLsv'
-#define VLIST_SAVE_AS_PANEL		'VLsp'
-#define VLIST_SAVE_AS_RESULT	'VLsr'
 #define VLIST_CLOSE				'VLcl'
 #define VLIST_DELETE			'VLdl'
 #define VLIST_MOVE_UP			'VLmu'
@@ -41,29 +37,48 @@ class TextDocumentView;
 #define VLIST_REMOVE_ROW		'VLrm'
 #define VLIST_DESCRIPTION_CHANGED	'VLdc'
 // Double-click on fNameView (#73) -- renames the open collection's own
-// folder in place, unlike Save As... (which duplicates it elsewhere).
+// folder in place.
 #define VLIST_RENAME			'VLrn'
 #define VLIST_RENAME_RESULT	'VLrR'
 // File > Import Text List... (#68) -- one reference per line, no header,
-// same shape as the real end user's own WORDsearch/QuickVerse-style
-// exports (confirmed against real sample files: AARON.TXT, one OSIS-
-// style abbreviation like "EXO 4:14" per line). See _ImportTextFile()
-// in the .cpp for why this needed no format-specific parsing beyond
-// splitting lines -- sword::VerseKey::setText() already accepts these
+// same shape as a QuickVerse/WORDsearch-style plain-text export
+// (confirmed against a real sample: AARON.TXT, one OSIS-style
+// abbreviation like "EXO 4:14" per line). See _ImportTextFile() in the
+// .cpp for why this needed no format-specific parsing beyond splitting
+// lines -- sword::VerseKey::setText() already accepts these
 // abbreviations directly.
 #define VLIST_IMPORT_PANEL		'VLip'
 #define VLIST_IMPORT_RESULT	'VLir'
+// #97: only sent when nothing was open at import time -- the name/
+// location prompt's own result, distinct from kNamePromptOK (New Verse
+// List's) so the two can't be confused if a prompt somehow outlives its
+// own purpose.
+#define VLIST_IMPORT_NAME_RESULT	'VLin'
+// File > Export Text List... (#102) -- the reverse of Import: writes
+// fBookmarks' own references, one per line, no header. The only
+// remaining way to get a collection's content out of the managed tree
+// now that Open/Save As are gone (#94) -- Go to List covers navigation
+// inside the tree, #58 (not built yet) covers copying/moving within it.
+#define VLIST_EXPORT_PANEL		'VLxp'
+#define VLIST_EXPORT_RESULT	'VLxr'
 // Edit > Add Reference... and a row's own right-click "Edit Reference..."
-// -- a real end user's own testing feedback: drag-and-drop is the only
-// way in today, and nothing in the window says so. Both open the same
-// prompt window (typed text, not a book/chapter/verse picker -- reuses
-// the exact validation the universal Go to / Search box already has,
-// see _CreateReference()/_EditReference() in the .cpp), just with
-// different titles/pre-filled text and a different result handler.
+// -- drag-and-drop was previously the only way to add a reference, and
+// nothing in the window said so. Both open the same prompt window
+// (typed text, not a book/chapter/verse picker -- reuses the exact
+// validation the universal Go to / Search box already has, see
+// _CreateReference()/_EditReference() in the .cpp), just with different
+// titles/pre-filled text and a different result handler.
 #define VLIST_ADD_REFERENCE		'VLar'
 #define VLIST_ADD_REFERENCE_RESULT	'VLaR'
 #define VLIST_EDIT_REFERENCE		'VLer'
 #define VLIST_EDIT_REFERENCE_RESULT	'VLeR'
+// #93: Edit Reference/Remove, triggered from the Edit menu against
+// whichever row is currently selected (fRowList->CurrentSelection()),
+// rather than the index a context-menu click already carries -- see
+// VLIST_EDIT_REFERENCE/VLIST_REMOVE_ROW above for the right-click path,
+// which stays as the shortcut both now have a menu equivalent for.
+#define VLIST_EDIT_REFERENCE_SELECTED	'VLes'
+#define VLIST_REMOVE_SELECTED	'VLrx'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -77,10 +92,10 @@ class TextDocumentView;
 //
 // Why a separate window rather than a column embedded in a chain (the
 // first #47 attempt, still intact but unmerged on
-// origin/feature/search-within-verse-list): a real end user's own
-// feedback described a lightweight file-management tool (New/Open/
-// Close/Save/Save As/Delete, reorder, describe) reading a *normal*
-// chapter alongside it, navigated by clicking a list entry -- not a
+// origin/feature/search-within-verse-list): the original #47 request
+// described a lightweight file-management tool (New/Open/Close/Save/
+// Delete, reorder, describe) reading a *normal* chapter alongside it,
+// navigated by clicking a list entry -- not a
 // concatenated multi-section document rendered into the reading pane.
 // A third ParallelBibleView column type would have touched 23 functions
 // that today only distinguish COLUMN_BIBLE/COLUMN_NOTES; this window
@@ -138,19 +153,31 @@ private:
 			// File menu handlers.
 			void			_NewList();
 			// Called once VerseListNamePromptWindow reports a chosen
-			// collection name.
-			void			_CreateNewList(const char* name);
+			// collection name and (#97) location -- NULL/empty
+			// `parentPath` means the root, same as before #97.
+			void			_CreateNewList(const char* name,
+								const char* parentPath = NULL);
+			// Also the target of Go to List's own navigation, not just
+			// startup restore -- see VLIST_NAV_SELECT.
 			void			_OpenList(const char* path);
-			void			_OpenPanel();
 			// #68: a plain-text file, one reference per line (no
 			// header) -- creates a new top-level collection named after
 			// the file and opens it. See the .cpp for the exact parsing
 			// and what happens to a line that doesn't parse.
 			void			_ImportPanel();
+			// #95: merges into the open collection if there is one.
+			// #97: if not, hands off to the two below for a destination.
 			void			_ImportTextFile(const char* path);
+			void			_StartImportIntoNewList(const char* path,
+								const BString& content);
+			void			_ImportIntoNewList(const char* name,
+								const char* parentPath);
+			// #102: the reverse of Import -- writes fBookmarks' own
+			// references, one per line, to a plain-text file.
+			void			_ExportPanel();
+			void			_ExportTextFile(const char* path);
 			void			_CloseList();
 			void			_SaveList();
-			void			_SaveListAs();
 			void			_DeleteList();
 			// Double-click on the name view (#73) -- opens the same
 			// name-prompt window _NewList() uses, pre-filled with the
@@ -182,6 +209,11 @@ private:
 			// user-edit-triggering) TextDocument.
 			void			_RebuildDescription();
 			void			_UpdateTitle();
+			// #93: Edit Reference/Remove/Move Up/Move Down all act on
+			// whichever row is selected -- called both from
+			// _UpdateTitle() (list opened/closed) and on every
+			// VLIST_ROW_SELECTED (selection itself changed).
+			void			_UpdateRowActionState();
 			// The versification new bookmarks in the currently open
 			// collection should be written in: the first already-loaded
 			// bookmark's own, or "KJV" for a still-empty collection. Each
@@ -234,6 +266,12 @@ private:
 			std::vector<BookmarkFile>	fBookmarks;
 			bool					fHasOpenFile;
 
+			// #97: an import's own file content, held here between
+			// _StartImportIntoNewList() showing the name/location prompt
+			// and _ImportIntoNewList() consuming it once that prompt
+			// returns -- only used when nothing was open at import time.
+			BString					fPendingImportContent;
+
 			// Which node_ref the currently-active collection watch
 			// (if any) is for -- needed to tell a B_NODE_MONITOR
 			// message's "directory"/"to directory" field apart from
@@ -252,9 +290,12 @@ private:
 			// once the description/row boxes below it fill up.
 			BStringView*			fNameView;
 			BMenuItem*				fSaveItem;
-			BMenuItem*				fSaveAsItem;
+			BMenuItem*				fExportItem;
+			BMenuItem*				fRenameItem;
 			BMenuItem*				fDeleteItem;
 			BMenuItem*				fAddReferenceItem;
+			BMenuItem*				fEditReferenceItem;
+			BMenuItem*				fRemoveItem;
 			BMenuItem*				fMoveUpItem;
 			BMenuItem*				fMoveDownItem;
 			BMenu*					fNavigationMenu;
@@ -270,12 +311,10 @@ private:
 			BOutlineListView*		fRowList;
 			BScrollView*			fRowScroll;
 
-			BFilePanel*				fOpenPanel;
-			BFilePanel*				fSaveAsPanel;
-			// B_FILE_NODE, unlike the two above -- an import source is
-			// an actual file (the plain-text export), not a collection
-			// folder.
+			// B_FILE_NODE -- an import source/export destination is an
+			// actual file (the plain-text list), not a collection folder.
 			BFilePanel*				fImportPanel;
+			BFilePanel*				fExportPanel;
 
 			class DescriptionSaveListener;
 			// Kept as the ref-counted wrapper (not just the raw listener

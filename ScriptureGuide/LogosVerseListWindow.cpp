@@ -62,12 +62,6 @@ CurrentLocaleCode()
 }
 
 
-// Defined further down, alongside _DeleteList() -- forward-declared here
-// so MessageReceived()'s VLIST_SAVE_AS_RESULT case (textually earlier in
-// this file) can use them too.
-static status_t CopyFile(const char* fromPath, const char* toPath);
-static status_t CopyCollectionInto(const char* sourceDir,
-	const char* destDir);
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "VerseListWindow"
@@ -316,9 +310,12 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fMenuBar(NULL),
 	fNameView(NULL),
 	fSaveItem(NULL),
-	fSaveAsItem(NULL),
+	fExportItem(NULL),
+	fRenameItem(NULL),
 	fDeleteItem(NULL),
 	fAddReferenceItem(NULL),
+	fEditReferenceItem(NULL),
+	fRemoveItem(NULL),
 	fMoveUpItem(NULL),
 	fMoveDownItem(NULL),
 	fNavigationMenu(NULL),
@@ -326,9 +323,8 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fDescriptionScroll(NULL),
 	fRowList(NULL),
 	fRowScroll(NULL),
-	fOpenPanel(NULL),
-	fSaveAsPanel(NULL),
 	fImportPanel(NULL),
+	fExportPanel(NULL),
 	fDescriptionSaveRunner(NULL),
 	fMessenger(owner)
 {
@@ -375,9 +371,8 @@ SGVerseListWindow::~SGVerseListWindow()
 	if (fMessenger != NULL)
 		fMessenger->SendMessage(VLIST_QUIT);
 
-	delete fOpenPanel;
-	delete fSaveAsPanel;
 	delete fImportPanel;
+	delete fExportPanel;
 	delete fMessenger;
 }
 
@@ -498,24 +493,31 @@ SGVerseListWindow::_BuildMenuBar()
 {
 	BMenuBar* menuBar = new BMenuBar("verseListMenuBar");
 
+	// No "Open"/"Save As" -- Go to List (arbitrarily deep since #78)
+	// already covers navigation to anything in the standard tree, and
+	// crossing that tree's boundary goes through Import/Export instead
+	// of a raw file panel (#94). Relocating within the tree is #58, not
+	// built yet.
 	BMenu* fileMenu = new BMenu(B_TRANSLATE("File"));
 	fileMenu->AddItem(new BMenuItem(B_TRANSLATE("New Verse List" B_UTF8_ELLIPSIS),
 		new BMessage(VLIST_NEW), 'N'));
-	fileMenu->AddItem(new BMenuItem(B_TRANSLATE("Open Verse List" B_UTF8_ELLIPSIS),
-		new BMessage(VLIST_OPEN_PANEL), 'O'));
 	fileMenu->AddItem(new BMenuItem(
 		B_TRANSLATE("Import Text List" B_UTF8_ELLIPSIS),
 		new BMessage(VLIST_IMPORT_PANEL)));
+	fExportItem = new BMenuItem(
+		B_TRANSLATE("Export Text List" B_UTF8_ELLIPSIS),
+		new BMessage(VLIST_EXPORT_PANEL));
+	fileMenu->AddItem(fExportItem);
 	fileMenu->AddItem(new BMenuItem(B_TRANSLATE("Close Verse List"),
 		new BMessage(VLIST_CLOSE), 'W'));
 	fileMenu->AddSeparatorItem();
 	fSaveItem = new BMenuItem(B_TRANSLATE("Save"), new BMessage(VLIST_SAVE),
 		'S');
 	fileMenu->AddItem(fSaveItem);
-	fSaveAsItem = new BMenuItem(
-		B_TRANSLATE("Save As" B_UTF8_ELLIPSIS),
-		new BMessage(VLIST_SAVE_AS_PANEL), 'S', B_SHIFT_KEY);
-	fileMenu->AddItem(fSaveAsItem);
+	fRenameItem = new BMenuItem(
+		B_TRANSLATE("Rename List" B_UTF8_ELLIPSIS),
+		new BMessage(VLIST_RENAME));
+	fileMenu->AddItem(fRenameItem);
 	fileMenu->AddSeparatorItem();
 	fDeleteItem = new BMenuItem(
 		B_TRANSLATE("Delete File" B_UTF8_ELLIPSIS),
@@ -528,6 +530,13 @@ SGVerseListWindow::_BuildMenuBar()
 		B_TRANSLATE("Add Reference" B_UTF8_ELLIPSIS),
 		new BMessage(VLIST_ADD_REFERENCE), 'R');
 	editMenu->AddItem(fAddReferenceItem);
+	fEditReferenceItem = new BMenuItem(
+		B_TRANSLATE("Edit Reference" B_UTF8_ELLIPSIS),
+		new BMessage(VLIST_EDIT_REFERENCE_SELECTED));
+	editMenu->AddItem(fEditReferenceItem);
+	fRemoveItem = new BMenuItem(B_TRANSLATE("Remove"),
+		new BMessage(VLIST_REMOVE_SELECTED));
+	editMenu->AddItem(fRemoveItem);
 	editMenu->AddSeparatorItem();
 	fMoveUpItem = new BMenuItem(B_TRANSLATE("Move Up"),
 		new BMessage(VLIST_MOVE_UP), B_UP_ARROW);
@@ -549,10 +558,12 @@ SGVerseListWindow::_BuildMenuBar()
 // (#73), renaming the open one -- same idiom as this app's other small
 // utility windows (e.g. SGDictionaryWindow): a non-modal BWindow that
 // posts its result back via BMessenger and closes itself, rather than a
-// blocking dialog (nothing in this app has one). "Save As..." doesn't
-// need this -- a native BFilePanel's B_SAVE_PANEL mode already has its
-// own filename field built in.
+// blocking dialog (nothing in this app has one).
 static const uint32 kNamePromptOK = 'VLpo';
+// #97: the optional location row's own "Choose..." button and the
+// B_DIRECTORY_NODE BFilePanel it opens.
+static const uint32 kLocationChoose = 'VLlc';
+static const uint32 kLocationResult = 'VLlr';
 
 class VerseListNamePromptWindow : public BWindow {
 public:
@@ -565,10 +576,19 @@ public:
 	// along in the result message as-is -- _EditReference() needs to
 	// know which row it's rewriting, which row list.MouseDown() gave to
 	// the context menu that opened this window in the first place.
+	//
+	// `showLocation` (#97) adds a second row: a read-only path display
+	// plus a "Choose..." button opening a native B_DIRECTORY_NODE
+	// BFilePanel, rooted at the verse-list tree -- Haiku's own file
+	// panel already has a "New Folder" button, so this covers both
+	// "put it in an existing sub-collection" and "put it in one that
+	// doesn't exist yet" without this window needing to reinvent
+	// either. Only _NewList() and the "nothing open" half of Import
+	// pass true; renaming/editing a reference has no location to pick.
 	VerseListNamePromptWindow(BMessenger target, uint32 resultWhat,
 		const char* windowTitle = NULL, const char* initialName = NULL,
 		const char* buttonLabel = NULL, const char* fieldLabel = NULL,
-		int32 index = -1)
+		int32 index = -1, bool showLocation = false)
 		:
 		BWindow(BRect(120, 120, 460, 210),
 			windowTitle != NULL ? windowTitle
@@ -577,7 +597,10 @@ public:
 			B_NOT_ZOOMABLE | B_CLOSE_ON_ESCAPE | B_AUTO_UPDATE_SIZE_LIMITS),
 		fTarget(target),
 		fResultWhat(resultWhat),
-		fIndex(index)
+		fIndex(index),
+		fLocationPath(BookmarkFile::RootDirectory()),
+		fLocationView(NULL),
+		fLocationPanel(NULL)
 	{
 		fNameControl = new BTextControl("name",
 			fieldLabel != NULL ? fieldLabel : B_TRANSLATE("Name:"),
@@ -586,10 +609,27 @@ public:
 			? buttonLabel : B_TRANSLATE("Create"), new BMessage(kNamePromptOK));
 		SetDefaultButton(okButton);
 
-		BLayoutBuilder::Group<>(this, B_VERTICAL)
-			.SetInsets(B_USE_WINDOW_SPACING)
-			.Add(fNameControl)
-			.AddGroup(B_HORIZONTAL)
+		BLayoutBuilder::Group<> layout(this, B_VERTICAL);
+		layout.SetInsets(B_USE_WINDOW_SPACING)
+			.Add(fNameControl);
+
+		if (showLocation) {
+			BPath rootPath(fLocationPath.String());
+			fLocationView = new BStringView("location",
+				rootPath.Leaf() != NULL ? rootPath.Leaf()
+					: fLocationPath.String());
+			BButton* chooseButton = new BButton("chooseLocation",
+				B_TRANSLATE("Choose" B_UTF8_ELLIPSIS),
+				new BMessage(kLocationChoose));
+			layout.AddGroup(B_HORIZONTAL)
+				.Add(new BStringView("locationLabel", B_TRANSLATE("Location:")))
+				.Add(fLocationView)
+				.AddGlue()
+				.Add(chooseButton)
+			.End();
+		}
+
+		layout.AddGroup(B_HORIZONTAL)
 				.AddGlue()
 				.Add(okButton)
 			.End()
@@ -610,12 +650,45 @@ public:
 				result.AddString("name", name);
 				if (fIndex >= 0)
 					result.AddInt32("index", fIndex);
+				if (fLocationView != NULL)
+					result.AddString("location", fLocationPath);
 				fTarget.SendMessage(&result);
 				Quit();
 			}
 			return;
 		}
+		if (message->what == kLocationChoose) {
+			if (fLocationPanel == NULL) {
+				entry_ref rootRef;
+				BEntry rootEntry(fLocationPath.String());
+				rootEntry.GetRef(&rootRef);
+				fLocationPanel = new BFilePanel(B_OPEN_PANEL,
+					new BMessenger(this), &rootRef, B_DIRECTORY_NODE, false,
+					new BMessage(kLocationResult));
+				fLocationPanel->SetButtonLabel(B_DEFAULT_BUTTON,
+					B_TRANSLATE("Select"));
+			}
+			fLocationPanel->Show();
+			return;
+		}
+		if (message->what == kLocationResult) {
+			entry_ref ref;
+			if (message->FindRef("refs", &ref) == B_OK) {
+				BPath path(&ref);
+				fLocationPath = path.Path();
+				if (fLocationView != NULL) {
+					fLocationView->SetText(path.Leaf() != NULL
+						? path.Leaf() : fLocationPath.String());
+				}
+			}
+			return;
+		}
 		BWindow::MessageReceived(message);
+	}
+
+	virtual ~VerseListNamePromptWindow()
+	{
+		delete fLocationPanel;
 	}
 
 private:
@@ -623,6 +696,9 @@ private:
 	uint32			fResultWhat;
 	int32			fIndex;
 	BTextControl*	fNameControl;
+	BString			fLocationPath;
+	BStringView*	fLocationView;
+	BFilePanel*		fLocationPanel;
 };
 
 
@@ -636,9 +712,11 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 
 		case kNamePromptOK:
 		{
-			BString name;
-			if (message->FindString("name", &name) == B_OK)
-				_CreateNewList(name.String());
+			BString name, location;
+			if (message->FindString("name", &name) == B_OK) {
+				message->FindString("location", &location);
+				_CreateNewList(name.String(), location.String());
+			}
 			break;
 		}
 
@@ -651,20 +729,6 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			BString name;
 			if (message->FindString("name", &name) == B_OK)
 				_RenameList(name.String());
-			break;
-		}
-
-		case VLIST_OPEN_PANEL:
-			_OpenPanel();
-			break;
-
-		case VLIST_OPEN_RESULT:
-		{
-			entry_ref ref;
-			if (message->FindRef("refs", &ref) == B_OK) {
-				BPath path(&ref);
-				_OpenList(path.Path());
-			}
 			break;
 		}
 
@@ -682,6 +746,34 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case VLIST_IMPORT_NAME_RESULT:
+		{
+			BString name, location;
+			if (message->FindString("name", &name) == B_OK) {
+				message->FindString("location", &location);
+				_ImportIntoNewList(name.String(), location.String());
+			}
+			break;
+		}
+
+		case VLIST_EXPORT_PANEL:
+			_ExportPanel();
+			break;
+
+		case VLIST_EXPORT_RESULT:
+		{
+			entry_ref dirRef;
+			BString name;
+			if (message->FindRef("directory", &dirRef) == B_OK
+				&& message->FindString("name", &name) == B_OK) {
+				BPath dirPath(&dirRef);
+				BPath filePath(dirPath.Path());
+				filePath.Append(name.String());
+				_ExportTextFile(filePath.Path());
+			}
+			break;
+		}
+
 		case VLIST_ADD_REFERENCE:
 			_AddReference();
 			break;
@@ -694,6 +786,14 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case VLIST_EDIT_REFERENCE_SELECTED:
+		{
+			int32 selected = fRowList->CurrentSelection();
+			if (selected >= 0)
+				_StartEditReference(selected);
+			break;
+		}
+
 		case VLIST_EDIT_REFERENCE_RESULT:
 		{
 			BString text;
@@ -702,6 +802,14 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 				&& message->FindInt32("index", &index) == B_OK) {
 				_EditReference(index, text.String());
 			}
+			break;
+		}
+
+		case VLIST_REMOVE_SELECTED:
+		{
+			int32 selected = fRowList->CurrentSelection();
+			if (selected >= 0)
+				_RemoveRow(selected);
 			break;
 		}
 
@@ -720,35 +828,6 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 		case VLIST_SAVE:
 			_SaveList();
 			break;
-
-		case VLIST_SAVE_AS_PANEL:
-			_SaveListAs();
-			break;
-
-		case VLIST_SAVE_AS_RESULT:
-		{
-			entry_ref dirRef;
-			BString name;
-			if (message->FindRef("directory", &dirRef) == B_OK
-				&& message->FindString("name", &name) == B_OK
-				&& fHasOpenFile) {
-				BPath dirPath(&dirRef);
-				// A fresh collection folder, then every bookmark (plus
-				// Description.txt) copied into it byte-for-byte,
-				// attributes included -- the original at fCollectionPath
-				// is left untouched, same "Save As..." contract
-				// VerseListFile::SaveAs() had.
-				BString newPath = BookmarkFile::CreateCollection(
-					dirPath.Path(), name.String());
-				if (!newPath.IsEmpty()) {
-					CopyCollectionInto(fCollectionPath.String(),
-						newPath.String());
-					_LoadFile(newPath.String());
-					_RebuildNavigationMenu();
-				}
-			}
-			break;
-		}
 
 		case VLIST_DELETE:
 			_DeleteList();
@@ -775,6 +854,7 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			int32 index = fRowList->CurrentSelection();
 			if (index >= 0)
 				_NavigateToRow(index);
+			_UpdateRowActionState();
 			break;
 		}
 
@@ -796,29 +876,20 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 void
 SGVerseListWindow::_BuildFilePanels()
 {
-	entry_ref dirRef;
-	BEntry dirEntry(BookmarkFile::RootDirectory().String());
-	dirEntry.GetRef(&dirRef);
-
-	// B_DIRECTORY_NODE, not B_FILE_NODE -- a collection is a folder now
-	// (#55), so both panels browse and select folders instead of files.
-	// The result messages' own shape (VLIST_OPEN_RESULT's "refs",
-	// VLIST_SAVE_AS_RESULT's "directory"+"name") is unaffected either
-	// way -- that comes from B_OPEN_PANEL/B_SAVE_PANEL mode, not the node
-	// flavor.
-	fOpenPanel = new BFilePanel(B_OPEN_PANEL, new BMessenger(this), &dirRef,
-		B_DIRECTORY_NODE, false, new BMessage(VLIST_OPEN_RESULT));
-	fOpenPanel->SetButtonLabel(B_DEFAULT_BUTTON, B_TRANSLATE("Open"));
-
-	fSaveAsPanel = new BFilePanel(B_SAVE_PANEL, new BMessenger(this), &dirRef,
-		B_DIRECTORY_NODE, false, new BMessage(VLIST_SAVE_AS_RESULT));
-	fSaveAsPanel->SetButtonLabel(B_DEFAULT_BUTTON, B_TRANSLATE("Save"));
-
-	// B_FILE_NODE here, unlike the two panels above -- picking the
-	// plain-text file to import, not a collection folder.
+	// B_FILE_NODE, not B_DIRECTORY_NODE -- both panels pick a plain-text
+	// file (the import source / the export destination), not a
+	// collection folder. Collection navigation itself goes through Go
+	// to List, not a file panel (#94).
 	fImportPanel = new BFilePanel(B_OPEN_PANEL, new BMessenger(this), NULL,
 		B_FILE_NODE, false, new BMessage(VLIST_IMPORT_RESULT));
 	fImportPanel->SetButtonLabel(B_DEFAULT_BUTTON, B_TRANSLATE("Import"));
+
+	entry_ref dirRef;
+	BEntry dirEntry(BookmarkFile::RootDirectory().String());
+	dirEntry.GetRef(&dirRef);
+	fExportPanel = new BFilePanel(B_SAVE_PANEL, new BMessenger(this), &dirRef,
+		B_FILE_NODE, false, new BMessage(VLIST_EXPORT_RESULT));
+	fExportPanel->SetButtonLabel(B_DEFAULT_BUTTON, B_TRANSLATE("Export"));
 }
 
 
@@ -826,7 +897,7 @@ void
 SGVerseListWindow::_NewList()
 {
 	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
-		BMessenger(this), kNamePromptOK);
+		BMessenger(this), kNamePromptOK, NULL, NULL, NULL, NULL, -1, true);
 	prompt->Show();
 }
 
@@ -846,14 +917,13 @@ SGVerseListWindow::_StartRename()
 
 
 void
-SGVerseListWindow::_CreateNewList(const char* name)
+SGVerseListWindow::_CreateNewList(const char* name, const char* parentPath)
 {
-	// Always created at the top level -- nesting a new collection inside
-	// whichever one happens to be open would be surprising, and "New"
-	// inside an open collection isn't offered anywhere in the menu (the
-	// way to grow a nested structure is Tracker itself, or a future
-	// "New Sub-Collection" -- issue #56).
-	BString path = BookmarkFile::CreateCollection(NULL, name);
+	// #97: the New Verse List prompt's own location picker chooses the
+	// parent (defaulting to the root) -- no longer always the top level.
+	BString path = BookmarkFile::CreateCollection(
+		parentPath != NULL && parentPath[0] != '\0' ? parentPath : NULL,
+		name);
 	if (path.IsEmpty())
 		return;
 
@@ -1020,14 +1090,6 @@ SGVerseListWindow::_EditReference(int32 index, const char* text)
 
 
 void
-SGVerseListWindow::_OpenPanel()
-{
-	if (fOpenPanel != NULL)
-		fOpenPanel->Show();
-}
-
-
-void
 SGVerseListWindow::_OpenList(const char* path)
 {
 	_LoadFile(path);
@@ -1064,51 +1126,16 @@ TitleCaseWords(const BString& raw)
 }
 
 
-// #68: imports a plain-text file, one reference per line, no header --
-// the shape confirmed against a real sample (AARON.TXT) from the same
-// legacy program that inspired #47/#55, one line per reference like
-// "EXO 4:14". Each line is parsed directly by sword::VerseKey::setText(),
-// which -- confirmed empirically on a full set of sample lines spanning
-// Genesis through Hebrews -- already accepts this exact abbreviation
-// style with no normalization needed. A line that doesn't parse is
-// skipped rather than aborting the whole import; there's no header line
-// declaring a versification, so KJV (this format's own numbering) is
-// assumed throughout, the same default _CollectionVersification() uses
-// for a brand-new, still-empty collection.
-void
-SGVerseListWindow::_ImportTextFile(const char* path)
+// Splits `content` into lines and parses each as a reference the same
+// way #68 always has -- one per line, no header, OSIS-style
+// abbreviations like "EXO 4:14" that sword::VerseKey::setText() already
+// accepts directly. A line that doesn't parse is skipped rather than
+// aborting the whole import; there's no header line declaring a
+// versification, so KJV (this format's own numbering) is assumed
+// throughout.
+static void
+ParseReferenceLines(const BString& content, std::vector<BString>& outRefs)
 {
-	BFile file(path, B_READ_ONLY);
-	if (file.InitCheck() != B_OK)
-		return;
-
-	off_t size = 0;
-	file.GetSize(&size);
-	if (size <= 0)
-		return;
-
-	BString content;
-	char* buffer = content.LockBuffer((int32)size);
-	ssize_t bytesRead = file.Read(buffer, (size_t)size);
-	content.UnlockBuffer(bytesRead > 0 ? bytesRead : 0);
-	if (content.IsEmpty())
-		return;
-
-	BPath sourcePath(path);
-	BString name(sourcePath.Leaf());
-	int32 dot = name.FindLast('.');
-	if (dot > 0)
-		name.Truncate(dot);
-	name = TitleCaseWords(name);
-	if (name.IsEmpty())
-		return;
-
-	BString collectionPath = BookmarkFile::CreateCollection(NULL,
-		name.String());
-	if (collectionPath.IsEmpty())
-		return;
-
-	int32 position = 0;
 	int32 lineStart = 0;
 	while (lineStart <= content.Length()) {
 		int32 lineEnd = content.FindFirst('\n', lineStart);
@@ -1123,19 +1150,162 @@ SGVerseListWindow::_ImportTextFile(const char* path)
 			sword::VerseKey key;
 			key.setVersificationSystem("KJV");
 			key.setText(line.String());
-			if (key.popError() == 0) {
-				BookmarkFile bookmark;
-				bookmark.CreateNew(collectionPath.String(), key.getText(),
-					"KJV", "", position);
-				position++;
-			}
+			if (key.popError() == 0)
+				outRefs.push_back(BString(key.getText()));
 		}
 
 		lineStart = lineEnd + 1;
 	}
+}
+
+
+static bool
+ReadWholeFile(const char* path, BString& content)
+{
+	BFile file(path, B_READ_ONLY);
+	if (file.InitCheck() != B_OK)
+		return false;
+
+	off_t size = 0;
+	file.GetSize(&size);
+	if (size <= 0)
+		return false;
+
+	char* buffer = content.LockBuffer((int32)size);
+	ssize_t bytesRead = file.Read(buffer, (size_t)size);
+	content.UnlockBuffer(bytesRead > 0 ? bytesRead : 0);
+	return !content.IsEmpty();
+}
+
+
+// #68/#95: imports into whichever collection is already open, the same
+// way a manual Add Reference would, one call per line -- no new
+// collection, no location to choose. Only when nothing is open does
+// this need a destination at all; that path (#97) is
+// _StartImportIntoNewList()/_ImportIntoNewList() below.
+void
+SGVerseListWindow::_ImportTextFile(const char* path)
+{
+	BString content;
+	if (!ReadWholeFile(path, content))
+		return;
+
+	if (!fHasOpenFile) {
+		_StartImportIntoNewList(path, content);
+		return;
+	}
+
+	std::vector<BString> refs;
+	ParseReferenceLines(content, refs);
+
+	BString versification = _CollectionVersification();
+	int32 position = (int32)fBookmarks.size();
+	bool appendedAny = false;
+	for (size_t i = 0; i < refs.size(); i++) {
+		BookmarkFile bookmark;
+		if (bookmark.CreateNew(fCollectionPath.String(), refs[i].String(),
+				versification.String(), "", position) == B_OK) {
+			fBookmarks.push_back(bookmark);
+			position++;
+			appendedAny = true;
+		}
+	}
+	if (appendedAny)
+		_RebuildRows();
+}
+
+
+// #97: nothing was open, so unlike the merge path above this needs a
+// destination -- reuses the same name-plus-location prompt New Verse
+// List already has, pre-filled with a name derived from the file, and
+// remembers the source content (`fPendingImportContent`) until the
+// prompt returns.
+void
+SGVerseListWindow::_StartImportIntoNewList(const char* path,
+	const BString& content)
+{
+	fPendingImportContent = content;
+
+	BPath sourcePath(path);
+	BString name(sourcePath.Leaf());
+	int32 dot = name.FindLast('.');
+	if (dot > 0)
+		name.Truncate(dot);
+	name = TitleCaseWords(name);
+
+	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
+		BMessenger(this), VLIST_IMPORT_NAME_RESULT,
+		B_TRANSLATE("Import Text List"), name.String(),
+		B_TRANSLATE("Import"), NULL, -1, true);
+	prompt->Show();
+}
+
+
+void
+SGVerseListWindow::_ImportIntoNewList(const char* name,
+	const char* parentPath)
+{
+	if (fPendingImportContent.IsEmpty())
+		return;
+
+	BString collectionPath = BookmarkFile::CreateCollection(
+		parentPath != NULL && parentPath[0] != '\0' ? parentPath : NULL,
+		name);
+	if (collectionPath.IsEmpty())
+		return;
+
+	std::vector<BString> refs;
+	ParseReferenceLines(fPendingImportContent, refs);
+
+	int32 position = 0;
+	for (size_t i = 0; i < refs.size(); i++) {
+		BookmarkFile bookmark;
+		if (bookmark.CreateNew(collectionPath.String(), refs[i].String(),
+				"KJV", "", position) == B_OK) {
+			position++;
+		}
+	}
+
+	fPendingImportContent = "";
 
 	_LoadFile(collectionPath.String());
 	_RebuildNavigationMenu();
+}
+
+
+void
+SGVerseListWindow::_ExportPanel()
+{
+	if (fExportPanel == NULL || !fHasOpenFile)
+		return;
+
+	BPath current(fCollectionPath.String());
+	BString suggestedName(current.Leaf() != NULL ? current.Leaf() : "list");
+	suggestedName << ".txt";
+	fExportPanel->SetSaveText(suggestedName.String());
+	fExportPanel->Show();
+}
+
+
+// #102: the reverse of _ImportTextFile() -- one reference per line, no
+// header, the same plain-text shape Import reads back in. Deliberately
+// just the references themselves, not position/tags/locale/
+// versification -- portable and human-readable rather than a full
+// round-trip of everything a bookmark file carries.
+void
+SGVerseListWindow::_ExportTextFile(const char* path)
+{
+	if (!fHasOpenFile)
+		return;
+
+	BFile file(path, B_READ_WRITE | B_CREATE_FILE | B_ERASE_FILE);
+	if (file.InitCheck() != B_OK)
+		return;
+
+	BString body;
+	for (size_t i = 0; i < fBookmarks.size(); i++)
+		body << fBookmarks[i].Reference() << "\n";
+	file.Write(body.String(), body.Length());
 }
 
 
@@ -1164,104 +1334,6 @@ SGVerseListWindow::_SaveList()
 	// fired yet. "Save" means "don't wait for it".
 	if (fDescriptionSaveRunner != NULL)
 		_SaveDescription();
-}
-
-
-void
-SGVerseListWindow::_SaveListAs()
-{
-	if (fSaveAsPanel == NULL)
-		return;
-	BPath current(fCollectionPath.String());
-	fSaveAsPanel->SetSaveText(fHasOpenFile && current.Leaf() != NULL
-		? current.Leaf() : "Untitled list");
-	fSaveAsPanel->Show();
-}
-
-
-// Copies one bookmark (or the description) file's raw bytes AND its BFS
-// attributes -- no BFS "copy a file" call exists in the Storage Kit
-// outside of Tracker's own private implementation, so this is the same
-// manual open/read/write a handful of small files needs regardless.
-// Attributes matter here specifically for Position/Tags (see
-// BookmarkFile) -- a byte-only copy would silently reset every bookmark
-// to "no position" (sorts last) and "no tags" in the new collection,
-// which "Save As..." copying the SAME collection under a new name should
-// never do.
-static status_t
-CopyFile(const char* fromPath, const char* toPath)
-{
-	BFile from(fromPath, B_READ_ONLY);
-	status_t status = from.InitCheck();
-	if (status != B_OK)
-		return status;
-
-	BFile to(toPath, B_READ_WRITE | B_CREATE_FILE | B_ERASE_FILE);
-	status = to.InitCheck();
-	if (status != B_OK)
-		return status;
-
-	off_t size = 0;
-	from.GetSize(&size);
-	if (size > 0) {
-		char* buffer = new(std::nothrow) char[size];
-		if (buffer == NULL)
-			return B_NO_MEMORY;
-		ssize_t bytesRead = from.Read(buffer, size);
-		if (bytesRead > 0)
-			to.Write(buffer, bytesRead);
-		delete[] buffer;
-	}
-
-	char attrName[B_ATTR_NAME_LENGTH];
-	while (from.GetNextAttrName(attrName) == B_OK) {
-		attr_info info;
-		if (from.GetAttrInfo(attrName, &info) != B_OK)
-			continue;
-		char* attrBuffer = new(std::nothrow) char[info.size];
-		if (attrBuffer == NULL)
-			continue;
-		ssize_t bytesRead = from.ReadAttr(attrName, info.type, 0, attrBuffer,
-			info.size);
-		if (bytesRead > 0) {
-			to.WriteAttr(attrName, info.type, 0, attrBuffer,
-				(size_t)bytesRead);
-		}
-		delete[] attrBuffer;
-	}
-
-	return B_OK;
-}
-
-
-// Copies every file directly inside `sourceDir` (bookmarks plus
-// Description.txt, if present) into `destDir`, which CreateCollection()
-// has already created -- what "Save As..." needs: the same content,
-// under a new name/location, the original left untouched (matching how
-// VerseListFile::SaveAs() behaved before it). Not recursive -- a
-// collection is deliberately flat (see _DeleteList()'s own comment).
-static status_t
-CopyCollectionInto(const char* sourceDir, const char* destDir)
-{
-	BDirectory dir(sourceDir);
-	if (dir.InitCheck() != B_OK)
-		return B_ERROR;
-
-	BEntry entry;
-	while (dir.GetNextEntry(&entry) == B_OK) {
-		if (entry.IsDirectory())
-			continue;
-		char name[B_FILE_NAME_LENGTH];
-		if (entry.GetName(name) != B_OK)
-			continue;
-
-		BPath fromPath;
-		entry.GetPath(&fromPath);
-		BPath toPath(destDir);
-		toPath.Append(name);
-		CopyFile(fromPath.Path(), toPath.Path());
-	}
-	return B_OK;
 }
 
 
@@ -1335,6 +1407,10 @@ SGVerseListWindow::_RebuildRows()
 	fRowList->MakeEmpty();
 	for (size_t i = 0; i < fBookmarks.size(); i++)
 		fRowList->AddItem(new BStringItem(fBookmarks[i].Reference()));
+	// MakeEmpty() clears the selection -- Edit Reference/Remove/Move Up/
+	// Move Down all need to fall back to disabled rather than keep
+	// whatever state a previous, now-gone selection left them in.
+	_UpdateRowActionState();
 }
 
 
@@ -1422,11 +1498,29 @@ SGVerseListWindow::_UpdateTitle()
 
 	bool onList = fHasOpenFile;
 	fSaveItem->SetEnabled(onList);
-	fSaveAsItem->SetEnabled(onList);
+	fExportItem->SetEnabled(onList);
+	fRenameItem->SetEnabled(onList);
 	fDeleteItem->SetEnabled(onList);
 	fAddReferenceItem->SetEnabled(onList);
-	fMoveUpItem->SetEnabled(onList);
-	fMoveDownItem->SetEnabled(onList);
+	_UpdateRowActionState();
+}
+
+
+// Edit Reference/Remove/Move Up/Move Down all act on whichever row is
+// currently selected -- unlike the rest of _UpdateTitle()'s items, their
+// enabled state depends on selection, not just whether a list is open,
+// so this needs to run both when the list itself changes and every time
+// the row selection does (see VLIST_ROW_SELECTED).
+void
+SGVerseListWindow::_UpdateRowActionState()
+{
+	int32 selected = fHasOpenFile ? fRowList->CurrentSelection() : -1;
+	bool hasSelection = selected >= 0;
+	fEditReferenceItem->SetEnabled(hasSelection);
+	fRemoveItem->SetEnabled(hasSelection);
+	fMoveUpItem->SetEnabled(hasSelection && selected > 0);
+	fMoveDownItem->SetEnabled(hasSelection
+		&& selected + 1 < fRowList->CountItems());
 }
 
 
