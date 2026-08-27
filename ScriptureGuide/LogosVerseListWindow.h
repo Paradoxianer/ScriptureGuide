@@ -309,6 +309,10 @@ private:
 			// the window reads as "this is the list you have open" even
 			// once the description/row boxes below it fill up.
 			BStringView*			fNameView;
+			// Breadcrumb line right under fNameView, showing where the
+			// open collection lives in the tree (not just its own name) --
+			// see _UpdateTitle().
+			BStringView*			fPathView;
 			BMenuItem*				fExportItem;
 			BMenuItem*				fRenameItem;
 			BMenuItem*				fDeleteItem;

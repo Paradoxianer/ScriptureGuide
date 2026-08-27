@@ -352,6 +352,7 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fWatchingRoot(false),
 	fMenuBar(NULL),
 	fNameView(NULL),
+	fPathView(NULL),
 	fExportItem(NULL),
 	fRenameItem(NULL),
 	fDeleteItem(NULL),
@@ -444,6 +445,17 @@ SGVerseListWindow::_BuildGUI()
 	fNameView->SetFont(be_bold_font);
 	fNameView->SetAlignment(B_ALIGN_CENTER);
 
+	// A collection can now live anywhere in an arbitrarily deep tree
+	// (#78) and can be moved around it (#58) -- the bold name alone no
+	// longer says where it actually is, just what it's called. A small,
+	// dim breadcrumb line right underneath it does, filled in by
+	// _UpdateTitle().
+	fPathView = new BStringView("verseListPath", "");
+	fPathView->SetFont(be_plain_font);
+	fPathView->SetAlignment(B_ALIGN_CENTER);
+	fPathView->SetHighColor(
+		tint_color(ui_color(B_PANEL_BACKGROUND_COLOR), B_DARKEN_3_TINT));
+
 	fRowList = new VerseListRowListView("verseListRows", this);
 	fRowList->SetSelectionMessage(new BMessage(VLIST_ROW_SELECTED));
 	fRowList->SetTarget(this);
@@ -527,6 +539,7 @@ SGVerseListWindow::_BuildGUI()
 		.AddGroup(B_VERTICAL, B_USE_DEFAULT_SPACING)
 			.SetInsets(B_USE_SMALL_INSETS)
 			.Add(fNameView)
+			.Add(fPathView)
 			.Add(descriptionBox)
 			.Add(rowsBox)
 		.End()
@@ -1784,9 +1797,29 @@ SGVerseListWindow::_UpdateTitle()
 	if (fHasOpenFile && current.Leaf() != NULL) {
 		SetTitle(current.Leaf());
 		fNameView->SetText(current.Leaf());
+
+		// The breadcrumb of parent folders between the root and this
+		// collection -- e.g. "Person Studies > Adam" for a collection
+		// nested two levels deep, or "Verse Lists (top level)" for one
+		// sitting directly under the root, same wording the Move/Copy
+		// List destination pickers use for that case (see
+		// _RebuildNavigationMenu()).
+		BString relative(fCollectionPath);
+		BString root(BookmarkFile::RootDirectory());
+		if (relative.StartsWith(root.String()))
+			relative.Remove(0, root.Length() + 1);
+		int32 lastSlash = relative.FindLast('/');
+		if (lastSlash >= 0) {
+			relative.Truncate(lastSlash);
+			relative.ReplaceAll("/", " > ");
+			fPathView->SetText(relative.String());
+		} else {
+			fPathView->SetText(B_TRANSLATE("Verse Lists (top level)"));
+		}
 	} else {
 		SetTitle(B_TRANSLATE("Verse Lists"));
 		fNameView->SetText(B_TRANSLATE("(No list open)"));
+		fPathView->SetText("");
 	}
 
 	bool onList = fHasOpenFile;
