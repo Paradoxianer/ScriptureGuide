@@ -1069,11 +1069,50 @@ public:
 
 	// Places the caret / starts a selection exactly where the click
 	// landed, like any other text view -- the base class already does
-	// all of it.
+	// all of it, for a left-click.
 	virtual void MouseDown(BPoint where)
 	{
 		if (fOwner != NULL)
 			fOwner->_SetActiveColumn(fPosition);
+
+		// #50: right-click on a reference already recognized in this
+		// note's own text (#28's cross-reference detection, the same
+		// FindReferencesInText()/ReferenceLinkAt() machinery a Bible
+		// column's own clickable cross-references use) -> "Add to
+		// list ▸", the exact same popup #67 built for a Bible column's
+		// own right-click.
+		uint32 buttons = 0;
+		BMessage* current = Window() != NULL
+			? Window()->CurrentMessage() : NULL;
+		if (current != NULL)
+			current->FindInt32("buttons", (int32*)&buttons);
+		if (buttons == B_SECONDARY_MOUSE_BUTTON) {
+			BString key;
+			if (fDocument != NULL
+					&& fDocument->ReferenceLinkAt(TextOffsetAt(where), key)
+					&& fOwner != NULL) {
+				// `key` is unlocalized/canonical (see
+				// FindReferencesInText()'s own comment) -- re-rendered in
+				// the active locale before being offered as something to
+				// bookmark, same as every other stored reference in this
+				// app. Notes aren't tied to any one translation's own
+				// versification scheme, so "KJV" on both ends is just a
+				// locale-only re-render, not a real conversion.
+				BLanguage language;
+				BLocale::Default()->GetLanguage(&language);
+
+				BString displayReference;
+				if (ConvertVerseReference(key.String(), "", "KJV",
+						language.Code(), "KJV", displayReference)) {
+					BPoint screenPoint = where;
+					ConvertToScreen(&screenPoint);
+					fOwner->_ShowAddToListMenu(displayReference.String(),
+						"KJV", language.Code(), screenPoint);
+				}
+			}
+			return;
+		}
+
 		TextDocumentView::MouseDown(where);
 	}
 
