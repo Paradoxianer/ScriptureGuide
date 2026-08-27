@@ -1,4 +1,4 @@
-1	German	application/x-vnd.Scripture-Guide	228661391
+1	German	application/x-vnd.Scripture-Guide	992252015
 Find Verse…	MainWindow		Vers finden…
 Dictionary 	DictionaryWindow		Wörterbuch 
 Regular Expression	SearchWindow		Regulärer Ausdruck
@@ -66,10 +66,7 @@ Description	VerseListWindow		Beschreibung
 Verses	VerseListWindow		Verse
 File	VerseListWindow		Datei
 New Verse List…	VerseListWindow		Neue Versliste…
-Open Verse List…	VerseListWindow		Versliste öffnen…
-Close Verse List	VerseListWindow		Versliste schließen
 Save	VerseListWindow		Speichern
-Save As…	VerseListWindow		Speichern unter…
 Delete File…	VerseListWindow		Datei löschen…
 Edit	VerseListWindow		Bearbeiten
 Move Up	VerseListWindow		Nach oben
@@ -78,10 +75,39 @@ Go to List	VerseListWindow		Gehe zu Liste
 New Verse List	VerseListWindow		Neue Versliste
 Name:	VerseListWindow		Name:
 Create	VerseListWindow		Erstellen
-Open	VerseListWindow		Öffnen
 Delete Verse List	VerseListWindow		Versliste löschen
-Delete this verse list file? This cannot be undone.	VerseListWindow		Diese Versliste löschen? Dies kann nicht rückgängig gemacht werden.
 Cancel	VerseListWindow		Abbrechen
 Delete	VerseListWindow		Löschen
 Verse Lists	VerseListWindow		Verslisten
 Verse Lists…	MainWindow		Verslisten…
+Add	VerseListWindow		Hinzufügen
+Add Reference	VerseListWindow		Referenz hinzufügen
+Add Reference…	VerseListWindow		Referenz hinzufügen…
+(copy here)	VerseListWindow		(hierher kopieren)
+Copy List to	VerseListWindow		Liste kopieren nach
+Copy to	VerseListWindow		Kopieren nach
+Could not move this collection there -- a collection with the same name may already exist in the target location.	VerseListWindow		Diese Sammlung konnte nicht dorthin verschoben werden -- am Zielort existiert möglicherweise bereits eine Sammlung mit demselben Namen.
+Delete this entire collection and everything in it? This cannot be undone.	VerseListWindow		Diese gesamte Sammlung und ihren gesamten Inhalt löschen? Dies kann nicht rückgängig gemacht werden.
+Drag a Bible reference here,	VerseListWindow		Eine Bibelstelle hierher ziehen,
+Edit Reference	VerseListWindow		Referenz bearbeiten
+Edit Reference…	VerseListWindow		Referenz bearbeiten…
+Export	VerseListWindow		Exportieren
+Export Text List…	VerseListWindow		Textliste exportieren…
+Import	VerseListWindow		Importieren
+Import Text List	VerseListWindow		Textliste importieren
+Import Text List…	VerseListWindow		Textliste importieren…
+Location:	VerseListWindow		Ort:
+(move here)	VerseListWindow		(hierher verschieben)
+Move List to	VerseListWindow		Liste verschieben nach
+Move to	VerseListWindow		Verschieben nach
+Move Verse List	VerseListWindow		Versliste verschieben
+OK	VerseListWindow		OK
+(open this collection)	VerseListWindow		(diese Sammlung öffnen)
+or use Edit > Add Reference…	VerseListWindow		oder Bearbeiten > Referenz hinzufügen… verwenden
+Reference:	VerseListWindow		Referenz:
+Rename	VerseListWindow		Umbenennen
+Rename List…	VerseListWindow		Liste umbenennen…
+Rename Verse List	VerseListWindow		Versliste umbenennen
+\"%text%\" isn't a Bible reference ScriptureGuide recognizes. Try something like \"John 3:16\" or \"Genesis 1:1-3\".	VerseListWindow		\"%text%\" ist keine Bibelstelle, die ScriptureGuide erkennt. Versuchen Sie etwas wie \"Johannes 3:16\" oder \"1. Mose 1:1-3\".
+(use this collection)	VerseListWindow		(diese Sammlung verwenden)
+Verse Lists (top level)	VerseListWindow		Verslisten (oberste Ebene)
