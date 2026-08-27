@@ -438,6 +438,20 @@ public:
 				// back out via _ColumnScrolled() above.
 				void				_ForwardWheelToChain(int32 position,
 										BMessage* message);
+				// #67: called by BibleColumnView's own right-click
+				// handler (not a friend, same reasoning as the other
+				// BibleColumnView-called methods here) -- `reference` is
+				// already the locale-formatted "<Book> <Chapter>:<Verse>
+				// [-<EndVerse>]" string (BibleColumnView::_ReferenceFor()),
+				// `versification`/`locale` are what it should be stored
+				// under. Builds the cascading collection tree (same shape
+				// as SGVerseListWindow's own "Go to List") and appends to
+				// whichever one is picked.
+				void				_ShowAddToListMenu(
+										const char* reference,
+										const char* versification,
+										const char* locale,
+										BPoint screenPoint);
 				// Called by NotesSaveListener (an unrelated class, not a
 				// friend -- same reasoning as _ColumnScrolled() etc.
 				// above) -- not meant for other callers.

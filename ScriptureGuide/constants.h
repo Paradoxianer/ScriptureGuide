@@ -95,6 +95,11 @@ const uint32 PARALLEL_ACTIVE_COLUMN_CHANGED = 'PVca';
 // cheap enough to run when typing pauses, far too expensive per
 // keystroke (see ParallelBibleView::NoteTextEdited()).
 const uint32 PARALLEL_NOTES_TEXT_CHANGED = 'PVnt';
+// #67: right-click "Add to list ▸" on a verse (or selection) in the
+// reading pane -- each item in the cascading collection tree carries
+// the already-formatted reference plus its source versification/locale
+// as "path"/"reference"/"versification"/"locale".
+const uint32 PARALLEL_ADD_TO_VERSE_LIST	= 'PVal';
 
 const uint32 MENU_HELP_LOGOS			= 'MHlo';
 const uint32 MENU_HELP_HOWTO			= 'MHho';

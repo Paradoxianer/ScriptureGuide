@@ -20,12 +20,14 @@
 #include <Font.h>
 #include <Language.h>
 #include <Locale.h>
+#include <Menu.h>
 #include <MenuField.h>
 #include <Clipboard.h>
 #include <MenuItem.h>
 #include <Message.h>
 #include <MessageRunner.h>
 #include <OS.h>
+#include <Path.h>
 #include <PopUpMenu.h>
 #include <ScrollBar.h>
 #include <ScrollView.h>
@@ -35,6 +37,7 @@
 
 #include <versekey.h>
 
+#include "BookmarkFile.h"
 #include "ParagraphLayout.h"
 #include "SGDebug.h"
 #include "SwordBackend.h"
@@ -273,6 +276,63 @@ public:
 	{
 		if (fOwner != NULL)
 			fOwner->_SetActiveColumn(fPosition);
+
+		// #67: right-click -> "Add to list ▸" on the reference an
+		// existing selection already covers (if the click landed inside
+		// it), or just the one verse under the pointer otherwise --
+		// right-clicking a single verse to bookmark it shouldn't first
+		// require selecting it.
+		uint32 buttons = 0;
+		BMessage* current = Window() != NULL
+			? Window()->CurrentMessage() : NULL;
+		if (current != NULL)
+			current->FindInt32("buttons", (int32*)&buttons);
+		if (buttons == B_SECONDARY_MOUSE_BUTTON) {
+			if (fOwner != NULL && fBibleDocument != NULL) {
+				int32 start, end;
+				if (HasSelection()) {
+					GetSelection(start, end);
+					int32 offset = TextOffsetAt(where);
+					if (offset < start || offset >= end)
+						start = end = -1;
+				} else {
+					start = end = -1;
+				}
+				if (start < 0) {
+					int verse = VerseAt(where);
+					if (verse <= 0
+						|| !fBibleDocument->TextRangeForVerseRange(verse,
+							verse, start, end)) {
+						start = end = -1;
+					}
+				}
+
+				if (start >= 0 && end > start) {
+					BString reference = _ReferenceFor(start, end);
+
+					BString versification;
+					SWModule* module = fBibleDocument->Module();
+					if (module != NULL) {
+						const char* configured
+							= module->getConfigEntry("Versification");
+						if (configured != NULL)
+							versification = configured;
+					}
+					if (versification.IsEmpty())
+						versification = "KJV";
+
+					BLanguage language;
+					BLocale::Default()->GetLanguage(&language);
+
+					BPoint screenPoint = where;
+					ConvertToScreen(&screenPoint);
+					fOwner->_ShowAddToListMenu(reference.String(),
+						versification.String(), language.Code(),
+						screenPoint);
+				}
+			}
+			return;
+		}
 
 		fMouseDownPoint = where;
 		fTrackingForDrag = false;
@@ -1760,6 +1820,29 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case PARALLEL_ADD_TO_VERSE_LIST:
+		{
+			// #67: whichever "Go to List"-style tree item was clicked in
+			// _ShowAddToListMenu()'s popup. Appended after whatever is
+			// already in that collection -- if SGVerseListWindow happens
+			// to have this same one open, its own node-monitor watch
+			// (#79) already picks up the new file with no extra call
+			// needed from here.
+			BString path, reference, versification, locale;
+			if (message->FindString("path", &path) == B_OK
+				&& message->FindString("reference", &reference) == B_OK
+				&& message->FindString("versification", &versification)
+					== B_OK
+				&& message->FindString("locale", &locale) == B_OK) {
+				int32 position = (int32)BookmarkFile::ListBookmarkPaths(
+					path.String()).size();
+				BookmarkFile bookmark;
+				bookmark.CreateNew(path.String(), reference.String(),
+					versification.String(), locale.String(), position);
+			}
+			break;
+		}
+
 		case PARALLEL_NOTES_TEXT_CHANGED:
 		{
 			// The debounce timer armed by NoteTextEdited() has expired --
@@ -2406,6 +2489,70 @@ ParallelBibleView::SetColumnLinked(int32 gapIndex, bool linked)
 	if (fActivePosition < 0 && !fColumnOrder.empty())
 		fActivePosition = 0;
 	_RebuildLayout();
+}
+
+
+// #67: same cascading-tree shape as SGVerseListWindow's own "Go to
+// List" (PopulateCollectionMenu() there) -- a local twin rather than a
+// shared export, since every item here needs to carry the reference
+// being added along with the destination path, not just the path alone
+// that helper's own callers all want. A folder with no sub-collections
+// becomes a plain leaf; one that does becomes a submenu, its own folder
+// still reachable as that submenu's first item (see the .h comment on
+// why the reference is baked into every item's message identically).
+static void
+PopulateAddToListMenu(BMenu* menu, BHandler* target, const char* path,
+	const char* reference, const char* versification, const char* locale)
+{
+	std::vector<BString> names = BookmarkFile::ListCollectionNames(path);
+	for (size_t i = 0; i < names.size(); i++) {
+		BPath childPath(path);
+		childPath.Append(names[i].String());
+
+		BMessage* add = new BMessage(PARALLEL_ADD_TO_VERSE_LIST);
+		add->AddString("path", childPath.Path());
+		add->AddString("reference", reference);
+		add->AddString("versification", versification);
+		add->AddString("locale", locale);
+
+		std::vector<BString> grandchildren
+			= BookmarkFile::ListCollectionNames(childPath.Path());
+		if (grandchildren.empty()) {
+			menu->AddItem(new BMenuItem(names[i].String(), add));
+			continue;
+		}
+
+		BMenu* submenu = new BMenu(names[i].String());
+		submenu->AddItem(new BMenuItem(
+			B_TRANSLATE("(add to this collection)"), add));
+		submenu->AddSeparatorItem();
+		PopulateAddToListMenu(submenu, target, childPath.Path(), reference,
+			versification, locale);
+		submenu->SetTargetForItems(target);
+		menu->AddItem(submenu);
+	}
+}
+
+
+void
+ParallelBibleView::_ShowAddToListMenu(const char* reference,
+	const char* versification, const char* locale, BPoint screenPoint)
+{
+	BPopUpMenu* menu = new BPopUpMenu("addToList", false, false);
+
+	// Read-only, for context -- shown exactly as it will be stored
+	// (already locale-formatted by BibleColumnView::_ReferenceFor()).
+	BMenuItem* heading = new BMenuItem(reference, (BMessage*)NULL);
+	heading->SetEnabled(false);
+	menu->AddItem(heading);
+	menu->AddSeparatorItem();
+
+	BString root = BookmarkFile::RootDirectory();
+	PopulateAddToListMenu(menu, this, root.String(), reference, versification,
+		locale);
+	menu->SetTargetForItems(this);
+	menu->SetAsyncAutoDestruct(true);
+	menu->Go(screenPoint, true, true, true);
 }
 
 
