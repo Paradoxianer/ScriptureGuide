@@ -116,7 +116,7 @@ class VerseListRowListView : public BOutlineListView {
 public:
 	VerseListRowListView(const char* name, SGVerseListWindow* owner)
 		:
-		BOutlineListView(name, B_SINGLE_SELECTION_LIST),
+		BOutlineListView(name, B_MULTIPLE_SELECTION_LIST),
 		fOwner(owner)
 	{
 	}
@@ -136,7 +136,12 @@ public:
 			current->FindInt32("buttons", (int32*)&buttons);
 		if (buttons == B_SECONDARY_MOUSE_BUTTON) {
 			if (index >= 0) {
-				Select(index);
+				// Right-clicking a row that's already part of a multi-
+				// selection (#58) acts on the whole selection; right-
+				// clicking outside it replaces the selection with just
+				// this row, same convention Tracker itself uses.
+				if (!ItemAt(index)->IsSelected())
+					Select(index);
 				BPoint screenPoint = where;
 				ConvertToScreen(&screenPoint);
 				_ShowRemoveMenu(index, screenPoint);
@@ -157,9 +162,8 @@ public:
 	virtual void KeyDown(const char* bytes, int32 numBytes)
 	{
 		if (numBytes == 1 && bytes[0] == B_DELETE) {
-			int32 index = CurrentSelection();
-			if (index >= 0 && fOwner != NULL) {
-				fOwner->_RemoveRow(index);
+			if (CurrentSelection() >= 0 && fOwner != NULL) {
+				fOwner->_RemoveSelectedRows();
 				return;
 			}
 		}
@@ -204,11 +208,12 @@ public:
 	virtual void MessageReceived(BMessage* message)
 	{
 		if (message->what == VLIST_REMOVE_ROW) {
-			int32 index;
-			if (message->FindInt32("index", &index) == B_OK
-				&& fOwner != NULL) {
-				fOwner->_RemoveRow(index);
-			}
+			// Acts on the whole current selection (#58), not just the
+			// row that was originally right-clicked -- MouseDown() above
+			// already made sure that row is part of it before this menu
+			// was even shown.
+			if (fOwner != NULL)
+				fOwner->_RemoveSelectedRows();
 			return;
 		}
 		if (message->what == VLIST_EDIT_REFERENCE) {
@@ -257,15 +262,23 @@ private:
 	// from list" popups) -- not owned by anything, cleans itself up.
 	void _ShowRemoveMenu(int32 index, BPoint screenPoint)
 	{
+		int32 selectionCount = 0;
+		for (int32 i = 0; CurrentSelection(i) >= 0; i++)
+			selectionCount++;
+
 		BPopUpMenu* menu = new BPopUpMenu("removeRow", false, false);
-		BMessage* edit = new BMessage(VLIST_EDIT_REFERENCE);
-		edit->AddInt32("index", index);
-		menu->AddItem(new BMenuItem(
-			B_TRANSLATE("Edit Reference" B_UTF8_ELLIPSIS), edit));
-		menu->AddSeparatorItem();
-		BMessage* remove = new BMessage(VLIST_REMOVE_ROW);
-		remove->AddInt32("index", index);
-		menu->AddItem(new BMenuItem(B_TRANSLATE("Remove"), remove));
+		// Editing a single reference in place only makes sense for
+		// exactly one selected row -- same gating as the Edit menu's own
+		// Edit Reference item (see _UpdateRowActionState()).
+		if (selectionCount <= 1) {
+			BMessage* edit = new BMessage(VLIST_EDIT_REFERENCE);
+			edit->AddInt32("index", index);
+			menu->AddItem(new BMenuItem(
+				B_TRANSLATE("Edit Reference" B_UTF8_ELLIPSIS), edit));
+			menu->AddSeparatorItem();
+		}
+		menu->AddItem(new BMenuItem(B_TRANSLATE("Remove"),
+			new BMessage(VLIST_REMOVE_ROW)));
 		menu->SetTargetForItems(this);
 		menu->SetAsyncAutoDestruct(true);
 		menu->Go(screenPoint, true, true, true);
@@ -348,6 +361,10 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fMoveUpItem(NULL),
 	fMoveDownItem(NULL),
 	fNavigationMenu(NULL),
+	fMoveListMenu(NULL),
+	fCopyListMenu(NULL),
+	fMoveEntriesMenu(NULL),
+	fCopyEntriesMenu(NULL),
 	fDescriptionView(NULL),
 	fDescriptionScroll(NULL),
 	fRowList(NULL),
@@ -548,6 +565,14 @@ SGVerseListWindow::_BuildMenuBar()
 		B_TRANSLATE("Rename List" B_UTF8_ELLIPSIS),
 		new BMessage(VLIST_RENAME));
 	fileMenu->AddItem(fRenameItem);
+	// #58: each a cascading submenu (same tree as "Go to List", built by
+	// PopulateCollectionMenu() in _RebuildNavigationMenu()), not a
+	// button-plus-dialog -- direct selection of the destination, same
+	// reasoning as the New List/Import location picker (#97).
+	fMoveListMenu = new BMenu(B_TRANSLATE("Move List to"));
+	fileMenu->AddItem(fMoveListMenu);
+	fCopyListMenu = new BMenu(B_TRANSLATE("Copy List to"));
+	fileMenu->AddItem(fCopyListMenu);
 	fileMenu->AddSeparatorItem();
 	fDeleteItem = new BMenuItem(
 		B_TRANSLATE("Delete File" B_UTF8_ELLIPSIS),
@@ -567,6 +592,14 @@ SGVerseListWindow::_BuildMenuBar()
 	fRemoveItem = new BMenuItem(B_TRANSLATE("Remove"),
 		new BMessage(VLIST_REMOVE_SELECTED));
 	editMenu->AddItem(fRemoveItem);
+	editMenu->AddSeparatorItem();
+	// #58: act on every currently selected row (fRowList is now
+	// B_MULTIPLE_SELECTION_LIST), same destination-picker submenus as
+	// the File menu's list-level versions above.
+	fMoveEntriesMenu = new BMenu(B_TRANSLATE("Move to"));
+	editMenu->AddItem(fMoveEntriesMenu);
+	fCopyEntriesMenu = new BMenu(B_TRANSLATE("Copy to"));
+	editMenu->AddItem(fCopyEntriesMenu);
 	editMenu->AddSeparatorItem();
 	fMoveUpItem = new BMenuItem(B_TRANSLATE("Move Up"),
 		new BMessage(VLIST_MOVE_UP), B_UP_ARROW);
@@ -593,7 +626,8 @@ SGVerseListWindow::_BuildMenuBar()
 // (_RebuildNavigationMenu()'s "Go to List" menu), but VerseListNamePromptWindow
 // below needs it too, for its own location-picker popup.
 static void PopulateCollectionMenu(BMenu* menu, BHandler* target,
-	const char* path, uint32 what, const char* selfLabel);
+	const char* path, uint32 what, const char* selfLabel,
+	const char* excludePath = "");
 
 
 static const uint32 kNamePromptOK = 'VLpo';
@@ -840,12 +874,8 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 		}
 
 		case VLIST_REMOVE_SELECTED:
-		{
-			int32 selected = fRowList->CurrentSelection();
-			if (selected >= 0)
-				_RemoveRow(selected);
+			_RemoveSelectedRows();
 			break;
-		}
 
 		case VLIST_NAV_SELECT:
 		{
@@ -858,6 +888,38 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 		case VLIST_DELETE:
 			_DeleteList();
 			break;
+
+		case VLIST_MOVE_LIST_TO:
+		{
+			BString path;
+			if (message->FindString("path", &path) == B_OK)
+				_MoveListTo(path.String());
+			break;
+		}
+
+		case VLIST_COPY_LIST_TO:
+		{
+			BString path;
+			if (message->FindString("path", &path) == B_OK)
+				_CopyListTo(path.String());
+			break;
+		}
+
+		case VLIST_MOVE_ENTRIES_TO:
+		{
+			BString path;
+			if (message->FindString("path", &path) == B_OK)
+				_CopyOrMoveSelectedEntries(path.String(), true);
+			break;
+		}
+
+		case VLIST_COPY_ENTRIES_TO:
+		{
+			BString path;
+			if (message->FindString("path", &path) == B_OK)
+				_CopyOrMoveSelectedEntries(path.String(), false);
+			break;
+		}
 
 		case VLIST_MOVE_UP:
 		{
@@ -1018,6 +1080,208 @@ SGVerseListWindow::_RenameList(const char* name)
 
 	_UpdateTitle();
 	_RebuildNavigationMenu();
+}
+
+
+// #58: byte content plus every BFS attribute, not just the bytes --
+// Position/Tags (see BookmarkFile) are attributes, and a byte-only copy
+// would silently reset every moved bookmark to "no position" (sorts
+// last) and "no tags" in its new home. Revived from ccf1d08's own
+// removed "Save As" copy path (see that commit's message) -- same need,
+// just reached from a different feature now.
+static status_t
+CopyFile(const char* fromPath, const char* toPath)
+{
+	BFile from(fromPath, B_READ_ONLY);
+	status_t status = from.InitCheck();
+	if (status != B_OK)
+		return status;
+
+	BFile to(toPath, B_READ_WRITE | B_CREATE_FILE | B_ERASE_FILE);
+	status = to.InitCheck();
+	if (status != B_OK)
+		return status;
+
+	off_t size = 0;
+	from.GetSize(&size);
+	if (size > 0) {
+		char* buffer = new(std::nothrow) char[size];
+		if (buffer == NULL)
+			return B_NO_MEMORY;
+		ssize_t bytesRead = from.Read(buffer, size);
+		if (bytesRead > 0)
+			to.Write(buffer, bytesRead);
+		delete[] buffer;
+	}
+
+	char attrName[B_ATTR_NAME_LENGTH];
+	while (from.GetNextAttrName(attrName) == B_OK) {
+		attr_info info;
+		if (from.GetAttrInfo(attrName, &info) != B_OK)
+			continue;
+		char* attrBuffer = new(std::nothrow) char[info.size];
+		if (attrBuffer == NULL)
+			continue;
+		ssize_t bytesRead = from.ReadAttr(attrName, info.type, 0, attrBuffer,
+			info.size);
+		if (bytesRead > 0) {
+			to.WriteAttr(attrName, info.type, 0, attrBuffer,
+				(size_t)bytesRead);
+		}
+		delete[] attrBuffer;
+	}
+
+	return B_OK;
+}
+
+
+// Copies every file AND nested sub-collection directly and indirectly
+// inside `sourceDir` into `destDir` (which the caller has already
+// created) -- unlike ccf1d08's removed CopyCollectionInto() (flat, "Save
+// As" only ever copied ONE collection's own bookmarks), this recurses:
+// duplicating "Person Studies" should bring "Person Studies/Adam" along,
+// the same way moving it (a plain directory move) already does for free.
+static void
+CopyCollectionTreeInto(const char* sourceDir, const char* destDir)
+{
+	BDirectory dir(sourceDir);
+	if (dir.InitCheck() != B_OK)
+		return;
+
+	BEntry entry;
+	while (dir.GetNextEntry(&entry) == B_OK) {
+		char name[B_FILE_NAME_LENGTH];
+		if (entry.GetName(name) != B_OK)
+			continue;
+
+		BPath toPath(destDir);
+		toPath.Append(name);
+
+		if (entry.IsDirectory()) {
+			create_directory(toPath.Path(), 0777);
+			BPath fromPath;
+			entry.GetPath(&fromPath);
+			CopyCollectionTreeInto(fromPath.Path(), toPath.Path());
+			continue;
+		}
+
+		BPath fromPath;
+		entry.GetPath(&fromPath);
+		CopyFile(fromPath.Path(), toPath.Path());
+	}
+}
+
+
+// #58: relocates the whole open collection folder -- a plain directory
+// move, so any nested sub-collection moves along with it for free (see
+// _DeleteList()'s own comment on how nesting is expressed on disk).
+void
+SGVerseListWindow::_MoveListTo(const char* destParentPath)
+{
+	if (!fHasOpenFile)
+		return;
+
+	BEntry entry(fCollectionPath.String());
+	if (entry.InitCheck() != B_OK)
+		return;
+
+	BDirectory destDir(destParentPath);
+	if (destDir.InitCheck() != B_OK)
+		return;
+
+	// Must happen before the move below -- once the directory is gone
+	// from its old location, a still-pending description edit's own
+	// flush target (_DescriptionPath(), derived from the OLD
+	// fCollectionPath) no longer exists to write to.
+	if (fDescriptionSaveRunner != NULL)
+		_SaveDescription();
+
+	if (entry.MoveTo(&destDir) != B_OK) {
+		BAlert* alert = new BAlert(B_TRANSLATE("Move Verse List"),
+			B_TRANSLATE("Could not move this collection there -- a "
+				"collection with the same name may already exist in the "
+				"target location."),
+			B_TRANSLATE("OK"));
+		alert->Go();
+		return;
+	}
+
+	BPath oldPath(fCollectionPath.String());
+	BPath newPath(destParentPath);
+	newPath.Append(oldPath.Leaf());
+
+	// Every fBookmarks[] entry's own BookmarkFile::Path() still points at
+	// the OLD location the directory move just invalidated -- _LoadFile()
+	// re-reads them fresh from the new one rather than trying to patch
+	// each one's internal path in place.
+	_LoadFile(newPath.Path());
+}
+
+
+// #58: duplicates the whole open collection folder, recursively (see
+// CopyCollectionTreeInto()), under a new name if needed (same numbered-
+// collision handling CreateCollection() already gives every other new
+// collection) -- the original is left untouched, unlike Move.
+void
+SGVerseListWindow::_CopyListTo(const char* destParentPath)
+{
+	if (!fHasOpenFile)
+		return;
+
+	BPath sourcePath(fCollectionPath.String());
+	BString destPath = BookmarkFile::CreateCollection(destParentPath,
+		sourcePath.Leaf());
+	if (destPath.IsEmpty())
+		return;
+
+	CopyCollectionTreeInto(fCollectionPath.String(), destPath.String());
+	_RebuildNavigationMenu();
+}
+
+
+// #58: appends every currently selected row into the collection at
+// `destPath` (after whatever bookmarks are already there), preserving
+// each one's own reference/versification/locale exactly -- then, if
+// `move`, removes the originals. Copying first and only removing once
+// every copy has actually succeeded means a failure partway through
+// (a full disk, a permissions problem) leaves the source list intact
+// rather than having already lost rows it couldn't recreate elsewhere.
+void
+SGVerseListWindow::_CopyOrMoveSelectedEntries(const char* destPath, bool move)
+{
+	if (!fHasOpenFile)
+		return;
+
+	std::vector<int32> indices;
+	int32 selected;
+	for (int32 i = 0; (selected = fRowList->CurrentSelection(i)) >= 0; i++)
+		indices.push_back(selected);
+	if (indices.empty())
+		return;
+
+	int32 position = (int32)BookmarkFile::ListBookmarkPaths(destPath).size();
+	std::vector<int32> copied;
+	for (size_t i = 0; i < indices.size(); i++) {
+		int32 index = indices[i];
+		if (index < 0 || index >= (int32)fBookmarks.size())
+			continue;
+		BookmarkFile copy;
+		if (copy.CreateNew(destPath, fBookmarks[index].Reference(),
+				fBookmarks[index].Versification(), fBookmarks[index].Locale(),
+				position) == B_OK) {
+			position++;
+			copied.push_back(index);
+		}
+	}
+
+	if (!move || copied.empty())
+		return;
+
+	std::sort(copied.begin(), copied.end());
+	for (std::vector<int32>::reverse_iterator it = copied.rbegin();
+			it != copied.rend(); ++it) {
+		_RemoveRow(*it);
+	}
 }
 
 
@@ -1300,8 +1564,8 @@ SGVerseListWindow::_ImportIntoNewList(const char* name,
 
 	fPendingImportContent = "";
 
+	// _LoadFile() rebuilds the navigation/destination menus itself now.
 	_LoadFile(collectionPath.String());
-	_RebuildNavigationMenu();
 }
 
 
@@ -1351,6 +1615,7 @@ SGVerseListWindow::_CloseList()
 	_RebuildRows();
 	_RebuildDescription();
 	_UpdateTitle();
+	_RebuildNavigationMenu();
 }
 
 
@@ -1387,7 +1652,6 @@ SGVerseListWindow::_DeleteList()
 	BEntry(fCollectionPath.String()).Remove();
 
 	_CloseList();
-	_RebuildNavigationMenu();
 }
 
 
@@ -1421,6 +1685,10 @@ SGVerseListWindow::_LoadFile(const char* path)
 	_RebuildRows();
 	_RebuildDescription();
 	_UpdateTitle();
+	// The Move/Copy List and Move/Copy Entries submenus exclude whatever
+	// is currently open (see PopulateCollectionMenu()'s own comment) --
+	// that changed, even though the tree itself may not have.
+	_RebuildNavigationMenu();
 }
 
 
@@ -1526,25 +1794,42 @@ SGVerseListWindow::_UpdateTitle()
 	fRenameItem->SetEnabled(onList);
 	fDeleteItem->SetEnabled(onList);
 	fAddReferenceItem->SetEnabled(onList);
+	fMoveListMenu->SetEnabled(onList);
+	fCopyListMenu->SetEnabled(onList);
 	_UpdateRowActionState();
 }
 
 
-// Edit Reference/Remove/Move Up/Move Down all act on whichever row is
-// currently selected -- unlike the rest of _UpdateTitle()'s items, their
-// enabled state depends on selection, not just whether a list is open,
-// so this needs to run both when the list itself changes and every time
-// the row selection does (see VLIST_ROW_SELECTED).
+// Edit Reference/Remove/Move Up/Move Down/Move to/Copy to all act on
+// whichever row(s) are currently selected -- unlike the rest of
+// _UpdateTitle()'s items, their enabled state depends on selection, not
+// just whether a list is open, so this needs to run both when the list
+// itself changes and every time the row selection does (see
+// VLIST_ROW_SELECTED). fRowList allows selecting more than one row
+// (#58) -- Edit Reference/Move Up/Move Down only make sense for exactly
+// one, Remove/Move to/Copy to work on any number.
 void
 SGVerseListWindow::_UpdateRowActionState()
 {
-	int32 selected = fHasOpenFile ? fRowList->CurrentSelection() : -1;
-	bool hasSelection = selected >= 0;
-	fEditReferenceItem->SetEnabled(hasSelection);
+	int32 selectionCount = 0;
+	int32 firstSelected = -1;
+	if (fHasOpenFile) {
+		int32 selected;
+		for (int32 i = 0; (selected = fRowList->CurrentSelection(i)) >= 0;
+				i++) {
+			if (selectionCount == 0)
+				firstSelected = selected;
+			selectionCount++;
+		}
+	}
+	bool hasSelection = selectionCount > 0;
+	fEditReferenceItem->SetEnabled(selectionCount == 1);
 	fRemoveItem->SetEnabled(hasSelection);
-	fMoveUpItem->SetEnabled(hasSelection && selected > 0);
-	fMoveDownItem->SetEnabled(hasSelection
-		&& selected + 1 < fRowList->CountItems());
+	fMoveEntriesMenu->SetEnabled(hasSelection);
+	fCopyEntriesMenu->SetEnabled(hasSelection);
+	fMoveUpItem->SetEnabled(selectionCount == 1 && firstSelected > 0);
+	fMoveDownItem->SetEnabled(selectionCount == 1
+		&& firstSelected + 1 < fRowList->CountItems());
 }
 
 
@@ -1565,14 +1850,32 @@ SGVerseListWindow::_UpdateRowActionState()
 // and the New-List/Import location picker's popup (a different message
 // so the two don't collide, "use this collection" reads better for a
 // destination pick than a navigation).
+//
+// `excludePath` (#58) is non-empty for the Move/Copy List and Move/Copy
+// Entries submenus: a collection can't sensibly be moved or copied into
+// itself or one of its own descendants (self-nesting), nor can entries
+// usefully be filed into the very collection they're already in -- both
+// that path itself and anything nested under it are skipped entirely
+// (not just disabled), same as they never existed in the tree.
 static void
 PopulateCollectionMenu(BMenu* menu, BHandler* target, const char* path,
-	uint32 what, const char* selfLabel)
+	uint32 what, const char* selfLabel, const char* excludePath)
 {
 	std::vector<BString> names = BookmarkFile::ListCollectionNames(path);
 	for (size_t i = 0; i < names.size(); i++) {
 		BPath childPath(path);
 		childPath.Append(names[i].String());
+
+		if (excludePath[0] != '\0') {
+			BString child(childPath.Path());
+			BString exclude(excludePath);
+			if (child == exclude
+				|| (child.Length() > exclude.Length()
+					&& child.Compare(exclude, exclude.Length()) == 0
+					&& child[exclude.Length()] == '/')) {
+				continue;
+			}
+		}
 
 		std::vector<BString> grandchildren
 			= BookmarkFile::ListCollectionNames(childPath.Path());
@@ -1589,13 +1892,20 @@ PopulateCollectionMenu(BMenu* menu, BHandler* target, const char* path,
 		submenu->AddItem(new BMenuItem(selfLabel, selectSelf));
 		submenu->AddSeparatorItem();
 		PopulateCollectionMenu(submenu, target, childPath.Path(), what,
-			selfLabel);
+			selfLabel, excludePath);
 		submenu->SetTargetForItems(target);
 		menu->AddItem(submenu);
 	}
 }
 
 
+// Rebuilds all four cascading collection menus at once: "Go to List"
+// plus the three #58 destination pickers (Move/Copy List, Move/Copy
+// Entries) -- called both when the tree itself changes (a collection
+// added/removed/renamed) and whenever fCollectionPath changes (opening a
+// different list or closing one), since the latter changes what the
+// three destination pickers need to exclude (see PopulateCollectionMenu()'s
+// own comment on `excludePath`) even though the tree itself didn't move.
 void
 SGVerseListWindow::_RebuildNavigationMenu()
 {
@@ -1609,8 +1919,57 @@ SGVerseListWindow::_RebuildNavigationMenu()
 	BString root = BookmarkFile::RootDirectory();
 	PopulateCollectionMenu(fNavigationMenu, this, root.String(),
 		VLIST_NAV_SELECT, B_TRANSLATE("(open this collection)"));
-
 	fNavigationMenu->SetTargetForItems(this);
+
+	for (int32 i = fMoveListMenu->CountItems() - 1; i >= 0; i--)
+		delete fMoveListMenu->RemoveItem(i);
+	for (int32 i = fCopyListMenu->CountItems() - 1; i >= 0; i--)
+		delete fCopyListMenu->RemoveItem(i);
+	for (int32 i = fMoveEntriesMenu->CountItems() - 1; i >= 0; i--)
+		delete fMoveEntriesMenu->RemoveItem(i);
+	for (int32 i = fCopyEntriesMenu->CountItems() - 1; i >= 0; i--)
+		delete fCopyEntriesMenu->RemoveItem(i);
+
+	if (fHasOpenFile) {
+		const char* exclude = fCollectionPath.String();
+
+		BMessage* moveToRoot = new BMessage(VLIST_MOVE_LIST_TO);
+		moveToRoot->AddString("path", root);
+		fMoveListMenu->AddItem(new BMenuItem(
+			B_TRANSLATE("Verse Lists (top level)"), moveToRoot));
+		fMoveListMenu->AddSeparatorItem();
+		PopulateCollectionMenu(fMoveListMenu, this, root.String(),
+			VLIST_MOVE_LIST_TO, B_TRANSLATE("(move here)"), exclude);
+
+		BMessage* copyToRoot = new BMessage(VLIST_COPY_LIST_TO);
+		copyToRoot->AddString("path", root);
+		fCopyListMenu->AddItem(new BMenuItem(
+			B_TRANSLATE("Verse Lists (top level)"), copyToRoot));
+		fCopyListMenu->AddSeparatorItem();
+		PopulateCollectionMenu(fCopyListMenu, this, root.String(),
+			VLIST_COPY_LIST_TO, B_TRANSLATE("(copy here)"), exclude);
+
+		BMessage* moveEntriesToRoot = new BMessage(VLIST_MOVE_ENTRIES_TO);
+		moveEntriesToRoot->AddString("path", root);
+		fMoveEntriesMenu->AddItem(new BMenuItem(
+			B_TRANSLATE("Verse Lists (top level)"), moveEntriesToRoot));
+		fMoveEntriesMenu->AddSeparatorItem();
+		PopulateCollectionMenu(fMoveEntriesMenu, this, root.String(),
+			VLIST_MOVE_ENTRIES_TO, B_TRANSLATE("(move here)"), exclude);
+
+		BMessage* copyEntriesToRoot = new BMessage(VLIST_COPY_ENTRIES_TO);
+		copyEntriesToRoot->AddString("path", root);
+		fCopyEntriesMenu->AddItem(new BMenuItem(
+			B_TRANSLATE("Verse Lists (top level)"), copyEntriesToRoot));
+		fCopyEntriesMenu->AddSeparatorItem();
+		PopulateCollectionMenu(fCopyEntriesMenu, this, root.String(),
+			VLIST_COPY_ENTRIES_TO, B_TRANSLATE("(copy here)"), exclude);
+	}
+
+	fMoveListMenu->SetTargetForItems(this);
+	fCopyListMenu->SetTargetForItems(this);
+	fMoveEntriesMenu->SetTargetForItems(this);
+	fCopyEntriesMenu->SetTargetForItems(this);
 }
 
 
@@ -1821,6 +2180,27 @@ SGVerseListWindow::_RemoveRow(int32 index)
 	int32 count = fRowList->CountItems();
 	if (count > 0)
 		fRowList->Select(std::min(index, count - 1));
+}
+
+
+// #58: highest index first -- removing a lower one first would shift
+// every higher, still-pending index out from under this loop. Reuses
+// _RemoveRow() per row rather than a bespoke batch path; collections are
+// small enough (same assumption _MoveRow()'s own full-renumber makes)
+// that the repeated _RebuildRows() calls this causes aren't worth
+// avoiding with more code.
+void
+SGVerseListWindow::_RemoveSelectedRows()
+{
+	std::vector<int32> indices;
+	int32 selected;
+	for (int32 i = 0; (selected = fRowList->CurrentSelection(i)) >= 0; i++)
+		indices.push_back(selected);
+	std::sort(indices.begin(), indices.end());
+	for (std::vector<int32>::reverse_iterator it = indices.rbegin();
+			it != indices.rend(); ++it) {
+		_RemoveRow(*it);
+	}
 }
 
 

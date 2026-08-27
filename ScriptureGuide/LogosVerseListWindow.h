@@ -77,6 +77,15 @@ class TextDocumentView;
 // which stays as the shortcut both now have a menu equivalent for.
 #define VLIST_EDIT_REFERENCE_SELECTED	'VLes'
 #define VLIST_REMOVE_SELECTED	'VLrx'
+// #58: File > Move/Copy List to... (the whole open collection, including
+// any nested sub-collections) and Edit > Move/Copy to... (just the
+// currently selected row(s)) -- all four are cascading submenus built by
+// PopulateCollectionMenu(), same tree as "Go to List", each carrying the
+// chosen destination as "path".
+#define VLIST_MOVE_LIST_TO		'VLmt'
+#define VLIST_COPY_LIST_TO		'VLct'
+#define VLIST_MOVE_ENTRIES_TO	'VLme'
+#define VLIST_COPY_ENTRIES_TO	'VLce'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -137,6 +146,11 @@ public:
 			// unlike File > Delete File..., which removes the whole
 			// list.
 			void			_RemoveRow(int32 index);
+			// Same not-a-friend reasoning: removes every currently
+			// selected row (#58 -- fRowList allows more than one now),
+			// used by both the Delete key and the row list's own
+			// right-click "Remove", as well as Edit > Remove.
+			void			_RemoveSelectedRows();
 			// Same not-a-friend reasoning: the row list's own right-click
 			// "Edit Reference..." item. Opens the prompt window;
 			// _EditReference() (private, called once the prompt returns
@@ -176,6 +190,15 @@ private:
 			void			_ExportTextFile(const char* path);
 			void			_CloseList();
 			void			_DeleteList();
+			// #58: relocates/duplicates the whole open collection folder
+			// (nested sub-collections included) under `destParentPath`.
+			void			_MoveListTo(const char* destParentPath);
+			void			_CopyListTo(const char* destParentPath);
+			// #58: copies (or, if `move`, copies then removes the
+			// originals) every currently selected row into the collection
+			// at `destPath`, appended after whatever is already there.
+			void			_CopyOrMoveSelectedEntries(const char* destPath,
+								bool move);
 			// Double-click on the name view (#73) -- opens the same
 			// name-prompt window _NewList() uses, pre-filled with the
 			// current name, then renames the collection's own folder in
@@ -295,6 +318,12 @@ private:
 			BMenuItem*				fMoveUpItem;
 			BMenuItem*				fMoveDownItem;
 			BMenu*					fNavigationMenu;
+			// #58: cascading destination pickers, same tree as
+			// fNavigationMenu -- see PopulateCollectionMenu().
+			BMenu*					fMoveListMenu;
+			BMenu*					fCopyListMenu;
+			BMenu*					fMoveEntriesMenu;
+			BMenu*					fCopyEntriesMenu;
 
 			// A value member, not a raw pointer -- TextDocumentRef is a
 			// BReference<TextDocument>, so it cleans itself up when this
