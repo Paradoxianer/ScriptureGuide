@@ -26,8 +26,6 @@ class TextDocumentView;
 // they live here rather than in constants.h.
 #define VLIST_QUIT				'VLqu'
 #define VLIST_NEW				'VLnw'
-#define VLIST_SAVE				'VLsv'
-#define VLIST_CLOSE				'VLcl'
 #define VLIST_DELETE			'VLdl'
 #define VLIST_MOVE_UP			'VLmu'
 #define VLIST_MOVE_DOWN			'VLmd'
@@ -177,7 +175,6 @@ private:
 			void			_ExportPanel();
 			void			_ExportTextFile(const char* path);
 			void			_CloseList();
-			void			_SaveList();
 			void			_DeleteList();
 			// Double-click on the name view (#73) -- opens the same
 			// name-prompt window _NewList() uses, pre-filled with the
@@ -289,7 +286,6 @@ private:
 			// the window reads as "this is the list you have open" even
 			// once the description/row boxes below it fill up.
 			BStringView*			fNameView;
-			BMenuItem*				fSaveItem;
 			BMenuItem*				fExportItem;
 			BMenuItem*				fRenameItem;
 			BMenuItem*				fDeleteItem;

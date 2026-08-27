@@ -20,6 +20,7 @@
 #include <LayoutBuilder.h>
 #include <ListItem.h>
 #include <MenuBar.h>
+#include <MenuField.h>
 #include <MenuItem.h>
 #include <NodeMonitor.h>
 #include <Message.h>
@@ -278,6 +279,10 @@ private:
 // VLIST_RENAME to the window, same not-a-friend reasoning as
 // VerseListRowListView above. A single click does nothing -- this is a
 // label, not a button, so there's no affordance to confuse with one.
+// Right-click (#97 follow-up) shows a small "Rename List.../Delete
+// File..." context menu -- both already exist as File-menu items, this
+// just makes them reachable right where the list's own name already is,
+// same menu+gesture pairing this window's other actions already have.
 class VerseListNameView : public BStringView {
 public:
 	VerseListNameView(const char* name, const char* text)
@@ -288,14 +293,39 @@ public:
 
 	virtual void MouseDown(BPoint where)
 	{
+		uint32 buttons = 0;
 		BMessage* current = Window() != NULL
 			? Window()->CurrentMessage() : NULL;
+		if (current != NULL)
+			current->FindInt32("buttons", (int32*)&buttons);
+		if (buttons == B_SECONDARY_MOUSE_BUTTON) {
+			BPoint screenPoint = where;
+			ConvertToScreen(&screenPoint);
+			_ShowContextMenu(screenPoint);
+			return;
+		}
+
 		int32 clicks = 0;
 		if (current != NULL)
 			current->FindInt32("clicks", &clicks);
 		if (clicks >= 2)
 			Window()->PostMessage(VLIST_RENAME);
 		BStringView::MouseDown(where);
+	}
+
+private:
+	void _ShowContextMenu(BPoint screenPoint)
+	{
+		BPopUpMenu* menu = new BPopUpMenu("verseListNameMenu", false, false);
+		menu->AddItem(new BMenuItem(
+			B_TRANSLATE("Rename List" B_UTF8_ELLIPSIS),
+			new BMessage(VLIST_RENAME)));
+		menu->AddItem(new BMenuItem(
+			B_TRANSLATE("Delete File" B_UTF8_ELLIPSIS),
+			new BMessage(VLIST_DELETE)));
+		menu->SetTargetForItems(Window());
+		menu->SetAsyncAutoDestruct(true);
+		menu->Go(screenPoint, true, true, true);
 	}
 };
 
@@ -309,7 +339,6 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fWatchingRoot(false),
 	fMenuBar(NULL),
 	fNameView(NULL),
-	fSaveItem(NULL),
 	fExportItem(NULL),
 	fRenameItem(NULL),
 	fDeleteItem(NULL),
@@ -497,7 +526,13 @@ SGVerseListWindow::_BuildMenuBar()
 	// already covers navigation to anything in the standard tree, and
 	// crossing that tree's boundary goes through Import/Export instead
 	// of a raw file panel (#94). Relocating within the tree is #58, not
-	// built yet.
+	// built yet. No "Close Verse List" or "Save" either -- closing this
+	// window (which hides, not destroys, same as the search window)
+	// already gets you away from the current list, and everything here
+	// already writes itself immediately (rows, rename, description via
+	// a debounce timer that _LoadFile() now flushes before switching
+	// lists) -- a manual Save was only ever covering for that flush
+	// gap, not a real save-vs-discard choice.
 	BMenu* fileMenu = new BMenu(B_TRANSLATE("File"));
 	fileMenu->AddItem(new BMenuItem(B_TRANSLATE("New Verse List" B_UTF8_ELLIPSIS),
 		new BMessage(VLIST_NEW), 'N'));
@@ -508,12 +543,7 @@ SGVerseListWindow::_BuildMenuBar()
 		B_TRANSLATE("Export Text List" B_UTF8_ELLIPSIS),
 		new BMessage(VLIST_EXPORT_PANEL));
 	fileMenu->AddItem(fExportItem);
-	fileMenu->AddItem(new BMenuItem(B_TRANSLATE("Close Verse List"),
-		new BMessage(VLIST_CLOSE), 'W'));
 	fileMenu->AddSeparatorItem();
-	fSaveItem = new BMenuItem(B_TRANSLATE("Save"), new BMessage(VLIST_SAVE),
-		'S');
-	fileMenu->AddItem(fSaveItem);
 	fRenameItem = new BMenuItem(
 		B_TRANSLATE("Rename List" B_UTF8_ELLIPSIS),
 		new BMessage(VLIST_RENAME));
@@ -567,11 +597,11 @@ static void PopulateCollectionMenu(BMenu* menu, BHandler* target,
 
 
 static const uint32 kNamePromptOK = 'VLpo';
-// #97: the optional location row's own "Choose..." button, which pops up
-// a cascading collection menu (same idiom as "Go to List", see
-// PopulateCollectionMenu()) rather than a file panel -- direct selection
-// from the same tree the user already navigates the app with.
-static const uint32 kLocationChoose = 'VLlc';
+static const uint32 kNamePromptCancel = 'VLpc';
+// #97: the optional location row is a real BMenuField dropdown, its menu
+// built by the same PopulateCollectionMenu() "Go to List" uses -- clicking
+// it shows the cascading tree right where the field is, direct selection,
+// no separate button-then-popup step and no file panel.
 static const uint32 kLocationMenuSelect = 'VLlm';
 
 class VerseListNamePromptWindow : public BWindow {
@@ -586,13 +616,12 @@ public:
 	// know which row it's rewriting, which row list.MouseDown() gave to
 	// the context menu that opened this window in the first place.
 	//
-	// `showLocation` (#97) adds a second row: a read-only path display
-	// plus a "Choose..." button that pops up a cascading collection
-	// menu -- the same PopulateCollectionMenu() tree "Go to List" shows,
-	// so picking a destination is direct selection from the existing
-	// folder structure, not a separate file-panel dialog. Only
-	// _NewList() and the "nothing open" half of Import pass true;
-	// renaming/editing a reference has no location to pick.
+	// `showLocation` (#97) adds a second row: a BMenuField dropdown whose
+	// menu is the same PopulateCollectionMenu() tree "Go to List" shows --
+	// clicking it opens the cascading menu right there, direct selection
+	// of the destination folder, no file panel. Only _NewList() and the
+	// "nothing open" half of Import pass true; renaming/editing a
+	// reference has no location to pick.
 	VerseListNamePromptWindow(BMessenger target, uint32 resultWhat,
 		const char* windowTitle = NULL, const char* initialName = NULL,
 		const char* buttonLabel = NULL, const char* fieldLabel = NULL,
@@ -607,11 +636,13 @@ public:
 		fResultWhat(resultWhat),
 		fIndex(index),
 		fLocationPath(BookmarkFile::RootDirectory()),
-		fLocationView(NULL)
+		fLocationField(NULL)
 	{
 		fNameControl = new BTextControl("name",
 			fieldLabel != NULL ? fieldLabel : B_TRANSLATE("Name:"),
 			initialName != NULL ? initialName : "", new BMessage(kNamePromptOK));
+		BButton* cancelButton = new BButton("cancel", B_TRANSLATE("Cancel"),
+			new BMessage(kNamePromptCancel));
 		BButton* okButton = new BButton("ok", buttonLabel != NULL
 			? buttonLabel : B_TRANSLATE("Create"), new BMessage(kNamePromptOK));
 		SetDefaultButton(okButton);
@@ -621,23 +652,28 @@ public:
 			.Add(fNameControl);
 
 		if (showLocation) {
-			BPath rootPath(fLocationPath.String());
-			fLocationView = new BStringView("location",
-				rootPath.Leaf() != NULL ? rootPath.Leaf()
-					: fLocationPath.String());
-			BButton* chooseButton = new BButton("chooseLocation",
-				B_TRANSLATE("Choose" B_UTF8_ELLIPSIS),
-				new BMessage(kLocationChoose));
-			layout.AddGroup(B_HORIZONTAL)
-				.Add(new BStringView("locationLabel", B_TRANSLATE("Location:")))
-				.Add(fLocationView)
-				.AddGlue()
-				.Add(chooseButton)
-			.End();
+			BMenu* locationMenu = new BMenu("locationMenu");
+			BMessage* selectRoot = new BMessage(kLocationMenuSelect);
+			selectRoot->AddString("path", fLocationPath);
+			locationMenu->AddItem(new BMenuItem(
+				B_TRANSLATE("Verse Lists (top level)"), selectRoot));
+			locationMenu->AddSeparatorItem();
+			PopulateCollectionMenu(locationMenu, this, fLocationPath.String(),
+				kLocationMenuSelect, B_TRANSLATE("(use this collection)"));
+			locationMenu->SetTargetForItems(this);
+
+			fLocationField = new BMenuField("location",
+				B_TRANSLATE("Location:"), locationMenu);
+			if (fLocationField->MenuItem() != NULL) {
+				fLocationField->MenuItem()->SetLabel(
+					B_TRANSLATE("Verse Lists (top level)"));
+			}
+			layout.Add(fLocationField);
 		}
 
 		layout.AddGroup(B_HORIZONTAL)
 				.AddGlue()
+				.Add(cancelButton)
 				.Add(okButton)
 			.End()
 		.End();
@@ -657,44 +693,32 @@ public:
 				result.AddString("name", name);
 				if (fIndex >= 0)
 					result.AddInt32("index", fIndex);
-				if (fLocationView != NULL)
+				if (fLocationField != NULL)
 					result.AddString("location", fLocationPath);
 				fTarget.SendMessage(&result);
 				Quit();
 			}
 			return;
 		}
-		if (message->what == kLocationChoose) {
-			BPopUpMenu* menu = new BPopUpMenu("chooseLocation", false, false);
-			BString root = BookmarkFile::RootDirectory();
-			BMessage* selectRoot = new BMessage(kLocationMenuSelect);
-			selectRoot->AddString("path", root);
-			menu->AddItem(new BMenuItem(
-				B_TRANSLATE("Verse Lists (top level)"), selectRoot));
-			menu->AddSeparatorItem();
-			PopulateCollectionMenu(menu, this, root.String(),
-				kLocationMenuSelect, B_TRANSLATE("(use this collection)"));
-			menu->SetTargetForItems(this);
-			menu->SetAsyncAutoDestruct(true);
-
-			BButton* chooseButton
-				= (BButton*)FindView("chooseLocation");
-			BPoint screenPoint(0, 0);
-			if (chooseButton != NULL) {
-				screenPoint = chooseButton->Frame().LeftBottom();
-				chooseButton->ConvertToScreen(&screenPoint);
-			}
-			menu->Go(screenPoint, true, true, true);
+		if (message->what == kNamePromptCancel) {
+			Quit();
 			return;
 		}
 		if (message->what == kLocationMenuSelect) {
 			BString path;
 			if (message->FindString("path", &path) == B_OK) {
 				fLocationPath = path;
-				if (fLocationView != NULL) {
-					BPath bpath(path.String());
-					fLocationView->SetText(bpath.Leaf() != NULL
-						? bpath.Leaf() : fLocationPath.String());
+				if (fLocationField != NULL
+						&& fLocationField->MenuItem() != NULL) {
+					BString label;
+					if (path == BookmarkFile::RootDirectory()) {
+						label = B_TRANSLATE("Verse Lists (top level)");
+					} else {
+						BPath bpath(path.String());
+						label = bpath.Leaf() != NULL ? bpath.Leaf()
+							: path.String();
+					}
+					fLocationField->MenuItem()->SetLabel(label.String());
 				}
 			}
 			return;
@@ -708,7 +732,7 @@ private:
 	int32			fIndex;
 	BTextControl*	fNameControl;
 	BString			fLocationPath;
-	BStringView*	fLocationView;
+	BMenuField*		fLocationField;
 };
 
 
@@ -831,14 +855,6 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			break;
 		}
 
-		case VLIST_CLOSE:
-			_CloseList();
-			break;
-
-		case VLIST_SAVE:
-			_SaveList();
-			break;
-
 		case VLIST_DELETE:
 			_DeleteList();
 			break;
@@ -936,6 +952,12 @@ SGVerseListWindow::_CreateNewList(const char* name, const char* parentPath)
 		name);
 	if (path.IsEmpty())
 		return;
+
+	// Same flush-before-switch as _LoadFile() -- a list can already be
+	// open (with a pending description edit) when "New Verse List" is
+	// used, not just when nothing is.
+	if (fDescriptionSaveRunner != NULL)
+		_SaveDescription();
 
 	fCollectionPath = path;
 	fBookmarks.clear();
@@ -1333,21 +1355,6 @@ SGVerseListWindow::_CloseList()
 
 
 void
-SGVerseListWindow::_SaveList()
-{
-	if (!fHasOpenFile)
-		return;
-	// Every bookmark file already writes itself immediately on creation,
-	// removal and reorder (see _AppendDroppedReferences()/_RemoveRow()/
-	// _MoveRow()) -- the one thing that CAN still be sitting unflushed is
-	// the description, if the debounce timer (_DescriptionEdited()) hasn't
-	// fired yet. "Save" means "don't wait for it".
-	if (fDescriptionSaveRunner != NULL)
-		_SaveDescription();
-}
-
-
-void
 SGVerseListWindow::_DeleteList()
 {
 	if (!fHasOpenFile || fCollectionPath.IsEmpty())
@@ -1390,6 +1397,14 @@ SGVerseListWindow::_LoadFile(const char* path)
 	BEntry entry(path);
 	if (entry.InitCheck() != B_OK || !entry.IsDirectory())
 		return;
+
+	// Flush a still-pending description edit against the OLD
+	// fCollectionPath before it's overwritten below -- without this,
+	// switching lists (Go to List) while the debounce timer from
+	// _DescriptionEdited() hadn't fired yet silently discarded the edit
+	// once _RebuildDescription() re-read the file from disk.
+	if (fDescriptionSaveRunner != NULL)
+		_SaveDescription();
 
 	fCollectionPath = path;
 	fBookmarks.clear();
@@ -1507,7 +1522,6 @@ SGVerseListWindow::_UpdateTitle()
 	}
 
 	bool onList = fHasOpenFile;
-	fSaveItem->SetEnabled(onList);
 	fExportItem->SetEnabled(onList);
 	fRenameItem->SetEnabled(onList);
 	fDeleteItem->SetEnabled(onList);
