@@ -1,6 +1,7 @@
 #ifndef VERSE_LIST_WINDOW_H
 #define VERSE_LIST_WINDOW_H
 
+#include <Message.h>
 #include <Messenger.h>
 #include <Node.h>
 #include <String.h>
@@ -99,6 +100,11 @@ class TextDocumentView;
 #define VLIST_NEW_REFERENCE_HERE_RESULT	'VLnH'
 #define VLIST_NEW_SUBCOLLECTION_HERE		'VLsh'
 #define VLIST_NEW_SUBCOLLECTION_HERE_RESULT	'VLsH'
+// #72: the name/location prompt _AppendDroppedReferences() shows when a
+// drop lands with nothing open -- distinct from kNamePromptOK (plain
+// "New Verse List…") so a canceled prompt can never be mistaken for one
+// from the other path (see fPendingDropMessage's own comment).
+#define VLIST_DROP_NAME_RESULT		'VLdn'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -211,6 +217,12 @@ private:
 			void			_CreateReferenceIn(const char* text,
 								const char* path);
 			void			_StartNewSubCollectionHere(const char* path);
+			// #72: shows the same New-Verse-List prompt _NewList() does,
+			// but with VLIST_DROP_NAME_RESULT as the result -- called from
+			// _AppendDroppedReferences() when a drop lands with nothing
+			// open, after that message has already been saved to
+			// fPendingDropMessage.
+			void			_StartNewListForDrop();
 			void			_CloseList();
 			void			_DeleteList();
 			// #58: relocates/duplicates the whole open collection folder
@@ -314,6 +326,17 @@ private:
 			// and _ImportIntoNewList() consuming it once that prompt
 			// returns -- only used when nothing was open at import time.
 			BString					fPendingImportContent;
+			// #72: same idea, for a reference (or range) dropped onto the
+			// row list while nothing is open -- a verbatim copy of the
+			// drop message, held between the name/location prompt
+			// _AppendDroppedReferences() shows in that case and the same
+			// method consuming it again once the prompt returns and a
+			// collection exists to append into. Overwritten by each new
+			// drop, so a canceled prompt just leaves stale content that's
+			// never read again rather than leaking into an unrelated
+			// later "New Verse List" -- nothing else ever triggers
+			// VLIST_DROP_NAME_RESULT.
+			BMessage				fPendingDropMessage;
 
 			// Which node_ref the currently-active collection watch
 			// (if any) is for -- needed to tell a B_NODE_MONITOR

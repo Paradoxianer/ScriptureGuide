@@ -826,6 +826,20 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case VLIST_DROP_NAME_RESULT:
+		{
+			BString name, location;
+			if (message->FindString("name", &name) == B_OK) {
+				message->FindString("location", &location);
+				_CreateNewList(name.String(), location.String());
+				// fHasOpenFile is true now -- this re-entry appends into
+				// what was just created instead of asking again.
+				_AppendDroppedReferences(&fPendingDropMessage);
+				fPendingDropMessage.MakeEmpty();
+			}
+			break;
+		}
+
 		case VLIST_RENAME:
 			_StartRename();
 			break;
@@ -1064,6 +1078,18 @@ SGVerseListWindow::_NewList()
 {
 	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
 		BMessenger(this), kNamePromptOK, NULL, NULL, NULL, NULL, -1, true);
+	prompt->Show();
+}
+
+
+// #72: same prompt, different result-what -- see fPendingDropMessage's
+// own comment on why this can't just reuse kNamePromptOK.
+void
+SGVerseListWindow::_StartNewListForDrop()
+{
+	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
+		BMessenger(this), VLIST_DROP_NAME_RESULT, NULL, NULL, NULL, NULL, -1,
+		true);
 	prompt->Show();
 }
 
@@ -2444,8 +2470,14 @@ SGVerseListWindow::_RemoveSelectedRows()
 void
 SGVerseListWindow::_AppendDroppedReferences(BMessage* message)
 {
-	if (!fHasOpenFile)
+	if (!fHasOpenFile) {
+		// #72: hold onto the drop (see fPendingDropMessage's own
+		// comment) and ask where it should land -- VLIST_DROP_NAME_RESULT
+		// re-enters this same method, by then with fHasOpenFile true.
+		fPendingDropMessage = *message;
+		_StartNewListForDrop();
 		return;
+	}
 
 	// What every new bookmark's own content gets written in -- see
 	// BookmarkFile::Locale()'s own comment on why storing the CURRENT
