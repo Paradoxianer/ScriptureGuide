@@ -448,7 +448,7 @@ SGVerseListWindow::_BuildGUI()
 	// A collection can now live anywhere in an arbitrarily deep tree
 	// (#78) and can be moved around it (#58) -- the bold name alone no
 	// longer says where it actually is, just what it's called. A small,
-	// dim breadcrumb line right underneath it does, filled in by
+	// dim breadcrumb line right above it does, filled in by
 	// _UpdateTitle().
 	fPathView = new BStringView("verseListPath", "");
 	fPathView->SetFont(be_plain_font);
@@ -538,8 +538,8 @@ SGVerseListWindow::_BuildGUI()
 		.Add(fMenuBar)
 		.AddGroup(B_VERTICAL, B_USE_DEFAULT_SPACING)
 			.SetInsets(B_USE_SMALL_INSETS)
-			.Add(fNameView)
 			.Add(fPathView)
+			.Add(fNameView)
 			.Add(descriptionBox)
 			.Add(rowsBox)
 		.End()
