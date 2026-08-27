@@ -648,7 +648,12 @@ SGVerseListWindow::_BuildMenuBar()
 // below needs it too, for its own location-picker popup.
 static void PopulateCollectionMenu(BMenu* menu, BHandler* target,
 	const char* path, uint32 what, const char* selfLabel,
-	const char* excludePath = "");
+	const char* excludePath = "", bool addCreateHere = false);
+// #56: appends "New reference here…"/"New sub-collection here…" to
+// `menu`, both carrying `path` -- shared by PopulateCollectionMenu()'s
+// own submenus and _RebuildNavigationMenu()'s handling of the top-level
+// "Go to List" menu itself (which isn't built inside that recursion).
+static void AddCreateHereItems(BMenu* menu, const char* path);
 
 
 static const uint32 kNamePromptOK = 'VLpo';
@@ -677,10 +682,19 @@ public:
 	// of the destination folder, no file panel. Only _NewList() and the
 	// "nothing open" half of Import pass true; renaming/editing a
 	// reference has no location to pick.
+	//
+	// `fixedLocation` (#56) is the "Go to List" trailing-item shape: the
+	// destination is already known (whichever submenu's own path the
+	// item was clicked from), so there is nothing to pick -- no dropdown
+	// shown at all, but the result message still carries "location" just
+	// like showLocation's does, so _StartNewReferenceHere()/
+	// _StartNewSubCollectionHere()'s result handlers don't need a third,
+	// different message shape.
 	VerseListNamePromptWindow(BMessenger target, uint32 resultWhat,
 		const char* windowTitle = NULL, const char* initialName = NULL,
 		const char* buttonLabel = NULL, const char* fieldLabel = NULL,
-		int32 index = -1, bool showLocation = false)
+		int32 index = -1, bool showLocation = false,
+		const char* fixedLocation = NULL)
 		:
 		BWindow(BRect(120, 120, 460, 210),
 			windowTitle != NULL ? windowTitle
@@ -690,7 +704,9 @@ public:
 		fTarget(target),
 		fResultWhat(resultWhat),
 		fIndex(index),
-		fLocationPath(BookmarkFile::RootDirectory()),
+		fLocationPath(fixedLocation != NULL ? BString(fixedLocation)
+			: BookmarkFile::RootDirectory()),
+		fCarriesLocation(showLocation || fixedLocation != NULL),
 		fLocationField(NULL)
 	{
 		fNameControl = new BTextControl("name",
@@ -748,7 +764,7 @@ public:
 				result.AddString("name", name);
 				if (fIndex >= 0)
 					result.AddInt32("index", fIndex);
-				if (fLocationField != NULL)
+				if (fCarriesLocation)
 					result.AddString("location", fLocationPath);
 				fTarget.SendMessage(&result);
 				Quit();
@@ -787,6 +803,7 @@ private:
 	int32			fIndex;
 	BTextControl*	fNameControl;
 	BString			fLocationPath;
+	bool			fCarriesLocation;
 	BMenuField*		fLocationField;
 };
 
@@ -907,6 +924,42 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			BString path;
 			if (message->FindString("path", &path) == B_OK)
 				_OpenList(path.String());
+			break;
+		}
+
+		case VLIST_NEW_REFERENCE_HERE:
+		{
+			BString path;
+			if (message->FindString("path", &path) == B_OK)
+				_StartNewReferenceHere(path.String());
+			break;
+		}
+
+		case VLIST_NEW_REFERENCE_HERE_RESULT:
+		{
+			BString name, path;
+			if (message->FindString("name", &name) == B_OK
+				&& message->FindString("location", &path) == B_OK) {
+				_CreateReferenceIn(name.String(), path.String());
+			}
+			break;
+		}
+
+		case VLIST_NEW_SUBCOLLECTION_HERE:
+		{
+			BString path;
+			if (message->FindString("path", &path) == B_OK)
+				_StartNewSubCollectionHere(path.String());
+			break;
+		}
+
+		case VLIST_NEW_SUBCOLLECTION_HERE_RESULT:
+		{
+			BString name, path;
+			if (message->FindString("name", &name) == B_OK
+				&& message->FindString("location", &path) == B_OK) {
+				_CreateNewList(name.String(), path.String());
+			}
 			break;
 		}
 
@@ -1368,6 +1421,78 @@ SGVerseListWindow::_CreateReference(const char* text)
 		fBookmarks.push_back(bookmark);
 		_RebuildRows();
 	}
+}
+
+
+// #56: "New reference here…" on a "Go to List" submenu -- `path` is
+// that submenu's own folder, not necessarily (or even related to)
+// whatever is currently open.
+void
+SGVerseListWindow::_StartNewReferenceHere(const char* path)
+{
+	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
+		BMessenger(this), VLIST_NEW_REFERENCE_HERE_RESULT,
+		B_TRANSLATE("New Reference"), NULL, B_TRANSLATE("Add"),
+		B_TRANSLATE("Reference:"), -1, false, path);
+	prompt->Show();
+}
+
+
+void
+SGVerseListWindow::_CreateReferenceIn(const char* text, const char* path)
+{
+	// `path` may not be the currently open collection (or anything may
+	// be open at all) -- same "first bookmark's own versification, or a
+	// sane default for a still-empty one" idea _CollectionVersification()
+	// already applies to fBookmarks, just read straight off disk instead,
+	// since the target isn't necessarily loaded into memory.
+	BString versification("KJV");
+	std::vector<BString> existing = BookmarkFile::ListBookmarkPaths(path);
+	if (!existing.empty()) {
+		BookmarkFile first;
+		if (first.SetTo(existing[0].String()) == B_OK
+				&& first.Versification()[0] != '\0') {
+			versification = first.Versification();
+		}
+	}
+
+	BString locale, normalized;
+	if (!_NormalizeTypedReference(text, versification, locale, normalized)) {
+		BString message(B_TRANSLATE("\"%text%\" isn't a Bible reference "
+			"ScriptureGuide recognizes. Try something like \"John 3:16\" "
+			"or \"Genesis 1:1-3\"."));
+		message.ReplaceFirst("%text%", text);
+		BAlert* alert = new BAlert(B_TRANSLATE("Add Reference"),
+			message.String(), B_TRANSLATE("OK"));
+		alert->Go();
+		return;
+	}
+
+	BookmarkFile bookmark;
+	if (bookmark.CreateNew(path, normalized.String(), versification.String(),
+			locale.String(), (int32)existing.size()) != B_OK) {
+		return;
+	}
+
+	// The whole point of "New reference here…" is seeing it land --
+	// loads the collection it was just added to, replacing whatever (if
+	// anything) was open, same as _CreateNewList()/_ImportIntoNewList()
+	// already do for their own "just created" moment.
+	_LoadFile(path);
+}
+
+
+// #56: "New sub-collection here…" -- reuses _CreateNewList() as-is
+// (same name+parentPath shape #97's location picker already produces),
+// just reached from a different place.
+void
+SGVerseListWindow::_StartNewSubCollectionHere(const char* path)
+{
+	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
+		BMessenger(this), VLIST_NEW_SUBCOLLECTION_HERE_RESULT,
+		B_TRANSLATE("New Sub-Collection"), NULL, B_TRANSLATE("Create"),
+		B_TRANSLATE("Name:"), -1, false, path);
+	prompt->Show();
 }
 
 
@@ -1922,9 +2047,37 @@ SGVerseListWindow::_UpdateRowActionState()
 // usefully be filed into the very collection they're already in -- both
 // that path itself and anything nested under it are skipped entirely
 // (not just disabled), same as they never existed in the tree.
+//
+// `addCreateHere` (#56) is true only for "Go to List": every submenu
+// this walk builds (i.e. every folder that already has sub-collections
+// of its own, and is therefore a submenu rather than a plain leaf) gets
+// a trailing "New reference here…"/"New sub-collection here…" pair
+// carrying its OWN path -- picking a spot already being browsed to
+// navigate IS the save location, no separate File > New path decision.
+// A childless folder stays a plain leaf either way; there is nowhere to
+// hang a trailing pair on a menu item that isn't a submenu (the caller
+// covers the root level itself, which isn't built inside this
+// recursion).
+static void
+AddCreateHereItems(BMenu* menu, const char* path)
+{
+	menu->AddSeparatorItem();
+	BMessage* newReference = new BMessage(VLIST_NEW_REFERENCE_HERE);
+	newReference->AddString("path", path);
+	menu->AddItem(new BMenuItem(
+		B_TRANSLATE("New reference here" B_UTF8_ELLIPSIS), newReference));
+	BMessage* newSubCollection = new BMessage(VLIST_NEW_SUBCOLLECTION_HERE);
+	newSubCollection->AddString("path", path);
+	menu->AddItem(new BMenuItem(
+		B_TRANSLATE("New sub-collection here" B_UTF8_ELLIPSIS),
+		newSubCollection));
+}
+
+
 static void
 PopulateCollectionMenu(BMenu* menu, BHandler* target, const char* path,
-	uint32 what, const char* selfLabel, const char* excludePath)
+	uint32 what, const char* selfLabel, const char* excludePath,
+	bool addCreateHere)
 {
 	std::vector<BString> names = BookmarkFile::ListCollectionNames(path);
 	for (size_t i = 0; i < names.size(); i++) {
@@ -1957,7 +2110,9 @@ PopulateCollectionMenu(BMenu* menu, BHandler* target, const char* path,
 		submenu->AddItem(new BMenuItem(selfLabel, selectSelf));
 		submenu->AddSeparatorItem();
 		PopulateCollectionMenu(submenu, target, childPath.Path(), what,
-			selfLabel, excludePath);
+			selfLabel, excludePath, addCreateHere);
+		if (addCreateHere)
+			AddCreateHereItems(submenu, childPath.Path());
 		submenu->SetTargetForItems(target);
 		menu->AddItem(submenu);
 	}
@@ -1983,7 +2138,11 @@ SGVerseListWindow::_RebuildNavigationMenu()
 	// see PopulateCollectionMenu()'s own comment.
 	BString root = BookmarkFile::RootDirectory();
 	PopulateCollectionMenu(fNavigationMenu, this, root.String(),
-		VLIST_NAV_SELECT, B_TRANSLATE("(open this collection)"));
+		VLIST_NAV_SELECT, B_TRANSLATE("(open this collection)"), "", true);
+	// #56: the root level isn't built inside PopulateCollectionMenu()'s
+	// own recursion (fNavigationMenu itself is passed in, not created by
+	// it), so its own trailing pair is added here instead.
+	AddCreateHereItems(fNavigationMenu, root.String());
 	fNavigationMenu->SetTargetForItems(this);
 
 	for (int32 i = fMoveListMenu->CountItems() - 1; i >= 0; i--)

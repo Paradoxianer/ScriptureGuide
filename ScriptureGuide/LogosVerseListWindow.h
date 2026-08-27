@@ -91,6 +91,14 @@ class TextDocumentView;
 // a collection" reasoning, without needing Save As (removed, #94) as a
 // detour to get there first.
 #define VLIST_SHOW_IN_TRACKER	'VLtk'
+// #56: "Go to List" submenu trailing items -- "New reference here…"/
+// "New sub-collection here…", each carrying the submenu's own path as
+// "path". The _RESULT ones are VerseListNamePromptWindow's own replies
+// (name + that same path, riding along as "location").
+#define VLIST_NEW_REFERENCE_HERE			'VLnh'
+#define VLIST_NEW_REFERENCE_HERE_RESULT	'VLnH'
+#define VLIST_NEW_SUBCOLLECTION_HERE		'VLsh'
+#define VLIST_NEW_SUBCOLLECTION_HERE_RESULT	'VLsH'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -195,6 +203,14 @@ private:
 			void			_ExportTextFile(const char* path);
 			// #99: opens fCollectionPath in a Tracker window.
 			void			_ShowInTracker();
+			// #56: "Go to List" submenu trailing items. _Start* open the
+			// prompt (fixedLocation = the submenu's own path, see
+			// VerseListNamePromptWindow); the sub-collection result reuses
+			// _CreateNewList() directly (same shape: name + parent path).
+			void			_StartNewReferenceHere(const char* path);
+			void			_CreateReferenceIn(const char* text,
+								const char* path);
+			void			_StartNewSubCollectionHere(const char* path);
 			void			_CloseList();
 			void			_DeleteList();
 			// #58: relocates/duplicates the whole open collection folder
