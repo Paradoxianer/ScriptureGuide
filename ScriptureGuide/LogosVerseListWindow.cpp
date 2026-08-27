@@ -600,10 +600,13 @@ SGVerseListWindow::_BuildMenuBar()
 	editMenu->AddItem(fAddReferenceItem);
 	fEditReferenceItem = new BMenuItem(
 		B_TRANSLATE("Edit Reference" B_UTF8_ELLIPSIS),
-		new BMessage(VLIST_EDIT_REFERENCE_SELECTED));
+		new BMessage(VLIST_EDIT_REFERENCE_SELECTED), 'E');
 	editMenu->AddItem(fEditReferenceItem);
+	// B_DELETE as the shortcut char, not a letter -- same key the row
+	// list's own KeyDown() already accepts directly (#66), just also
+	// reachable with the command modifier through the menu now.
 	fRemoveItem = new BMenuItem(B_TRANSLATE("Remove"),
-		new BMessage(VLIST_REMOVE_SELECTED));
+		new BMessage(VLIST_REMOVE_SELECTED), B_DELETE);
 	editMenu->AddItem(fRemoveItem);
 	editMenu->AddSeparatorItem();
 	// #58: act on every currently selected row (fRowList is now
