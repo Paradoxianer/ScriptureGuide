@@ -86,6 +86,11 @@ class TextDocumentView;
 #define VLIST_COPY_LIST_TO		'VLct'
 #define VLIST_MOVE_ENTRIES_TO	'VLme'
 #define VLIST_COPY_ENTRIES_TO	'VLce'
+// #99: opens the currently open collection's own folder in a Tracker
+// window -- the payoff of #55's own "Tracker becomes a free browser for
+// a collection" reasoning, without needing Save As (removed, #94) as a
+// detour to get there first.
+#define VLIST_SHOW_IN_TRACKER	'VLtk'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -188,6 +193,8 @@ private:
 			// references, one per line, to a plain-text file.
 			void			_ExportPanel();
 			void			_ExportTextFile(const char* path);
+			// #99: opens fCollectionPath in a Tracker window.
+			void			_ShowInTracker();
 			void			_CloseList();
 			void			_DeleteList();
 			// #58: relocates/duplicates the whole open collection folder
@@ -314,6 +321,7 @@ private:
 			// see _UpdateTitle().
 			BStringView*			fPathView;
 			BMenuItem*				fExportItem;
+			BMenuItem*				fShowInTrackerItem;
 			BMenuItem*				fRenameItem;
 			BMenuItem*				fDeleteItem;
 			BMenuItem*				fAddReferenceItem;

@@ -28,6 +28,7 @@
 #include <OutlineListView.h>
 #include <Path.h>
 #include <PopUpMenu.h>
+#include <Roster.h>
 #include <ScrollView.h>
 #include <String.h>
 #include <StringItem.h>
@@ -354,6 +355,7 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fNameView(NULL),
 	fPathView(NULL),
 	fExportItem(NULL),
+	fShowInTrackerItem(NULL),
 	fRenameItem(NULL),
 	fDeleteItem(NULL),
 	fAddReferenceItem(NULL),
@@ -573,6 +575,9 @@ SGVerseListWindow::_BuildMenuBar()
 		B_TRANSLATE("Export Text List" B_UTF8_ELLIPSIS),
 		new BMessage(VLIST_EXPORT_PANEL));
 	fileMenu->AddItem(fExportItem);
+	fShowInTrackerItem = new BMenuItem(B_TRANSLATE("Show in Tracker"),
+		new BMessage(VLIST_SHOW_IN_TRACKER));
+	fileMenu->AddItem(fShowInTrackerItem);
 	fileMenu->AddSeparatorItem();
 	fRenameItem = new BMenuItem(
 		B_TRANSLATE("Rename List" B_UTF8_ELLIPSIS),
@@ -857,6 +862,10 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			}
 			break;
 		}
+
+		case VLIST_SHOW_IN_TRACKER:
+			_ShowInTracker();
+			break;
 
 		case VLIST_ADD_REFERENCE:
 			_AddReference();
@@ -1621,6 +1630,25 @@ SGVerseListWindow::_ExportTextFile(const char* path)
 }
 
 
+// #99: launching a folder's own entry_ref is Haiku's own idiom for
+// "open this in Tracker" (be_roster->Launch() special-cases a directory
+// ref exactly that way) -- no need to talk to Tracker's own signature
+// directly.
+void
+SGVerseListWindow::_ShowInTracker()
+{
+	if (!fHasOpenFile)
+		return;
+
+	entry_ref ref;
+	BEntry entry(fCollectionPath.String());
+	if (entry.InitCheck() != B_OK || entry.GetRef(&ref) != B_OK)
+		return;
+
+	be_roster->Launch(&ref);
+}
+
+
 void
 SGVerseListWindow::_CloseList()
 {
@@ -1827,6 +1855,7 @@ SGVerseListWindow::_UpdateTitle()
 
 	bool onList = fHasOpenFile;
 	fExportItem->SetEnabled(onList);
+	fShowInTrackerItem->SetEnabled(onList);
 	fRenameItem->SetEnabled(onList);
 	fDeleteItem->SetEnabled(onList);
 	fAddReferenceItem->SetEnabled(onList);
