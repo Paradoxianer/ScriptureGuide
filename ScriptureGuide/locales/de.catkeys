@@ -1,4 +1,4 @@
-1	German	application/x-vnd.Scripture-Guide	3783446253
+1	German	application/x-vnd.Scripture-Guide	602518831
 Add Reference	VerseListWindow		Referenz hinzufügen
 Dictionary 	DictionaryWindow		Wörterbuch 
 Regular Expression	SearchWindow		Regulärer Ausdruck
@@ -32,6 +32,7 @@ Verse	ExportFormats		Vers
 Copy List to	VerseListWindow		Liste kopieren nach
 Go to / Search:	MainWindow		Gehe zu / Suche:
 Rename List…	VerseListWindow		Liste umbenennen…
+Add to Verse List	ParallelBibleView		Zur Versliste hinzufügen
 Program	MainWindow		Programm
 Verses	VerseListWindow		Verse
 Verse Lists (top level)	VerseListWindow		Verslisten (oberste Ebene)
