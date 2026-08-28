@@ -178,6 +178,18 @@ public:
 			// called (VerseListRowColumn's own MouseDown() makes sure the
 			// clicked row is part of that selection first).
 			void			_ShowRowContextMenu(BPoint screenPoint);
+			// Same not-a-friend reasoning: VerseListDescriptionView's
+			// own KeyDown() (#50), called with whatever text sat
+			// between the last newline and the caret right as Enter
+			// was pressed -- a silent counterpart to _CreateReference()
+			// (private, below; no alert on a parse failure, since most
+			// finished lines are just prose, not a reference) plus a
+			// duplicate check _CreateReference() doesn't need (pressing
+			// Enter again after an already-recognized line, e.g. to add
+			// a blank line below it, must not add the same bookmark
+			// twice).
+			void			_TryAutoAddDescriptionReference(
+								const char* line);
 
 private:
 			void			_BuildGUI();

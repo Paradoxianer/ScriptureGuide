@@ -404,6 +404,64 @@ private:
 };
 
 
+// #50: pressing Enter right after typing a line that is nothing BUT a
+// recognized Bible reference adds it as a new row in the Verses list
+// below, on top of leaving the typed line exactly where it is in the
+// description -- a quick-add path for the common case of writing a
+// reference into the description prose anyway ("see Genesis 1:1" as its
+// own line), without a detour through "Add Reference...". A line where
+// the reference is mixed into other text ("the flood, Genesis 6-9,
+// changes everything") does NOT trigger it -- deliberately narrower
+// than #28's own FindReferencesInText() substring search, since
+// detecting on every keystroke (rather than on a clear, deliberate
+// Enter) is exactly what #50 originally ruled out as too eager; a
+// whole-line match is the version of "one recognized reference, one
+// deliberate action" that fits typing prose rather than clicking a
+// menu.
+class VerseListDescriptionView : public TextDocumentView {
+public:
+	VerseListDescriptionView(const char* name, TextDocument* document,
+		SGVerseListWindow* owner)
+		:
+		TextDocumentView(name),
+		fDocument(document),
+		fOwner(owner)
+	{
+	}
+
+	virtual void KeyDown(const char* bytes, int32 numBytes)
+	{
+		if (_RawChar(bytes, numBytes) == B_ENTER && fOwner != NULL
+				&& fDocument != NULL && Editor().IsSet()) {
+			int32 caretOffset = Editor()->CaretOffset();
+			BString text(fDocument->Text());
+			int32 lineStart = caretOffset;
+			while (lineStart > 0 && text.ByteAt(lineStart - 1) != '\n')
+				lineStart--;
+			BString line;
+			text.CopyInto(line, lineStart, caretOffset - lineStart);
+			fOwner->_TryAutoAddDescriptionReference(line.String());
+		}
+
+		TextDocumentView::KeyDown(bytes, numBytes);
+	}
+
+private:
+	int32 _RawChar(const char* bytes, int32 numBytes)
+	{
+		int32 rawChar = 0;
+		if (Window() != NULL && Window()->CurrentMessage() != NULL)
+			Window()->CurrentMessage()->FindInt32("raw_char", &rawChar);
+		if (rawChar == 0 && numBytes > 0)
+			rawChar = (unsigned char)bytes[0];
+		return rawChar;
+	}
+
+	TextDocument*		fDocument;
+	SGVerseListWindow*	fOwner;
+};
+
+
 SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	:
 	BWindow(frame, "", B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL,
@@ -537,7 +595,8 @@ SGVerseListWindow::_BuildGUI()
 	fDescriptionListenerRef.SetTo(new DescriptionSaveListener(this), true);
 	fDescriptionDocument->AddListener(fDescriptionListenerRef);
 
-	fDescriptionView = new TextDocumentView("verseListDescription");
+	fDescriptionView = new VerseListDescriptionView("verseListDescription",
+		fDescriptionDocument.Get(), this);
 	fDescriptionView->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 	fDescriptionView->SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 	fDescriptionView->SetInsets(4.0f, 3.0f, 4.0f, 3.0f);
@@ -1482,6 +1541,39 @@ SGVerseListWindow::_CreateReference(const char* text)
 			message.String(), B_TRANSLATE("OK"));
 		alert->Go();
 		return;
+	}
+
+	BookmarkFile bookmark;
+	if (bookmark.CreateNew(fCollectionPath.String(), normalized.String(),
+			versification.String(), locale.String(),
+			(int32)fBookmarks.size()) == B_OK) {
+		fBookmarks.push_back(bookmark);
+		_RebuildRows();
+	}
+}
+
+
+void
+SGVerseListWindow::_TryAutoAddDescriptionReference(const char* line)
+{
+	if (!fHasOpenFile)
+		return;
+
+	BString trimmed(line);
+	trimmed.Trim();
+	if (trimmed.IsEmpty())
+		return;
+
+	BString versification = _CollectionVersification();
+	BString locale, normalized;
+	if (!_NormalizeTypedReference(trimmed.String(), versification, locale,
+			normalized)) {
+		return;
+	}
+
+	for (size_t i = 0; i < fBookmarks.size(); i++) {
+		if (normalized == fBookmarks[i].Reference())
+			return;
 	}
 
 	BookmarkFile bookmark;
