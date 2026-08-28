@@ -2586,9 +2586,17 @@ ParallelBibleView::_ShowAddToListMenu(const char* reference,
 	menu->AddItem(heading);
 	menu->AddSeparatorItem();
 
+	// The collection tree lives inside its own "Add to Verse List ▸"
+	// submenu, not as this popup's direct contents -- this menu is
+	// meant to grow other actions on the same reference later without
+	// having to restructure it again once it does.
+	BMenu* addToListMenu = new BMenu(B_TRANSLATE("Add to Verse List"));
 	BString root = BookmarkFile::RootDirectory();
-	PopulateAddToListMenu(menu, this, root.String(), reference, versification,
-		locale);
+	PopulateAddToListMenu(addToListMenu, this, root.String(), reference,
+		versification, locale);
+	addToListMenu->SetTargetForItems(this);
+	menu->AddItem(addToListMenu);
+
 	menu->SetTargetForItems(this);
 	menu->SetAsyncAutoDestruct(true);
 	menu->Go(screenPoint, true, true, true);
