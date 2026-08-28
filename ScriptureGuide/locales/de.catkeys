@@ -1,24 +1,21 @@
-1	German	application/x-vnd.Scripture-Guide	602518831
+1	German	application/x-vnd.Scripture-Guide	1166630890
 Add Reference	VerseListWindow		Referenz hinzufügen
 Dictionary 	DictionaryWindow		Wörterbuch 
 Regular Expression	SearchWindow		Regulärer Ausdruck
 Move to	VerseListWindow		Verschieben nach
 As HTML Table	MainWindow		Als HTML-Tabelle
 \"%text%\" isn't a Bible reference ScriptureGuide recognizes. Try something like \"John 3:16\" or \"Genesis 1:1-3\".	VerseListWindow		\"%text%\" ist keine Bibelstelle, die ScriptureGuide erkennt. Versuchen Sie etwas wie \"Johannes 3:16\" oder \"1. Mose 1:1-3\".
-(use this collection)	VerseListWindow		(diese Sammlung verwenden)
 Copy Comparison	MainWindow		Vergleich kopieren
 OK	VerseListWindow		OK
 Rename Verse List	VerseListWindow		Versliste umbenennen
 (add to this collection)	ParallelBibleView		(zu dieser Sammlung hinzufügen)
 File	VerseListWindow		Datei
 Move Down	VerseListWindow		Nach unten
-(copy here)	VerseListWindow		(hierher kopieren)
 Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Suchergebnisse (nur sichtbar, wenn eine Suche mehr als einen Treffer liefert):
 (No list open)	VerseListWindow		(Keine Liste geöffnet)
 Find	SearchWindow		Finde
 Move Verse List	VerseListWindow		Versliste verschieben
 New Verse List…	VerseListWindow		Neue Versliste…
-New Reference	VerseListWindow		Neue Referenz
 Search in 	SearchWindow		Suche in
 Copy to	VerseListWindow		Kopieren nach
 New Verse List	VerseListWindow		Neue Versliste
@@ -38,7 +35,6 @@ Verses	VerseListWindow		Verse
 Verse Lists (top level)	VerseListWindow		Verslisten (oberste Ebene)
 Next Chapter	MainWindow		nächstes Kapitel
 Font Name	FontPanel		Schrift
-(open this collection)	VerseListWindow		(diese Sammlung öffnen)
 Dictionary…	MainWindow		Wörterbuch…
 Could not move this collection there -- a collection with the same name may already exist in the target location.	VerseListWindow		Diese Sammlung konnte nicht dorthin verschoben werden -- am Zielort existiert möglicherweise bereits eine Sammlung mit demselben Namen.
 Delete File…	VerseListWindow		Datei löschen…
@@ -48,7 +44,6 @@ Rename	VerseListWindow		Umbenennen
 No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		Kein Eintrag für %number% im installierten Strong-Wörterbuch.
 Show Strong's Numbers	MainWindow		Strong-Nummern anzeigen
 Match Case	SearchWindow		Großschreibung beachten
-or use Edit > Add Reference…	VerseListWindow		oder Bearbeiten > Referenz hinzufügen… verwenden
 Chapter	MainWindow		Kapitel
 Options	MainWindow		Einstellungen
 No matching entry found.	DictionaryWindow		Kein passender Eintrag gefunden.
@@ -59,7 +54,6 @@ Verse Lists…	MainWindow		Verslisten…
 Notes	MainWindow		Notizen
 Entry:	DictionaryWindow		Eintrag:
 No module selected.	BibleTextDocument		Kein Modul ausgewählt.
-Drag a Bible reference here,	VerseListWindow		Eine Bibelstelle hierher ziehen,
 Previous Chapter	MainWindow		vorheriges Kapitel
 Go to List	VerseListWindow		Gehe zu Liste
 %d matching entries -- pick one below.	DictionaryWindow		%d passende Einträge – bitte unten auswählen.
@@ -73,19 +67,19 @@ Choose Font…	MainWindow		Schrift…
 Verse	MainWindow		Vers
 Back	MainWindow		Zurück
 Notes	ExportFormats		Notizen
-(move here)	VerseListWindow		(hierher verschieben)
 Delete Verse List	VerseListWindow		Versliste löschen
 Show Cross-References	MainWindow		Querverweise anzeigen
 Quit	MainWindow		Beenden
-Edit Reference	VerseListWindow		Referenz bearbeiten
 Forward	MainWindow		Vorwärts
+Edit Reference	VerseListWindow		Referenz bearbeiten
 Look up: 	DictionaryWindow		Nachschlagen: 
+Reference	VerseListWindow		Referenz
 Import Text List…	VerseListWindow		Textliste importieren…
 As Plain Text	MainWindow		Als reinen Text
 Book Manager…	MainWindow		Buchverwaltung…
 Duplicate This Window…	MainWindow		Fenster duplizieren
+Tags	VerseListWindow		Tags
 Show in Tracker	VerseListWindow		In Tracker zeigen
-New Sub-Collection	VerseListWindow		Neue Untersammlung
 Close This Window	MainWindow		Fenster schließen
 Start in 	SearchWindow		Start in
 Create	VerseListWindow		Erstellen
@@ -105,7 +99,6 @@ Search Progress:	SearchWindow		Fortschritt Suche:
 Preview	FontPanel		Vorschau
 No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		Für diese Nummern ist kein Strong-Wörterbuch installiert. Installiere das Modul %module% über „Programm › Buchverwaltung“, um %number% nachzuschlagen.
 Find Phrase	SearchWindow		Suche Phrase
-New reference here…	VerseListWindow		Neue Referenz hier…
 Name:	VerseListWindow		Name:
 OK	FontPanel		OK
 Search Results:	SearchWindow		Ergebniss der Suche:
@@ -117,4 +110,3 @@ Navigation	MainWindow		Navigation
 Biblical Texts	ParallelBibleView		Bibeltexte
 Find: 	SearchWindow		Suche:
 Edit Reference…	VerseListWindow		Referenz bearbeiten…
-New sub-collection here…	VerseListWindow		Neue Untersammlung hier…
