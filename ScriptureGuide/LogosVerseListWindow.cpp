@@ -406,18 +406,19 @@ private:
 
 // #50: pressing Enter right after typing a line that is nothing BUT a
 // recognized Bible reference adds it as a new row in the Verses list
-// below, on top of leaving the typed line exactly where it is in the
-// description -- a quick-add path for the common case of writing a
-// reference into the description prose anyway ("see Genesis 1:1" as its
-// own line), without a detour through "Add Reference...". A line where
-// the reference is mixed into other text ("the flood, Genesis 6-9,
-// changes everything") does NOT trigger it -- deliberately narrower
-// than #28's own FindReferencesInText() substring search, since
-// detecting on every keystroke (rather than on a clear, deliberate
-// Enter) is exactly what #50 originally ruled out as too eager; a
-// whole-line match is the version of "one recognized reference, one
-// deliberate action" that fits typing prose rather than clicking a
-// menu.
+// below AND removes that line from the description -- the reference
+// "moves" into the list rather than staying duplicated in both places.
+// Shift+Enter is the escape hatch: it inserts a plain newline like
+// Enter always did, without adding OR removing anything, for a line
+// that merely happens to look like a reference. A line where the
+// reference is mixed into other text ("the flood, Genesis 6-9, changes
+// everything") never triggers this at all -- deliberately narrower
+// than #28's own FindReferencesInText() substring search (used below
+// only for the blue styling, not for this), since detecting on every
+// keystroke rather than on a clear, deliberate Enter is exactly what
+// #50 originally ruled out as too eager; a whole-line match is the
+// version of "one recognized reference, one deliberate action" that
+// fits typing prose rather than clicking a menu.
 class VerseListDescriptionView : public TextDocumentView {
 public:
 	VerseListDescriptionView(const char* name, TextDocument* document,
@@ -429,10 +430,33 @@ public:
 	{
 	}
 
+	virtual void MouseDown(BPoint where)
+	{
+		// #28/#50: parity with NotesDisplayView's own left-click follow
+		// -- a plain click on one of the blue spans
+		// _RestyleDescriptionReferences() styled jumps there instead of
+		// placing the caret.
+		BString key;
+		if (fOwner != NULL
+				&& fOwner->_DescriptionReferenceLinkAt(TextOffsetAt(where),
+					key)) {
+			// NOT Window()->PostMessage() -- Window() here is this
+			// satellite Verse List window itself, which has no Bible
+			// reading pane of its own to navigate. _NavigateToKey()
+			// (below) reaches the owning SGMainWindow's own messenger
+			// instead, same as every other navigation this window
+			// triggers (_NavigateToRow(), Go to List).
+			fOwner->_NavigateToKey(key.String());
+			return;
+		}
+
+		TextDocumentView::MouseDown(where);
+	}
+
 	virtual void KeyDown(const char* bytes, int32 numBytes)
 	{
-		if (_RawChar(bytes, numBytes) == B_ENTER && fOwner != NULL
-				&& fDocument != NULL && Editor().IsSet()) {
+		if (_RawChar(bytes, numBytes) == B_ENTER && !_ShiftHeld()
+				&& fOwner != NULL && fDocument != NULL && Editor().IsSet()) {
 			int32 caretOffset = Editor()->CaretOffset();
 			BString text(fDocument->Text());
 			int32 lineStart = caretOffset;
@@ -440,7 +464,13 @@ public:
 				lineStart--;
 			BString line;
 			text.CopyInto(line, lineStart, caretOffset - lineStart);
-			fOwner->_TryAutoAddDescriptionReference(line.String());
+			if (fOwner->_TryAutoAddDescriptionReference(line.String())) {
+				// Swallows the Enter itself -- no newline, the line is
+				// simply gone, same spot picks up whatever is typed
+				// next.
+				Editor()->Remove(lineStart, caretOffset - lineStart);
+				return;
+			}
 		}
 
 		TextDocumentView::KeyDown(bytes, numBytes);
@@ -455,6 +485,14 @@ private:
 		if (rawChar == 0 && numBytes > 0)
 			rawChar = (unsigned char)bytes[0];
 		return rawChar;
+	}
+
+	bool _ShiftHeld()
+	{
+		int32 modifiers = 0;
+		if (Window() != NULL && Window()->CurrentMessage() != NULL)
+			Window()->CurrentMessage()->FindInt32("modifiers", &modifiers);
+		return (modifiers & B_SHIFT_KEY) != 0;
 	}
 
 	TextDocument*		fDocument;
@@ -1553,27 +1591,31 @@ SGVerseListWindow::_CreateReference(const char* text)
 }
 
 
-void
+bool
 SGVerseListWindow::_TryAutoAddDescriptionReference(const char* line)
 {
 	if (!fHasOpenFile)
-		return;
+		return false;
 
 	BString trimmed(line);
 	trimmed.Trim();
 	if (trimmed.IsEmpty())
-		return;
+		return false;
 
 	BString versification = _CollectionVersification();
 	BString locale, normalized;
 	if (!_NormalizeTypedReference(trimmed.String(), versification, locale,
 			normalized)) {
-		return;
+		return false;
 	}
 
+	// Already in the list (typed by hand after it got there some other
+	// way) -- the line still counts as "recognized" and disappears from
+	// the description like any other match, just without a second,
+	// duplicate row.
 	for (size_t i = 0; i < fBookmarks.size(); i++) {
 		if (normalized == fBookmarks[i].Reference())
-			return;
+			return true;
 	}
 
 	BookmarkFile bookmark;
@@ -1582,7 +1624,9 @@ SGVerseListWindow::_TryAutoAddDescriptionReference(const char* line)
 			(int32)fBookmarks.size()) == B_OK) {
 		fBookmarks.push_back(bookmark);
 		_RebuildRows();
+		return true;
 	}
+	return false;
 }
 
 
@@ -2065,6 +2109,11 @@ SGVerseListWindow::_RebuildDescription()
 	// from under an already-visible view.
 	fDescriptionView->Relayout();
 	fDescriptionView->Invalidate();
+
+	// A second pass, deliberately -- re-styling reference spans wants
+	// its own Remove()+Insert() cycle (see _RestyleDescriptionReferences()'s
+	// own comment), not woven into the plain reload above.
+	_RestyleDescriptionReferences();
 }
 
 
@@ -2436,7 +2485,7 @@ SGVerseListWindow::_HandleNodeMonitorMessage(BMessage* message)
 void
 SGVerseListWindow::_NavigateToRow(int32 index)
 {
-	if (index < 0 || index >= (int32)fBookmarks.size() || fMessenger == NULL)
+	if (index < 0 || index >= (int32)fBookmarks.size())
 		return;
 
 	// BookmarkFile::NavigationKey(), not Reference() directly --
@@ -2445,15 +2494,30 @@ SGVerseListWindow::_NavigateToRow(int32 index)
 	// locale, so handing them the reference's own (possibly different)
 	// locale would only work by coincidence, when that still happens to
 	// match. See NavigationKey()'s own comment.
-	//
+	_NavigateToKey(fBookmarks[index].NavigationKey());
+}
+
+
+void
+SGVerseListWindow::_NavigateToKey(const char* key)
+{
+	if (fMessenger == NULL)
+		return;
+
 	// Exactly the path a dropped reference or the universal search box
 	// already take (see BibleColumnView::_HandleReferenceDrop() and
 	// SGMainWindow::MessageReceived()'s own SG_BIBLE case) -- no new
 	// navigation mechanism, just another source for the same message.
 	// It reaches the OWNING window's active chain, not necessarily
-	// whichever SGMainWindow currently has focus.
+	// whichever SGMainWindow currently has focus -- and NOT
+	// Window()->PostMessage(), unlike BibleColumnView/NotesDisplayView's
+	// own click-follow: those live inside the main reading window
+	// itself, so Window() already IS the right target there. This
+	// window is a separate satellite (SGVerseListWindow), so every
+	// navigation out of it -- this one (#50/#28's Description click-
+	// follow) included -- has always gone through fMessenger instead.
 	BMessage jump(SG_BIBLE);
-	jump.AddString("key", fBookmarks[index].NavigationKey());
+	jump.AddString("key", key);
 	fMessenger->SendMessage(&jump);
 }
 
@@ -2668,6 +2732,124 @@ SGVerseListWindow::_DescriptionEdited()
 	BMessage message(VLIST_DESCRIPTION_CHANGED);
 	fDescriptionSaveRunner = new BMessageRunner(BMessenger(this), &message,
 		kDescriptionSaveDelay, 1);
+
+	// Immediate, unlike the disk save above -- the blue styling should
+	// track every keystroke, not lag behind a debounce meant to avoid
+	// hammering the filesystem.
+	_RestyleDescriptionReferences();
+}
+
+
+// #50/#28: re-styles every whole-line-independent reference match --
+// same FindReferencesInText() this whole feature otherwise deliberately
+// does NOT use for the auto-add/auto-remove Enter behavior (see
+// VerseListDescriptionView's own comment on why that stays whole-line-
+// only) -- blue, exactly like a Bible/Commentary or Notes column's own
+// cross-references (BibleTextDocument::fReferenceLinkStyle). Detaches
+// fDescriptionListenerRef around the rebuild for the same reason
+// _RebuildDescription() does: a Remove()+Insert() pass here must not
+// re-arm the save-debounce timer or recurse back into this function via
+// _DescriptionEdited().
+void
+SGVerseListWindow::_RestyleDescriptionReferences()
+{
+	if (fDescriptionDocument == NULL || fDescriptionView == NULL)
+		return;
+
+	fDescriptionDocument->RemoveListener(fDescriptionListenerRef);
+
+	// The caret lives in TextEditor's own BReference<TextSelection>, not
+	// in the TextDocument this function otherwise fully tears down and
+	// rebuilds -- captured before, restored via SetSelection() after, so
+	// typing doesn't visibly jump the caret to the end (or the start)
+	// on every keystroke.
+	int32 caretStart = 0, caretEnd = 0;
+	fDescriptionView->GetSelection(caretStart, caretEnd);
+
+	BString text(fDescriptionDocument->Text());
+
+	int32 length = fDescriptionDocument->Length();
+	if (length > 0)
+		fDescriptionDocument->Remove(0, length);
+
+	fDescriptionReferenceLinks.clear();
+
+	CharacterStyle plainStyle;
+	CharacterStyle linkStyle;
+	rgb_color linkColor = { 0, 0, 200, 255 };
+	linkStyle.SetForegroundColor(linkColor);
+	linkStyle.SetUnderline(1);
+
+	std::vector<TextReference> references
+		= FindReferencesInText(text.String());
+	int32 cursor = 0;
+	int32 insertOffset = 0;
+	for (size_t i = 0; i < references.size(); i++) {
+		const TextReference& reference = references[i];
+		if (reference.start < cursor)
+			continue; // overlapping match -- keep the earlier one
+
+		if (reference.start > cursor) {
+			BString before;
+			text.CopyInto(before, cursor, reference.start - cursor);
+			fDescriptionDocument->Insert(insertOffset, before, plainStyle);
+			insertOffset += before.CountChars();
+		}
+
+		BString matched;
+		text.CopyInto(matched, reference.start, reference.length);
+		fDescriptionDocument->Insert(insertOffset, matched, linkStyle);
+
+		DescriptionReferenceLink link;
+		link.start = insertOffset;
+		link.end = insertOffset + matched.CountChars();
+		link.key = reference.normalizedKey;
+		fDescriptionReferenceLinks.push_back(link);
+
+		insertOffset += matched.CountChars();
+		cursor = reference.start + reference.length;
+	}
+	if (cursor < text.Length()) {
+		BString after;
+		text.CopyInto(after, cursor, text.Length() - cursor);
+		fDescriptionDocument->Insert(insertOffset, after, plainStyle);
+	}
+
+	fDescriptionDocument->AddListener(fDescriptionListenerRef);
+	fDescriptionView->Relayout();
+	fDescriptionView->Invalidate();
+
+	// Clamped, not just restored as captured -- when this runs nested
+	// inside VerseListDescriptionView::KeyDown's own Editor()->Remove()
+	// call (the #50 auto-remove path), the caret this captured further
+	// up is still the PRE-removal offset (TextEditor only moves it to
+	// the removal point after fDocument->Remove() -- the call that
+	// notifies this function -- returns), which can point past the end
+	// of the now-shorter text. Harmless either way once KeyDown's own
+	// Remove() finishes and repositions the caret correctly right
+	// after, but clamping here means this function is never the one
+	// handing a bad offset to SetSelection() even transiently.
+	int32 documentLength = fDescriptionDocument->Length();
+	if (caretStart > documentLength)
+		caretStart = documentLength;
+	if (caretEnd > documentLength)
+		caretEnd = documentLength;
+	fDescriptionView->SetSelection(caretStart, caretEnd);
+}
+
+
+bool
+SGVerseListWindow::_DescriptionReferenceLinkAt(int32 offset,
+	BString& outKey) const
+{
+	for (size_t i = 0; i < fDescriptionReferenceLinks.size(); i++) {
+		if (offset >= fDescriptionReferenceLinks[i].start
+				&& offset < fDescriptionReferenceLinks[i].end) {
+			outKey = fDescriptionReferenceLinks[i].key;
+			return true;
+		}
+	}
+	return false;
 }
 
 

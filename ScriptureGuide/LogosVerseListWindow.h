@@ -187,9 +187,29 @@ public:
 			// duplicate check _CreateReference() doesn't need (pressing
 			// Enter again after an already-recognized line, e.g. to add
 			// a blank line below it, must not add the same bookmark
-			// twice).
-			void			_TryAutoAddDescriptionReference(
+			// twice). Returns true if it actually added something --
+			// the line is only removed from the description (leaving
+			// it "vanish" into the list, per #50) when this returns
+			// true; a plain Shift+Enter skips calling this at all, so
+			// a line that merely looks like a reference can still be
+			// kept as ordinary prose.
+			bool			_TryAutoAddDescriptionReference(
 								const char* line);
+			// Same not-a-friend reasoning: VerseListDescriptionView's
+			// own MouseDown() (#50/#28 parity with Notes) -- a plain
+			// click landing on one of the blue spans
+			// _RestyleDescriptionReferences() just styled follows it,
+			// same SG_BIBLE path BibleColumnView/NotesDisplayView
+			// already use.
+			bool			_DescriptionReferenceLinkAt(int32 offset,
+								BString& outKey) const;
+			// Shared tail of the private _NavigateToRow() -- also
+			// called directly by VerseListDescriptionView's own click-
+			// follow (#50/#28) with a canonical key from
+			// FindReferencesInText() rather than a row index. NOT
+			// Window()->PostMessage() -- see the .cpp for why this
+			// window in particular has to route through fMessenger.
+			void			_NavigateToKey(const char* key);
 
 private:
 			void			_BuildGUI();
@@ -307,6 +327,20 @@ private:
 			// PersonalNotesModule.
 			void			_DescriptionEdited();
 			void			_SaveDescription();
+			// #50/#28: re-styles every recognized reference in the
+			// description blue, same look Notes gives one (see
+			// BibleTextDocument's fReferenceLinkStyle) -- called after
+			// every edit (from _DescriptionEdited(), immediately, not
+			// debounced like the disk save) and once after loading a
+			// collection (from _RebuildDescription()). Rebuilds
+			// fDescriptionReferenceLinks and fDescriptionDocument's
+			// whole content from scratch each time (the text is always
+			// short, so this is cheap) rather than trying to patch
+			// spans in place, and restores the caret afterward via
+			// SetSelection() -- a full Remove()+Insert() pass doesn't
+			// go through TextEditor, which is the only thing that
+			// otherwise keeps the caret in sync with the document.
+			void			_RestyleDescriptionReferences();
 
 			// #79: live-reflect filesystem changes made from outside this
 			// window (Tracker, another instance, a script) instead of
@@ -393,6 +427,20 @@ private:
 			TextDocumentRef			fDescriptionDocument;
 			TextDocumentView*		fDescriptionView;
 			BScrollView*			fDescriptionScroll;
+			// One entry per recognized reference currently styled blue in
+			// fDescriptionDocument (#50/#28 parity with Notes) -- rebuilt
+			// from scratch by _RestyleDescriptionReferences() every time
+			// the description's text changes, since a span's offsets
+			// don't survive an edit anywhere before it. Looked up by
+			// _DescriptionReferenceLinkAt() (below), the same not-a-
+			// friend pattern _ShowRowContextMenu() etc. already use, for
+			// VerseListDescriptionView's own click-to-follow.
+			struct DescriptionReferenceLink {
+				int32	start;
+				int32	end;
+				BString	key;
+			};
+			std::vector<DescriptionReferenceLink>	fDescriptionReferenceLinks;
 
 			// #57: BColumnListView manages its own scrolling internally
 			// (unlike the old BOutlineListView, which needed an external
