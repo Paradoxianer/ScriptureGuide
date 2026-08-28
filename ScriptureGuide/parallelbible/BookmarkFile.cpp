@@ -315,6 +315,14 @@ ComputeBookmarkCode(const char* reference, const char* versification,
 }
 
 
+BString
+BookmarkFile::Code() const
+{
+	return ComputeBookmarkCode(fReference.String(), fVersification.String(),
+		fLocale.String());
+}
+
+
 status_t
 BookmarkFile::Save()
 {
@@ -352,8 +360,7 @@ BookmarkFile::Save()
 
 	file.WriteAttr(kAttrPosition, B_INT32_TYPE, 0, &fPosition,
 		sizeof(fPosition));
-	BString code = ComputeBookmarkCode(fReference.String(),
-		fVersification.String(), fLocale.String());
+	BString code = Code();
 	file.WriteAttrString(kAttrCode, &code);
 	file.WriteAttrString(kAttrTags, &fTags);
 

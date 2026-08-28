@@ -109,6 +109,16 @@ public:
 			// won't need a schema migration when it lands.
 			const char*		Tags() const
 									{ return fTags.String(); }
+			// The same testament+book+chapter+verse sort key already
+			// computed and written as the SG:code attribute (for
+			// Tracker's own column sorting, see EnsureMimeTypeRegistered())
+			// -- a plain lexicographic sort of this string equals true
+			// Bible order, unlike a plain string sort of Reference()
+			// itself (which would put e.g. "Genesis 10:1" before
+			// "Genesis 2:1"). Recomputed on demand rather than cached,
+			// so it can't silently go stale relative to Reference()/
+			// Versification()/Locale() after SetReference().
+			BString			Code() const;
 
 			void			SetReference(const char* referenceLine);
 			void			SetPosition(int32 position);
