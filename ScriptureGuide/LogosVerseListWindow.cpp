@@ -625,9 +625,14 @@ SGVerseListWindow::_BuildGUI()
 	// (#78) and can be moved around it (#58) -- the bold name alone no
 	// longer says where it actually is, just what it's called. A small,
 	// dim breadcrumb line right above it does, filled in by
-	// _UpdateTitle().
+	// _UpdateTitle(). Explicitly smaller than the surrounding UI font
+	// (reported taking up too much of the window for what it is, next
+	// to Description/Verses below) -- it's secondary information, the
+	// window's own title bar already repeats fNameView's own text.
 	fPathView = new BStringView("verseListPath", "");
-	fPathView->SetFont(be_plain_font);
+	BFont pathFont(be_plain_font);
+	pathFont.SetSize(pathFont.Size() * 0.85f);
+	fPathView->SetFont(&pathFont);
 	fPathView->SetAlignment(B_ALIGN_CENTER);
 	fPathView->SetHighColor(
 		tint_color(ui_color(B_PANEL_BACKGROUND_COLOR), B_DARKEN_3_TINT));
@@ -662,10 +667,13 @@ SGVerseListWindow::_BuildGUI()
 	fDescriptionView->SetTextDocument(fDescriptionDocument);
 	fDescriptionScroll = new BScrollView("verseListDescriptionScroll",
 		fDescriptionView, 0, false, true, B_NO_BORDER);
-	// A short, fixed-height strip -- overflow scrolls inside it rather
-	// than pushing the row list down every time a sentence is added.
-	fDescriptionScroll->SetExplicitMinSize(BSize(B_SIZE_UNSET, 60.0f));
-	fDescriptionScroll->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, 60.0f));
+	// Used to be a fixed-height strip (overflow scrolling inside it
+	// rather than pushing the row list down); now the boundary between
+	// Description and Verses is a user-draggable BSplitView divider
+	// instead (see the layout below), so this only needs a floor, not a
+	// ceiling, to keep from collapsing to nothing when the split is
+	// dragged all the way toward Verses.
+	fDescriptionScroll->SetExplicitMinSize(BSize(B_SIZE_UNSET, 40.0f));
 
 	// Labeled boxes around each field, same idiom Haiku apps use
 	// elsewhere for "group of controls with a caption" (BBox::SetLabel()
@@ -711,12 +719,28 @@ SGVerseListWindow::_BuildGUI()
 	// content beneath them.
 	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
 		.Add(fMenuBar)
-		.AddGroup(B_VERTICAL, B_USE_DEFAULT_SPACING)
+		.AddGroup(B_VERTICAL, B_USE_SMALL_SPACING)
 			.SetInsets(B_USE_SMALL_INSETS)
-			.Add(fPathView)
-			.Add(fNameView)
-			.Add(descriptionBox)
-			.Add(rowsBox)
+			// fPathView/fNameView tight against each other (they're
+			// read together, "which list, and where is it") -- the
+			// gap that matters is beneath them, before the two boxes
+			// that actually hold the content this window is for.
+			.AddGroup(B_VERTICAL, 0)
+				.Add(fPathView)
+				.Add(fNameView)
+			.End()
+			// A user-draggable divider (#50 followup) instead of the
+			// Description box's old fixed 60px height -- Description
+			// and Verses matter more than the header above them, and
+			// which of the two matters more varies by list, so this
+			// leaves that call to whoever's looking at it instead of
+			// baking in one fixed split. Verses starts with more of
+			// the initial weight (2:1), roughly matching how much more
+			// room it got than Description's old fixed 60px before.
+			.AddSplit(B_VERTICAL, B_USE_SMALL_SPACING)
+				.Add(descriptionBox, 1)
+				.Add(rowsBox, 2)
+			.End()
 		.End()
 	.End();
 }
