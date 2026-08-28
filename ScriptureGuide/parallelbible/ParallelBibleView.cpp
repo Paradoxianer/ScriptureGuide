@@ -1113,6 +1113,33 @@ public:
 			return;
 		}
 
+		// A plain (left) click landing on a cross-reference already
+		// recognized in this note's own text (#28's detection -- same
+		// blue styling a Bible/Commentary column's own clickable
+		// references get, see BibleTextDocument's shared paragraph
+		// building) follows it, the same SG_BIBLE path
+		// BibleColumnView::_TryFollowReferenceAt() uses -- rather than
+		// just placing the caret there like every other click in this
+		// editable view. The styling promised a link; before this, it
+		// never delivered one here (right-click's own "Add to list"
+		// above was the only thing a recognized reference actually DID).
+		// Clicking exactly on the linked text takes priority over
+		// caret placement -- same trade-off BibleColumnView already
+		// makes for its own (non-editable) cross-references.
+		BString key;
+		if (fDocument != NULL
+				&& fDocument->ReferenceLinkAt(TextOffsetAt(where), key)) {
+			BWindow* window = Window();
+			if (window != NULL) {
+				if (fOwner != NULL)
+					fOwner->_SetActiveColumn(fPosition);
+				BMessage jump(SG_BIBLE);
+				jump.AddString("key", key);
+				window->PostMessage(&jump);
+				return;
+			}
+		}
+
 		TextDocumentView::MouseDown(where);
 	}
 
