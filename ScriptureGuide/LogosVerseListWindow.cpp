@@ -5,6 +5,8 @@
 #include <Alert.h>
 #include <Box.h>
 #include <Button.h>
+#include <ColumnListView.h>
+#include <ColumnTypes.h>
 #include <ControlLook.h>
 #include <Catalog.h>
 #include <Directory.h>
@@ -18,20 +20,17 @@
 #include <GroupLayout.h>
 #include <InterfaceDefs.h>
 #include <LayoutBuilder.h>
-#include <ListItem.h>
 #include <MenuBar.h>
 #include <MenuField.h>
 #include <MenuItem.h>
 #include <NodeMonitor.h>
 #include <Message.h>
 #include <MessageRunner.h>
-#include <OutlineListView.h>
 #include <Path.h>
 #include <PopUpMenu.h>
 #include <Roster.h>
 #include <ScrollView.h>
 #include <String.h>
-#include <StringItem.h>
 #include <StringView.h>
 #include <TextControl.h>
 
@@ -104,137 +103,173 @@ private:
 };
 
 
-// One row's plain reference text, with drag-out (matching
-// ResultListView's own drag-a-reference idiom) and drag-REORDER support
-// -- the latter modeled directly on ParallelBibleView's column
-// reordering (see BibleColumnView-adjacent header-drag code,
-// ParallelBibleView.cpp): MouseDown() on an already-selected row starts
-// a drag carrying VLIST_ROW_REORDER plus the row's own index; the drop
-// lands as an ordinary MessageReceived() with WasDropped() true, and the
-// target index comes from where the drop landed, not from a separate
-// drag-and-drop callback.
-class VerseListRowListView : public BOutlineListView {
+// #57: a right-click on either column needs its own hook --
+// BColumnListView has no MouseDown() override point of its own (clicks
+// on a row land on a private child view, not this outer view); opting a
+// column into BColumn::MouseDown() via SetWantsEvents(true) is the
+// documented way to intercept this. This is purely an ADDITIONAL
+// notification layered on top of the list's own built-in click-to-
+// select/multi-select handling (confirmed live: FontPanel.cpp's own
+// column selects normally without ever opting into this), so left-
+// clicks are untouched -- only a secondary click does anything here.
+// One class, used for both the Reference and Tags columns, so right-
+// click works no matter which cell of a row was clicked.
+class VerseListRowColumn : public BStringColumn {
+public:
+	VerseListRowColumn(SGVerseListWindow* owner, const char* title,
+		float width, float minWidth, float maxWidth)
+		:
+		BStringColumn(title, width, minWidth, maxWidth, B_TRUNCATE_END),
+		fOwner(owner)
+	{
+		SetWantsEvents(true);
+	}
+
+	virtual void MouseDown(BColumnListView* parent, BRow* row, BField* field,
+		BRect fieldRect, BPoint point, uint32 buttons)
+	{
+		if (buttons != B_SECONDARY_MOUSE_BUTTON || row == NULL
+			|| fOwner == NULL) {
+			return;
+		}
+		// Right-clicking a row that's already part of a multi-selection
+		// (#58) acts on the whole selection; right-clicking outside it
+		// replaces the selection with just this row, same convention
+		// Tracker itself uses.
+		if (!row->IsSelected()) {
+			parent->DeselectAll();
+			parent->AddToSelection(row);
+		}
+		BPoint screenPoint = point;
+		parent->ConvertToScreen(&screenPoint);
+		fOwner->_ShowRowContextMenu(screenPoint);
+	}
+
+private:
+	SGVerseListWindow*	fOwner;
+};
+
+
+// Reference + Tags per row (#57), with drag-REORDER support -- modeled
+// directly on ParallelBibleView's column reordering: InitiateDrag() on
+// an already-selected row starts a drag carrying VLIST_ROW_REORDER plus
+// the row's own index; the drop lands in MessageDropped(), and the
+// target index comes from where the drop landed.
+//
+// BColumnListView instead of the original BOutlineListView specifically
+// so tags have a real column to live in, not squeezed into the
+// reference text -- see VerseListRowColumn above for the one piece that
+// widget doesn't hand over for free (right-click). The
+// CountItems()/CurrentSelection(int32)/Select(int32)/MoveItem()/
+// MakeEmpty() wrappers below exist so every *caller* elsewhere in this
+// file -- SGVerseListWindow's own row-index-based bookkeeping, already
+// exercised and correct -- keeps working completely unmodified; only
+// this class and _ShowRowContextMenu() (moved here from what used to be
+// a private method on the old list view class, now that the context
+// menu no longer targets the row list itself) needed to change.
+//
+// Not ported from the old class: the empty-list hint text ("Drag a
+// Bible reference here..."). BColumnListView's own empty state (a
+// blank list, same as Tracker's own empty-folder view) is an acceptable
+// simplification for this migration -- revisit if it's missed.
+class VerseListRowListView : public BColumnListView {
 public:
 	VerseListRowListView(const char* name, SGVerseListWindow* owner)
 		:
-		BOutlineListView(name, B_MULTIPLE_SELECTION_LIST),
+		BColumnListView(name, B_WILL_DRAW | B_NAVIGABLE | B_FRAME_EVENTS,
+			B_FANCY_BORDER, true),
 		fOwner(owner)
 	{
+		SetSelectionMode(B_MULTIPLE_SELECTION_LIST);
+
+		float referenceWidth = StringWidth("Genesis 1:1-3" B_UTF8_ELLIPSIS)
+			+ 20;
+		AddColumn(new VerseListRowColumn(owner, B_TRANSLATE("Reference"),
+			referenceWidth, 60, 400), 0);
+		AddColumn(new VerseListRowColumn(owner, B_TRANSLATE("Tags"),
+			100, 40, 300), 1);
 	}
 
-	virtual void MouseDown(BPoint where)
+	int32 CountItems()
 	{
-		int32 index = IndexOf(where);
+		return CountRows();
+	}
 
-		// Right-click: a "Remove" context menu on whichever row is
-		// under the pointer (#66) -- there was previously no way at
-		// all to take a single reference back out of an open list,
-		// short of deleting the whole file.
-		uint32 buttons = 0;
-		BMessage* current = Window() != NULL
-			? Window()->CurrentMessage() : NULL;
-		if (current != NULL)
-			current->FindInt32("buttons", (int32*)&buttons);
-		if (buttons == B_SECONDARY_MOUSE_BUTTON) {
-			if (index >= 0) {
-				// Right-clicking a row that's already part of a multi-
-				// selection (#58) acts on the whole selection; right-
-				// clicking outside it replaces the selection with just
-				// this row, same convention Tracker itself uses.
-				if (!ItemAt(index)->IsSelected())
-					Select(index);
-				BPoint screenPoint = where;
-				ConvertToScreen(&screenPoint);
-				_ShowRemoveMenu(index, screenPoint);
-			}
-			return;
-		}
+	// Position-based, matching the old BOutlineListView-backed shape --
+	// SGVerseListWindow keeps fBookmarks[] and this list's own rows in
+	// the same order at all times (every mutation goes through
+	// _RebuildRows(), a full rebuild), so a row's position IS its
+	// fBookmarks[] index; no separate per-row bookkeeping needed.
+	// CurrentSelection(BRow*) walks a linked chain of *pointers*. not
+	// indices -- this converts nth-selected to a position by walking
+	// that chain, then IndexOf().
+	int32 CurrentSelection(int32 index = 0)
+	{
+		BRow* row = BColumnListView::CurrentSelection();
+		for (int32 i = 0; i < index && row != NULL; i++)
+			row = BColumnListView::CurrentSelection(row);
+		return row != NULL ? IndexOf(row) : -1;
+	}
 
-		if (index < 0 || !ItemAt(index)->IsSelected()) {
-			BOutlineListView::MouseDown(where);
+	void Select(int32 index)
+	{
+		DeselectAll();
+		BRow* row = RowAt(index);
+		if (row != NULL)
+			AddToSelection(row);
+	}
+
+	void MakeEmpty()
+	{
+		Clear();
+	}
+
+	// RemoveRow() does NOT delete the row (confirmed in ColumnListView.h's
+	// own comment) -- reusing the same BRow object at its new position
+	// instead of destroying and recreating it.
+	void MoveItem(int32 from, int32 to)
+	{
+		BRow* row = RowAt(from);
+		if (row == NULL)
 			return;
-		}
+		RemoveRow(row);
+		AddRow(row, to);
+	}
+
+	void AddReferenceRow(const char* reference, const char* tags)
+	{
+		BRow* row = new BRow();
+		row->SetField(new BStringField(reference), 0);
+		row->SetField(new BStringField(tags != NULL ? tags : ""), 1);
+		AddRow(row);
+	}
+
+protected:
+	virtual bool InitiateDrag(BPoint point, bool wasSelected)
+	{
+		if (!wasSelected)
+			return false;
+		BRow* row = RowAt(point);
+		if (row == NULL)
+			return false;
 
 		BMessage dragMessage(VLIST_ROW_REORDER);
-		dragMessage.AddInt32("from", index);
-		DragMessage(&dragMessage, ItemFrame(index));
+		dragMessage.AddInt32("from", IndexOf(row));
+		BRect rowRect;
+		GetRowRect(row, &rowRect);
+		DragMessage(&dragMessage, rowRect);
+		return true;
 	}
 
-	virtual void KeyDown(const char* bytes, int32 numBytes)
+	virtual void MessageDropped(BMessage* message, BPoint point)
 	{
-		if (numBytes == 1 && bytes[0] == B_DELETE) {
-			if (CurrentSelection() >= 0 && fOwner != NULL) {
-				fOwner->_RemoveSelectedRows();
-				return;
-			}
-		}
-		BOutlineListView::KeyDown(bytes, numBytes);
-	}
-
-	// A real end user's own testing feedback: an empty list gives no
-	// hint at all that dragging a reference in is how it's filled, or
-	// that Edit > Add Reference... exists as the alternative. Two
-	// short, centered lines drawn directly onto the empty background,
-	// same idiom as a placeholder in an empty search-results list would
-	// use -- nothing to clean up, they just stop being drawn once
-	// CountItems() > 0.
-	virtual void Draw(BRect updateRect)
-	{
-		BOutlineListView::Draw(updateRect);
-		if (CountItems() > 0)
-			return;
-
-		BString line1(B_TRANSLATE("Drag a Bible reference here,"));
-		BString line2(B_TRANSLATE(
-			"or use Edit > Add Reference" B_UTF8_ELLIPSIS));
-
-		SetHighColor(tint_color(ViewColor(), B_DARKEN_2_TINT));
-		SetLowColor(ViewColor());
-		font_height fh;
-		GetFontHeight(&fh);
-		float lineHeight = fh.ascent + fh.descent + fh.leading;
-		BRect bounds = Bounds();
-		float y = bounds.Height() / 2 - lineHeight / 2 + fh.ascent;
-
-		float width1 = StringWidth(line1.String());
-		DrawString(line1.String(),
-			BPoint(std::max(4.0f, (bounds.Width() - width1) / 2), y));
-
-		float width2 = StringWidth(line2.String());
-		DrawString(line2.String(),
-			BPoint(std::max(4.0f, (bounds.Width() - width2) / 2),
-				y + lineHeight));
-	}
-
-	virtual void MessageReceived(BMessage* message)
-	{
-		if (message->what == VLIST_REMOVE_ROW) {
-			// Acts on the whole current selection (#58), not just the
-			// row that was originally right-clicked -- MouseDown() above
-			// already made sure that row is part of it before this menu
-			// was even shown.
-			if (fOwner != NULL)
-				fOwner->_RemoveSelectedRows();
-			return;
-		}
-		if (message->what == VLIST_EDIT_REFERENCE) {
-			int32 index;
-			if (message->FindInt32("index", &index) == B_OK
-				&& fOwner != NULL) {
-				fOwner->_StartEditReference(index);
-			}
-			return;
-		}
-		if (message->WasDropped() && message->what == VLIST_ROW_REORDER) {
+		if (message->what == VLIST_ROW_REORDER) {
 			int32 from;
-			if (message->FindInt32("from", &from) == B_OK) {
-				BPoint dropPoint = message->DropPoint();
-				ConvertFromScreen(&dropPoint);
-				int32 to = IndexOf(dropPoint);
-				if (to < 0)
-					to = CountItems() - 1;
-				if (fOwner != NULL)
-					fOwner->_MoveRow(from, to);
+			if (message->FindInt32("from", &from) == B_OK && fOwner != NULL) {
+				BRow* targetRow = RowAt(point);
+				int32 to = targetRow != NULL ? IndexOf(targetRow)
+					: CountRows() - 1;
+				fOwner->_MoveRow(from, to);
 			}
 			return;
 		}
@@ -246,45 +281,23 @@ public:
 		// own comment on why this was unified rather than left as two)
 		// -- means "add these references to the open list", the same
 		// way a drop onto a chain reading list mode already worked in
-		// #52. Checked by content, not just WasDropped(), so a drop
-		// from somewhere unrelated that happens to land here doesn't
-		// misfire.
-		if (message->WasDropped() && message->HasString("key")
-			&& fOwner != NULL) {
+		// #52.
+		if (message->HasString("key") && fOwner != NULL)
 			fOwner->_AppendDroppedReferences(message);
-			return;
+	}
+
+	virtual void KeyDown(const char* bytes, int32 numBytes)
+	{
+		if (numBytes == 1 && bytes[0] == B_DELETE) {
+			if (CurrentSelection() >= 0 && fOwner != NULL) {
+				fOwner->_RemoveSelectedRows();
+				return;
+			}
 		}
-		BOutlineListView::MessageReceived(message);
+		BColumnListView::KeyDown(bytes, numBytes);
 	}
 
 private:
-	// Fire-and-forget, same idiom this app already uses for its other
-	// context menus (e.g. ParallelBibleView's "Add to list"/"Remove
-	// from list" popups) -- not owned by anything, cleans itself up.
-	void _ShowRemoveMenu(int32 index, BPoint screenPoint)
-	{
-		int32 selectionCount = 0;
-		for (int32 i = 0; CurrentSelection(i) >= 0; i++)
-			selectionCount++;
-
-		BPopUpMenu* menu = new BPopUpMenu("removeRow", false, false);
-		// Editing a single reference in place only makes sense for
-		// exactly one selected row -- same gating as the Edit menu's own
-		// Edit Reference item (see _UpdateRowActionState()).
-		if (selectionCount <= 1) {
-			BMessage* edit = new BMessage(VLIST_EDIT_REFERENCE);
-			edit->AddInt32("index", index);
-			menu->AddItem(new BMenuItem(
-				B_TRANSLATE("Edit Reference" B_UTF8_ELLIPSIS), edit));
-			menu->AddSeparatorItem();
-		}
-		menu->AddItem(new BMenuItem(B_TRANSLATE("Remove"),
-			new BMessage(VLIST_REMOVE_ROW)));
-		menu->SetTargetForItems(this);
-		menu->SetAsyncAutoDestruct(true);
-		menu->Go(screenPoint, true, true, true);
-	}
-
 	SGVerseListWindow*	fOwner;
 };
 
@@ -371,7 +384,6 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fDescriptionView(NULL),
 	fDescriptionScroll(NULL),
 	fRowList(NULL),
-	fRowScroll(NULL),
 	fImportPanel(NULL),
 	fExportPanel(NULL),
 	fDescriptionSaveRunner(NULL),
@@ -461,8 +473,6 @@ SGVerseListWindow::_BuildGUI()
 	fRowList = new VerseListRowListView("verseListRows", this);
 	fRowList->SetSelectionMessage(new BMessage(VLIST_ROW_SELECTED));
 	fRowList->SetTarget(this);
-	fRowScroll = new BScrollView("verseListRowsScroll", fRowList, 0, false,
-		true, B_NO_BORDER);
 
 	fDescriptionDocument.SetTo(new TextDocument(), true);
 	// A brand-new TextDocument has ZERO paragraphs, not one empty one --
@@ -526,7 +536,7 @@ SGVerseListWindow::_BuildGUI()
 	rowsBoxLayout->SetInsets(padding, rowsBox->TopBorderOffset() + padding,
 		padding, padding);
 	descriptionBoxLayout->AddView(fDescriptionScroll);
-	rowsBoxLayout->AddView(fRowScroll);
+	rowsBoxLayout->AddView(fRowList);
 
 	// SetInsets() applies to the whole group it's called on -- calling it
 	// directly on this outer one would have inset fMenuBar too, leaving
@@ -1362,6 +1372,13 @@ SGVerseListWindow::_CopyOrMoveSelectedEntries(const char* destPath, bool move)
 		indices.push_back(selected);
 	if (indices.empty())
 		return;
+	// #57: CurrentSelection(i)'s own order changed with the move to
+	// BColumnListView -- it walks a selection chain (most-recently-
+	// selected first), not row position order the way the old
+	// BOutlineListView-backed one happened to. Sorted here so entries
+	// land in the destination in the same relative order they have in
+	// the source list, regardless of the order they were clicked in.
+	std::sort(indices.begin(), indices.end());
 
 	int32 position = (int32)BookmarkFile::ListBookmarkPaths(destPath).size();
 	std::vector<int32> copied;
@@ -1533,6 +1550,36 @@ SGVerseListWindow::_StartEditReference(int32 index)
 		B_TRANSLATE("Edit Reference"), fBookmarks[index].Reference(),
 		B_TRANSLATE("Save"), B_TRANSLATE("Reference:"), index);
 	prompt->Show();
+}
+
+
+// #57: VerseListRowColumn's own right-click handler -- both menu items
+// post bare messages the window already handles identically whether
+// they come from here or the Edit menu (VLIST_EDIT_REFERENCE_SELECTED/
+// VLIST_REMOVE_SELECTED both act on fRowList->CurrentSelection()), so
+// no index needs to ride along with either one.
+void
+SGVerseListWindow::_ShowRowContextMenu(BPoint screenPoint)
+{
+	int32 selectionCount = 0;
+	for (int32 i = 0; fRowList->CurrentSelection(i) >= 0; i++)
+		selectionCount++;
+
+	BPopUpMenu* menu = new BPopUpMenu("rowContext", false, false);
+	// Editing a single reference in place only makes sense for exactly
+	// one selected row -- same gating as the Edit menu's own Edit
+	// Reference item (see _UpdateRowActionState()).
+	if (selectionCount == 1) {
+		menu->AddItem(new BMenuItem(
+			B_TRANSLATE("Edit Reference" B_UTF8_ELLIPSIS),
+			new BMessage(VLIST_EDIT_REFERENCE_SELECTED)));
+		menu->AddSeparatorItem();
+	}
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Remove"),
+		new BMessage(VLIST_REMOVE_SELECTED)));
+	menu->SetTargetForItems(this);
+	menu->SetAsyncAutoDestruct(true);
+	menu->Go(screenPoint, true, true, true);
 }
 
 
@@ -1893,8 +1940,10 @@ void
 SGVerseListWindow::_RebuildRows()
 {
 	fRowList->MakeEmpty();
-	for (size_t i = 0; i < fBookmarks.size(); i++)
-		fRowList->AddItem(new BStringItem(fBookmarks[i].Reference()));
+	for (size_t i = 0; i < fBookmarks.size(); i++) {
+		fRowList->AddReferenceRow(fBookmarks[i].Reference(),
+			fBookmarks[i].Tags());
+	}
 	// MakeEmpty() clears the selection -- Edit Reference/Remove/Move Up/
 	// Move Down all need to fall back to disabled rather than keep
 	// whatever state a previous, now-gone selection left them in.

@@ -17,10 +17,10 @@ class BFilePanel;
 class BMenu;
 class BMenuBar;
 class BMenuItem;
-class BOutlineListView;
 class BScrollView;
 class BStringView;
 class TextDocumentView;
+class VerseListRowListView;
 
 // Local message constants, same convention as LogosSearchWindow.h's
 // FIND_*/M_ACTIVATE_WINDOW #defines -- window-local, not app-wide, so
@@ -33,7 +33,6 @@ class TextDocumentView;
 #define VLIST_NAV_SELECT		'VLns'
 #define VLIST_ROW_SELECTED		'VLrs'
 #define VLIST_ROW_REORDER		'VLrr'
-#define VLIST_REMOVE_ROW		'VLrm'
 #define VLIST_DESCRIPTION_CHANGED	'VLdc'
 // Double-click on fNameView (#73) -- renames the open collection's own
 // folder in place.
@@ -60,22 +59,21 @@ class TextDocumentView;
 // inside the tree, #58 (not built yet) covers copying/moving within it.
 #define VLIST_EXPORT_PANEL		'VLxp'
 #define VLIST_EXPORT_RESULT	'VLxr'
-// Edit > Add Reference... and a row's own right-click "Edit Reference..."
-// -- drag-and-drop was previously the only way to add a reference, and
-// nothing in the window said so. Both open the same prompt window
-// (typed text, not a book/chapter/verse picker -- reuses the exact
-// validation the universal Go to / Search box already has, see
-// _CreateReference()/_EditReference() in the .cpp), just with different
-// titles/pre-filled text and a different result handler.
+// Edit > Add Reference... -- drag-and-drop was previously the only way
+// to add a reference, and nothing in the window said so. Opens the same
+// prompt window Edit Reference does (typed text, not a book/chapter/
+// verse picker -- reuses the exact validation the universal Go to /
+// Search box already has, see _CreateReference()/_EditReference() in
+// the .cpp), just with a different title/pre-filled text and result
+// handler.
 #define VLIST_ADD_REFERENCE		'VLar'
 #define VLIST_ADD_REFERENCE_RESULT	'VLaR'
-#define VLIST_EDIT_REFERENCE		'VLer'
 #define VLIST_EDIT_REFERENCE_RESULT	'VLeR'
-// #93: Edit Reference/Remove, triggered from the Edit menu against
-// whichever row is currently selected (fRowList->CurrentSelection()),
-// rather than the index a context-menu click already carries -- see
-// VLIST_EDIT_REFERENCE/VLIST_REMOVE_ROW above for the right-click path,
-// which stays as the shortcut both now have a menu equivalent for.
+// #93: Edit Reference/Remove, both usable from the Edit menu OR the row
+// list's own right-click menu (#57's _ShowRowContextMenu()) -- either
+// path posts the same message, acting on whichever row(s) are currently
+// selected (fRowList->CurrentSelection()) rather than carrying an index
+// of their own.
 #define VLIST_EDIT_REFERENCE_SELECTED	'VLes'
 #define VLIST_REMOVE_SELECTED	'VLrx'
 // #58: File > Move/Copy List to... (the whole open collection, including
@@ -175,6 +173,13 @@ public:
 			// _EditReference() (private, called once the prompt returns
 			// a result) does the actual rewrite.
 			void			_StartEditReference(int32 index);
+			// Same not-a-friend reasoning: VerseListRowColumn's own
+			// right-click handler (#57) -- builds and shows the
+			// Edit Reference/Remove popup at `screenPoint`, acting on
+			// whichever row(s) are already selected by the time this is
+			// called (VerseListRowColumn's own MouseDown() makes sure the
+			// clicked row is part of that selection first).
+			void			_ShowRowContextMenu(BPoint screenPoint);
 
 private:
 			void			_BuildGUI();
@@ -384,8 +389,10 @@ private:
 			TextDocumentView*		fDescriptionView;
 			BScrollView*			fDescriptionScroll;
 
-			BOutlineListView*		fRowList;
-			BScrollView*			fRowScroll;
+			// #57: BColumnListView manages its own scrolling internally
+			// (unlike the old BOutlineListView, which needed an external
+			// BScrollView) -- no separate scroll-view field needed.
+			VerseListRowListView*	fRowList;
 
 			// B_FILE_NODE -- an import source/export destination is an
 			// actual file (the plain-text list), not a collection folder.
