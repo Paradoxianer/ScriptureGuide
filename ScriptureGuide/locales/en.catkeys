@@ -1,87 +1,114 @@
-1	English	application/x-vnd.Scripture-Guide	228661391
+1	English	application/x-vnd.Scripture-Guide	3842911384
+Add Reference	VerseListWindow		Add Reference
+Dictionary 	DictionaryWindow		Dictionary 
+Regular Expression	SearchWindow		Regular Expression
+Move to	VerseListWindow		Move to
+As HTML Table	MainWindow		As HTML Table
+\"%text%\" isn't a Bible reference ScriptureGuide recognizes. Try something like \"John 3:16\" or \"Genesis 1:1-3\".	VerseListWindow		\"%text%\" isn't a Bible reference ScriptureGuide recognizes. Try something like \"John 3:16\" or \"Genesis 1:1-3\".
+Copy Comparison	MainWindow		Copy Comparison
+OK	VerseListWindow		OK
+Rename Verse List	VerseListWindow		Rename Verse List
+(add to this collection)	ParallelBibleView		(add to this collection)
+File	VerseListWindow		File
+Move Down	VerseListWindow		Move Down
+Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Search results (only shown if a lookup finds more than one match):
+(No list open)	VerseListWindow		(No list open)
+Find	SearchWindow		Find
+Move Verse List	VerseListWindow		Move Verse List
+New Verse List…	VerseListWindow		New Verse List…
+Search in 	SearchWindow		Search in 
+Copy to	VerseListWindow		Copy to
+New Verse List	VerseListWindow		New Verse List
+Show Verse Numbers	MainWindow		Show Verse Numbers
+Font Size: 	FontPanel		Font Size: 
+Remove	VerseListWindow		Remove
+Description	VerseListWindow		Description
+Edit	VerseListWindow		Edit
+Add Reference…	VerseListWindow		Add Reference…
+Verse	ExportFormats		Verse
+Copy List to	VerseListWindow		Copy List to
+Go to / Search:	MainWindow		Go to / Search:
+Rename List…	VerseListWindow		Rename List…
+Add to Verse List	ParallelBibleView		Add to Verse List
+Program	MainWindow		Program
+Verses	VerseListWindow		Verses
+Verse Lists (top level)	VerseListWindow		Verse Lists (top level)
+Next Chapter	MainWindow		Next Chapter
+Font Name	FontPanel		Font Name
+Dictionary…	MainWindow		Dictionary…
+Could not move this collection there -- a collection with the same name may already exist in the target location.	VerseListWindow		Could not move this collection there -- a collection with the same name may already exist in the target location.
+Delete File…	VerseListWindow		Delete File…
+Previous Book	MainWindow		Previous Book
+Look up	DictionaryWindow		Look up
+Rename	VerseListWindow		Rename
+No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		No entry for %number% in the installed Strong's dictionary.
+Show Strong's Numbers	MainWindow		Show Strong's Numbers
+Match Case	SearchWindow		Match Case
+Chapter	MainWindow		Chapter
+Options	MainWindow		Options
+No matching entry found.	DictionaryWindow		No matching entry found.
+Notes	ParallelBibleView		Notes
+End in 	SearchWindow		End in 
+Save	VerseListWindow		Save
+Verse Lists…	MainWindow		Verse Lists…
+Notes	MainWindow		Notes
+Entry:	DictionaryWindow		Entry:
+No module selected.	BibleTextDocument		No module selected.
+Previous Chapter	MainWindow		Previous Chapter
+Go to List	VerseListWindow		Go to List
+%d matching entries -- pick one below.	DictionaryWindow		%d matching entries -- pick one below.
 Move Up	VerseListWindow		Move Up
 Find Verse…	MainWindow		Find Verse…
-Dictionary 	DictionaryWindow		Dictionary 
-Open Verse List…	VerseListWindow		Open Verse List…
-Regular Expression	SearchWindow		Regular Expression
+Reference:	VerseListWindow		Reference:
+Delete this entire collection and everything in it? This cannot be undone.	VerseListWindow		Delete this entire collection and everything in it? This cannot be undone.
 Commentaries	ParallelBibleView		Commentaries
-Open	VerseListWindow		Open
+Import Text List	VerseListWindow		Import Text List
 Choose Font…	MainWindow		Choose Font…
-As HTML Table	MainWindow		As HTML Table
-Back	MainWindow		Back
 Verse	MainWindow		Verse
+Back	MainWindow		Back
 Notes	ExportFormats		Notes
 Delete Verse List	VerseListWindow		Delete Verse List
 Show Cross-References	MainWindow		Show Cross-References
 Quit	MainWindow		Quit
 Forward	MainWindow		Forward
-Copy Comparison	MainWindow		Copy Comparison
-Close Verse List	VerseListWindow		Close Verse List
+Edit Reference	VerseListWindow		Edit Reference
 Look up: 	DictionaryWindow		Look up: 
-File	VerseListWindow		File
-Move Down	VerseListWindow		Move Down
-(No list open)	VerseListWindow		(No list open)
-Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Search results (only shown if a lookup finds more than one match):
+Reference	VerseListWindow		Reference
+Import Text List…	VerseListWindow		Import Text List…
 As Plain Text	MainWindow		As Plain Text
-Find	SearchWindow		Find
 Book Manager…	MainWindow		Book Manager…
-New Verse List…	VerseListWindow		New Verse List…
 Duplicate This Window…	MainWindow		Duplicate This Window…
-Search in 	SearchWindow		Search in 
-New Verse List	VerseListWindow		New Verse List
-Remove	VerseListWindow		Remove
-Start in 	SearchWindow		Start in 
-Font Size: 	FontPanel		Font Size: 
+Tags	VerseListWindow		Tags
+Show in Tracker	VerseListWindow		Show in Tracker
+New Sub-Collection	VerseListWindow		New Sub-Collection
 Close This Window	MainWindow		Close This Window
-Show Verse Numbers	MainWindow		Show Verse Numbers
+Start in 	SearchWindow		Start in 
 Create	VerseListWindow		Create
-Description	VerseListWindow		Description
-Find Words	SearchWindow		Find Words
 As Tab-Separated	MainWindow		As Tab-Separated
-Cancel	VerseListWindow		Cancel
-Edit	VerseListWindow		Edit
+Find Words	SearchWindow		Find Words
 Next Book	MainWindow		Next Book
-Verse	ExportFormats		Verse
-Go to / Search:	MainWindow		Go to / Search:
+Cancel	VerseListWindow		Cancel
+Export	VerseListWindow		Export
+Add	VerseListWindow		Add
+Export Text List…	VerseListWindow		Export Text List…
 Book:	MainWindow		Book:
-Verses	VerseListWindow		Verses
-Program	MainWindow		Program
 About Scripture Guide…	MainWindow		About Scripture Guide…
-Font Name	FontPanel		Font Name
-Next Chapter	MainWindow		Next Chapter
+Move List to	VerseListWindow		Move List to
+Import	VerseListWindow		Import
 Verse Lists	VerseListWindow		Verse Lists
-Dictionary…	MainWindow		Dictionary…
-Delete File…	VerseListWindow		Delete File…
-Previous Book	MainWindow		Previous Book
 Search Progress:	SearchWindow		Search Progress:
-Look up	DictionaryWindow		Look up
 Preview	FontPanel		Preview
-Find Phrase	SearchWindow		Find Phrase
 No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.
-No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		No entry for %number% in the installed Strong's dictionary.
-Show Strong's Numbers	MainWindow		Show Strong's Numbers
-Match Case	SearchWindow		Match Case
+Find Phrase	SearchWindow		Find Phrase
 Name:	VerseListWindow		Name:
-Chapter	MainWindow		Chapter
 OK	FontPanel		OK
-Options	MainWindow		Options
-No matching entry found.	DictionaryWindow		No matching entry found.
 Search Results:	SearchWindow		Search Results:
-Notes	ParallelBibleView		Notes
 Delete	VerseListWindow		Delete
-End in 	SearchWindow		End in 
-Save	VerseListWindow		Save
+Location:	VerseListWindow		Location:
 Dictionary	DictionaryWindow		Dictionary
-Delete this verse list file? This cannot be undone.	VerseListWindow		Delete this verse list file? This cannot be undone.
-Verse Lists…	MainWindow		Verse Lists…
 As Markdown Table	MainWindow		As Markdown Table
-Entry:	DictionaryWindow		Entry:
-Notes	MainWindow		Notes
-No module selected.	BibleTextDocument		No module selected.
-Save As…	VerseListWindow		Save As…
 Navigation	MainWindow		Navigation
 Biblical Texts	ParallelBibleView		Biblical Texts
-Previous Chapter	MainWindow		Previous Chapter
 Find: 	SearchWindow		Find: 
-Go to List	VerseListWindow		Go to List
-%d matching entries -- pick one below.	DictionaryWindow		%d matching entries -- pick one below.
+Edit Reference…	VerseListWindow		Edit Reference…
+New sub-collection here…	VerseListWindow		New sub-collection here…

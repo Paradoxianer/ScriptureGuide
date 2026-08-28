@@ -704,7 +704,8 @@ SGVerseListWindow::_BuildMenuBar()
 // (_RebuildNavigationMenu()'s "Go to List" menu), but VerseListNamePromptWindow
 // below needs it too, for its own location-picker popup.
 static void PopulateCollectionMenu(BMenu* menu, BHandler* target,
-	const char* path, uint32 what, const char* excludePath = "");
+	const char* path, uint32 what, const char* excludePath = "",
+	bool addNewSubCollectionHere = false);
 
 
 static const uint32 kNamePromptOK = 'VLpo';
@@ -733,10 +734,18 @@ public:
 	// of the destination folder, no file panel. Only _NewList() and the
 	// "nothing open" half of Import pass true; renaming/editing a
 	// reference has no location to pick.
+	//
+	// `fixedLocation` (#56's "New sub-collection here...") is the other
+	// way to give this window a location: already known from which menu
+	// entry was clicked, so no dropdown is shown at all, but the result
+	// still carries it as "location" -- same as if showLocation had been
+	// used and that one folder picked. Mutually exclusive with
+	// showLocation in practice (nothing passes both).
 	VerseListNamePromptWindow(BMessenger target, uint32 resultWhat,
 		const char* windowTitle = NULL, const char* initialName = NULL,
 		const char* buttonLabel = NULL, const char* fieldLabel = NULL,
-		int32 index = -1, bool showLocation = false)
+		int32 index = -1, bool showLocation = false,
+		const char* fixedLocation = NULL)
 		:
 		BWindow(BRect(120, 120, 460, 210),
 			windowTitle != NULL ? windowTitle
@@ -746,8 +755,10 @@ public:
 		fTarget(target),
 		fResultWhat(resultWhat),
 		fIndex(index),
-		fLocationPath(BookmarkFile::RootDirectory()),
-		fLocationField(NULL)
+		fLocationPath(fixedLocation != NULL ? BString(fixedLocation)
+			: BookmarkFile::RootDirectory()),
+		fLocationField(NULL),
+		fCarriesLocation(showLocation || fixedLocation != NULL)
 	{
 		fNameControl = new BTextControl("name",
 			fieldLabel != NULL ? fieldLabel : B_TRANSLATE("Name:"),
@@ -804,7 +815,7 @@ public:
 				result.AddString("name", name);
 				if (fIndex >= 0)
 					result.AddInt32("index", fIndex);
-				if (fLocationField != NULL)
+				if (fCarriesLocation)
 					result.AddString("location", fLocationPath);
 				fTarget.SendMessage(&result);
 				Quit();
@@ -844,6 +855,7 @@ private:
 	BTextControl*	fNameControl;
 	BString			fLocationPath;
 	BMenuField*		fLocationField;
+	bool			fCarriesLocation;
 };
 
 
@@ -876,6 +888,14 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 				_AppendDroppedReferences(&fPendingDropMessage);
 				fPendingDropMessage.MakeEmpty();
 			}
+			break;
+		}
+
+		case VLIST_NEW_SUBCOLLECTION_HERE:
+		{
+			BString path;
+			if (message->FindString("path", &path) == B_OK)
+				_StartNewSubCollectionHere(path.String());
 			break;
 		}
 
@@ -1081,6 +1101,20 @@ SGVerseListWindow::_NewList()
 {
 	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
 		BMessenger(this), kNamePromptOK, NULL, NULL, NULL, NULL, -1, true);
+	prompt->Show();
+}
+
+
+// "New sub-collection here..." -- same prompt/result path as _NewList()
+// (kNamePromptOK's own handler already does exactly _CreateNewList(name,
+// location) when a location rides along), just with the location fixed
+// to whichever menu entry was clicked instead of picked from a dropdown.
+void
+SGVerseListWindow::_StartNewSubCollectionHere(const char* path)
+{
+	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
+		BMessenger(this), kNamePromptOK, B_TRANSLATE("New Sub-Collection"),
+		NULL, B_TRANSLATE("Create"), NULL, -1, false, path);
 	prompt->Show();
 }
 
@@ -2050,9 +2084,17 @@ SGVerseListWindow::_UpdateRowActionState()
 // usefully be filed into the very collection they're already in -- both
 // that path itself and anything nested under it are skipped entirely
 // (not just disabled), same as they never existed in the tree.
+//
+// `addNewSubCollectionHere` (#56, restored after a brief removal -- see
+// the git log) is only set for "Go to List" itself: a trailing
+// separator plus "New sub-collection here..." appended to `menu`, at
+// every level this recursion reaches (the root menu and every submenu
+// alike), carrying THIS level's own `path`. The three #58 destination
+// pickers and the New List/Import location dropdown never pass it --
+// creating a folder isn't a thing any of those are for.
 static void
 PopulateCollectionMenu(BMenu* menu, BHandler* target, const char* path,
-	uint32 what, const char* excludePath)
+	uint32 what, const char* excludePath, bool addNewSubCollectionHere)
 {
 	std::vector<BString> names = BookmarkFile::ListCollectionNames(path);
 	for (size_t i = 0; i < names.size(); i++) {
@@ -2082,9 +2124,17 @@ PopulateCollectionMenu(BMenu* menu, BHandler* target, const char* path,
 
 		BMenu* submenu = new BMenu(names[i].String());
 		PopulateCollectionMenu(submenu, target, childPath.Path(), what,
-			excludePath);
+			excludePath, addNewSubCollectionHere);
 		submenu->SetTargetForItems(target);
 		menu->AddItem(new BMenuItem(submenu, select));
+	}
+
+	if (addNewSubCollectionHere) {
+		BMessage* newHere = new BMessage(VLIST_NEW_SUBCOLLECTION_HERE);
+		newHere->AddString("path", path);
+		menu->AddSeparatorItem();
+		menu->AddItem(new BMenuItem(
+			B_TRANSLATE("New sub-collection here" B_UTF8_ELLIPSIS), newHere));
 	}
 }
 
@@ -2108,7 +2158,7 @@ SGVerseListWindow::_RebuildNavigationMenu()
 	// see PopulateCollectionMenu()'s own comment.
 	BString root = BookmarkFile::RootDirectory();
 	PopulateCollectionMenu(fNavigationMenu, this, root.String(),
-		VLIST_NAV_SELECT);
+		VLIST_NAV_SELECT, "", true);
 	fNavigationMenu->SetTargetForItems(this);
 
 	for (int32 i = fMoveListMenu->CountItems() - 1; i >= 0; i--)

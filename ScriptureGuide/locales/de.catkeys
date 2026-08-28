@@ -1,4 +1,4 @@
-1	German	application/x-vnd.Scripture-Guide	1166630890
+1	English	application/x-vnd.Scripture-Guide	3842911384
 Add Reference	VerseListWindow		Referenz hinzufügen
 Dictionary 	DictionaryWindow		Wörterbuch 
 Regular Expression	SearchWindow		Regulärer Ausdruck
@@ -80,6 +80,7 @@ Book Manager…	MainWindow		Buchverwaltung…
 Duplicate This Window…	MainWindow		Fenster duplizieren
 Tags	VerseListWindow		Tags
 Show in Tracker	VerseListWindow		In Tracker zeigen
+New Sub-Collection	VerseListWindow		Neue Untersammlung
 Close This Window	MainWindow		Fenster schließen
 Start in 	SearchWindow		Start in
 Create	VerseListWindow		Erstellen
@@ -110,3 +111,4 @@ Navigation	MainWindow		Navigation
 Biblical Texts	ParallelBibleView		Bibeltexte
 Find: 	SearchWindow		Suche:
 Edit Reference…	VerseListWindow		Referenz bearbeiten…
+New sub-collection here…	VerseListWindow		Neue Untersammlung hier…

@@ -95,6 +95,12 @@ class VerseListRowListView;
 // "New Verse List…") so a canceled prompt can never be mistaken for one
 // from the other path (see fPendingDropMessage's own comment).
 #define VLIST_DROP_NAME_RESULT		'VLdn'
+// "New sub-collection here..." (Go to List's own trailing item, every
+// level including the root) -- carries the clicked submenu's own path as
+// "path", fixed (no location picker, it's already implied by which entry
+// was clicked). Reuses kNamePromptOK as the prompt's own resultWhat --
+// see _StartNewSubCollectionHere() in the .cpp for why that's enough.
+#define VLIST_NEW_SUBCOLLECTION_HERE	'VLsh'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -185,6 +191,9 @@ private:
 			// `parentPath` means the root, same as before #97.
 			void			_CreateNewList(const char* name,
 								const char* parentPath = NULL);
+			// "New sub-collection here..." -- same prompt as _NewList(),
+			// just with `path` fixed instead of user-chosen.
+			void			_StartNewSubCollectionHere(const char* path);
 			// Also the target of Go to List's own navigation, not just
 			// startup restore -- see VLIST_NAV_SELECT.
 			void			_OpenList(const char* path);
