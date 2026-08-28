@@ -787,9 +787,21 @@ ExtractTrailingChapterVerse(const BString& text, int& chapter, int& verse,
 }
 
 
-bool ParseVerseReference(const char* input, BString& normalizedKey)
+// Shared by ParseVerseReference() and ConvertVerseReference() below --
+// both ultimately hand their input to VerseKey::setText(), which only
+// understands ':' as a chapter:verse separator and, worse, silently
+// accepts a bare book-less number/comma-list instead of rejecting it
+// (confirmed empirically: "1,1 - 1,6" with no book name at all parses
+// as whatever book VerseKey defaults to, not an error) -- ConvertVerseReference()
+// went straight to setText() with neither guard for a long time, which
+// is why a typed "Johannes 3, 16" silently became "Johannes 3:1" (the
+// comma read as SWORD's own list separator, "16" discarded) instead of
+// failing loudly or working correctly. Trims and lowercases neither --
+// only the two things VerseKey itself gets wrong on its own.
+static bool
+NormalizeReferenceText(const char* input, BString& trimmed)
 {
-	BString trimmed(input);
+	trimmed = input;
 	trimmed.Trim();
 	if (trimmed.IsEmpty())
 		return false;
@@ -817,6 +829,15 @@ bool ParseVerseReference(const char* input, BString& normalizedKey)
 	// number as a second chapter number instead, rejecting the whole
 	// reference as invalid.
 	trimmed.ReplaceAll(": ", ":");
+	return true;
+}
+
+
+bool ParseVerseReference(const char* input, BString& normalizedKey)
+{
+	BString trimmed;
+	if (!NormalizeReferenceText(input, trimmed))
+		return false;
 
 	// A verse range's end ("Epheser 6:4-5") has to be stripped before
 	// ExtractTrailingChapterVerse() runs, not passed through -- its
@@ -871,11 +892,23 @@ ConvertVerseReference(const char* key, const char* sourceLocale,
 	const char* sourceVersification, const char* targetLocale,
 	const char* targetVersification, BString& outText)
 {
+	// NormalizeReferenceText() (see its own comment) -- this used to
+	// hand `key` to VerseKey::setText() completely as-is, which is
+	// exactly right for an already-canonical key (e.g. a drag source's
+	// own "key" field, or a stored bookmark's own Reference()) but
+	// silently mangled a user-typed one with a German comma separator
+	// or no book name at all. Every caller's input already satisfies
+	// this normalization trivially (no comma to replace, already has a
+	// book name) except the one that didn't.
+	BString normalized;
+	if (!NormalizeReferenceText(key, normalized))
+		return false;
+
 	VerseKey source;
 	if (sourceLocale != NULL && sourceLocale[0] != '\0')
 		source.setLocale(sourceLocale);
 	source.setVersificationSystem(sourceVersification);
-	source.setText(key);
+	source.setText(normalized.String());
 	if (source.popError() != 0)
 		return false;
 

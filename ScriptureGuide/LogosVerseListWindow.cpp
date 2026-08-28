@@ -13,6 +13,7 @@
 #include <Entry.h>
 #include <File.h>
 #include <FilePanel.h>
+#include <Font.h>
 #include <fs_attr.h>
 #include <StorageDefs.h>
 #include <Language.h>
@@ -457,13 +458,31 @@ public:
 	{
 		if (_RawChar(bytes, numBytes) == B_ENTER && !_ShiftHeld()
 				&& fOwner != NULL && fDocument != NULL && Editor().IsSet()) {
+			// CaretOffset() (and every other offset this whole engine
+			// uses -- Remove(), Insert(), Length()) is a CHARACTER
+			// offset, not a byte one. Text(0, caretOffset) does that
+			// conversion correctly (it slices by the document's own
+			// character count, whatever the underlying BString's byte
+			// length actually is); the FindLast()/CopyInto() below then
+			// only ever index INTO that already-correctly-sliced
+			// prefix, and the line's own length is measured back in
+			// characters via CountChars() before being handed back to
+			// Remove(). A previous version indexed a byte-oriented
+			// BString::ByteAt() with a character offset directly --
+			// correct only as long as nothing before the caret was
+			// multi-byte UTF-8, which German prose (umlauts) routinely
+			// is, silently corrupting which substring got extracted.
 			int32 caretOffset = Editor()->CaretOffset();
-			BString text(fDocument->Text());
-			int32 lineStart = caretOffset;
-			while (lineStart > 0 && text.ByteAt(lineStart - 1) != '\n')
-				lineStart--;
+			BString prefix = fDocument->Text(0, caretOffset);
+			int32 newline = prefix.FindLast('\n');
 			BString line;
-			text.CopyInto(line, lineStart, caretOffset - lineStart);
+			if (newline < 0)
+				line = prefix;
+			else
+				prefix.CopyInto(line, newline + 1,
+					prefix.Length() - newline - 1);
+			int32 lineStart = caretOffset - line.CountChars();
+
 			if (fOwner->_TryAutoAddDescriptionReference(line.String())) {
 				// Swallows the Enter itself -- no newline, the line is
 				// simply gone, same spot picks up whatever is typed

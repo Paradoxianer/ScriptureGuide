@@ -25,6 +25,7 @@
 #include "ParagraphLayout.h"
 #include "ParallelBibleView.h"
 #include "PersonalNotesModule.h"
+#include "SwordBackend.h"
 #include "VerseAligner.h"
 #include "constants.h"
 
@@ -1004,6 +1005,36 @@ TestWritableModuleBecomesEditableColumn(SWMgr* manager)
 	Check(ok, name);
 }
 
+
+// Regression test for a real bug (found live, not in review): typed
+// text handed straight to ConvertVerseReference() -- as the Verse List
+// window's "Add Reference..." and #50's Description auto-add both do
+// -- silently mangled a German comma-separated verse ("Johannes 3, 16"
+// became "Johannes 3:1", the comma read as SWORD's own list separator
+// and "16" discarded) or, worse, a book-less fragment ("1,1 - 1,6")
+// silently succeeded under WHATEVER book VerseKey defaults to instead
+// of failing. ParseVerseReference() (used for in-place cross-reference
+// detection, #28) already normalized both cases correctly; the same
+// normalization is now shared via SwordBackend.cpp's own
+// NormalizeReferenceText(), so this exercises it through
+// ConvertVerseReference() specifically, the path that broke.
+static void
+TestConvertVerseReferenceNormalizesCommaAndRejectsBookless()
+{
+	BString result;
+
+	bool ok = ConvertVerseReference("Genesis 1, 1", "", "KJV", "", "KJV",
+		result);
+	Check(ok && result == "Genesis 1:1",
+		"ConvertVerseReference: comma separator, not just colon, keeps "
+		"the actual verse number");
+
+	ok = ConvertVerseReference("1,1 - 1,6", "", "KJV", "", "KJV", result);
+	Check(!ok, "ConvertVerseReference: a book-less fragment is rejected, "
+		"not silently resolved against some default book");
+}
+
+
 int
 main()
 {
@@ -1024,6 +1055,7 @@ main()
 			moduleB = it->second;
 	}
 
+	TestConvertVerseReferenceNormalizesCommaAndRejectsBookless();
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestOnlyRawFilesModulesAreEditable(&manager);
