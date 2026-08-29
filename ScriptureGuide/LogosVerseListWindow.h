@@ -38,8 +38,13 @@ class VerseListRowListView;
 // Move Up/Move Down silently stop having any visible effect, since
 // BColumnListView re-sorts right back over whatever position they
 // just placed a row at. Edit > Custom Order calls
-// BColumnListView::ClearSortColumns() to get back to plain insertion
-// order, the one order any of those three can actually change.
+// BColumnListView::ClearSortColumns() -- confirmed live that this
+// alone stops FUTURE re-sorting but does not undo the physical
+// reorder a header click already performed on fRowList's own rows --
+// plus _RebuildRows() to actually put the rows back, since fBookmarks
+// (what drag-reorder/Move Up/Move Down/CreateNew() etc. all read and
+// write) was never touched by the sort in the first place and still
+// holds the real, user-set order.
 #define VLIST_CLEAR_SORT		'VLcs'
 #define VLIST_NAV_SELECT		'VLns'
 #define VLIST_ROW_SELECTED		'VLrs'

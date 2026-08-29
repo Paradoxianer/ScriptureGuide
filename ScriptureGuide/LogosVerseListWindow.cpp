@@ -1234,6 +1234,7 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 
 		case VLIST_CLEAR_SORT:
 			fRowList->ClearSortColumns();
+			_RebuildRows();
 			break;
 
 		case VLIST_ROW_SELECTED:
