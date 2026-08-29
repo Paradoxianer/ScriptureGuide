@@ -945,6 +945,36 @@ SplitVerseRangeSuffix(const BString& reference, BString& base, BString& suffix)
 }
 
 
+BString
+CombineVerseRange(const BString& startText, const BString& endText)
+{
+	// `startText`/`endText` are both "<Book> <Chapter>:<Verse>" --
+	// VerseKey::getText() always uses ':', regardless of locale
+	// (confirmed empirically, unlike the display separator elsewhere in
+	// this app that follows the German comma convention).
+	int32 startColon = startText.FindLast(':');
+	int32 endColon = endText.FindLast(':');
+	BString startPrefix, endPrefix, endVerse;
+	if (startColon >= 0)
+		startText.CopyInto(startPrefix, 0, startColon);
+	if (endColon >= 0) {
+		endText.CopyInto(endPrefix, 0, endColon);
+		endText.CopyInto(endVerse, endColon + 1,
+			endText.Length() - endColon - 1);
+	}
+
+	if (startColon >= 0 && endColon >= 0 && startPrefix == endPrefix) {
+		BString combined(startText);
+		combined << "-" << endVerse;
+		return combined;
+	}
+
+	BString combined(startText);
+	combined << " - " << endText;
+	return combined;
+}
+
+
 std::vector<TextReference>
 FindReferencesInText(const char* text)
 {

@@ -1035,6 +1035,26 @@ TestConvertVerseReferenceNormalizesCommaAndRejectsBookless()
 }
 
 
+// CombineVerseRange() is the write-side counterpart used both by a
+// reading-pane multi-verse selection drag (_AppendDroppedReferences())
+// and by #50's typed-reference range support
+// (LogosVerseListWindow.cpp's _NormalizeTypedReference(), not directly
+// testable here since it's file-static and GUI-window-scoped) -- this
+// exercises the shared piece both go through directly.
+static void
+TestCombineVerseRange()
+{
+	BString result = CombineVerseRange("Genesis 1:1", "Genesis 1:5");
+	Check(result == "Genesis 1:1-5",
+		"CombineVerseRange: same book/chapter collapses to one line");
+
+	result = CombineVerseRange("Genesis 1:1", "Genesis 2:5");
+	Check(result == "Genesis 1:1 - Genesis 2:5",
+		"CombineVerseRange: different chapters keep both references in "
+		"full");
+}
+
+
 int
 main()
 {
@@ -1056,6 +1076,7 @@ main()
 	}
 
 	TestConvertVerseReferenceNormalizesCommaAndRejectsBookless();
+	TestCombineVerseRange();
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestOnlyRawFilesModulesAreEditable(&manager);

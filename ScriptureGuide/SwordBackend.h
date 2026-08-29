@@ -77,6 +77,23 @@ bool			ConvertVerseReference(const char* key,
 void			SplitVerseRangeSuffix(const BString& reference,
 					BString& base, BString& suffix);
 
+// The write-side counterpart: combines two already-canonical
+// VerseKey::getText() results ("<Book> <Chapter>:<Verse>") into one
+// compact range ("<Book> <Chapter>:<Start>-<End>") when they share the
+// same book and chapter -- the one shape SplitVerseRangeSuffix() above
+// (and VerseKey::setText() generally) can read back, rather than
+// silently keeping only the start. Falls back to
+// "<startText> - <endText>" (both kept in full) when the book/chapter
+// differ -- a versification-driven shift across a boundary, or the two
+// texts just aren't actually a range of each other. Does no reference
+// parsing of its own; `startText`/`endText` must already be in
+// canonical form. Shared by _AppendDroppedReferences() (a reading-pane
+// multi-verse selection drag) and #50's typed-reference range support
+// (LogosVerseListWindow.cpp) -- same shape, two different sources for
+// the pair of endpoints.
+BString			CombineVerseRange(const BString& startText,
+					const BString& endText);
+
 // One occurrence of a recognized verse reference embedded in a larger
 // block of free text (a commentary's prose, not a whole search/goto
 // field) -- see FindReferencesInText() below. start/length are a byte

@@ -1587,19 +1587,67 @@ SGVerseListWindow::_AddReference()
 }
 
 
-// Shared by _CreateReference()/_EditReference(): the typed text is
-// whatever the user just wrote in their own current locale (the same
-// universal Go to / Search box already accepts, e.g. English "John
-// 3:16" or German "Johannes 3, 16") -- ConvertVerseReference() with the
-// same locale/versification on both sides both validates it (false if
-// it doesn't parse as a reference at all) and re-renders it in
-// VerseKey's own canonical form, the same normalization a dropped
-// reference already gets.
+// Shared by _CreateReference()/_EditReference()/#50's
+// _TryAutoAddDescriptionReference(): the typed text is whatever the
+// user just wrote in their own current locale (the same universal Go
+// to / Search box already accepts, e.g. English "John 3:16" or German
+// "Johannes 3, 16") -- ConvertVerseReference() with the same locale/
+// versification on both sides both validates it (false if it doesn't
+// parse as a reference at all) and re-renders it in VerseKey's own
+// canonical form, the same normalization a dropped reference already
+// gets.
+//
+// A typed RANGE ("Johannes 1,1 - Johannes 1,5") is tried first,
+// separately -- ConvertVerseReference() on the whole string below
+// actually SUCCEEDS on one of these too, just silently keeping only
+// the start (VerseKey::setText()'s own long-standing behavior with a
+// trailing "-...", see ExtractTrailingChapterVerse()'s own comment in
+// SwordBackend.cpp), so checking success alone would never catch that
+// the end got dropped. Splits on the first '-', parses both halves
+// independently, and -- when they share the same book/chapter, the
+// only shape this collapses to one line -- combines them exactly the
+// way _AppendDroppedReferences() already does for a multi-verse
+// reading-pane selection drag (this is the typed-text equivalent of
+// that same "<Book> <Chapter>:<Start>-<End>" shape). Anything that
+// isn't actually two full references either side of a dash (a bare
+// "Genesis 1:1-5" shorthand, or just a reference that happens to
+// contain no dash at all) falls through to the plain single-reference
+// parse below, unchanged.
 static bool
 _NormalizeTypedReference(const char* text, BString& versification,
 	BString& locale, BString& normalized)
 {
 	locale = CurrentLocaleCode();
+
+	BString trimmed(text);
+	trimmed.Trim();
+	int32 dash = trimmed.FindFirst('-');
+	if (dash > 0 && dash + 1 < trimmed.Length()) {
+		BString startPart(trimmed);
+		startPart.Truncate(dash);
+		startPart.Trim();
+		BString endPart;
+		trimmed.CopyInto(endPart, dash + 1, trimmed.Length() - dash - 1);
+		endPart.Trim();
+
+		BString startText, endText;
+		if (!startPart.IsEmpty() && !endPart.IsEmpty()
+				&& ConvertVerseReference(startPart.String(), locale.String(),
+					versification.String(), locale.String(),
+					versification.String(), startText)
+				&& ConvertVerseReference(endPart.String(), locale.String(),
+					versification.String(), locale.String(),
+					versification.String(), endText)
+				&& endText != startText) {
+			// Same combiner _AppendDroppedReferences() uses for a
+			// reading-pane multi-verse selection drag -- collapses to
+			// "<Start>-<End>" when start/end share a book/chapter,
+			// otherwise keeps both full references joined by " - ".
+			normalized = CombineVerseRange(startText, endText);
+			return true;
+		}
+	}
+
 	return ConvertVerseReference(text, locale.String(), versification.String(),
 		locale.String(), versification.String(), normalized);
 }
@@ -2708,6 +2756,12 @@ SGVerseListWindow::_AppendDroppedReferences(BMessage* message)
 			continue;
 		}
 
+		// _NavigateToRow() can feed a compact "<Start>-<End>" range
+		// back into VerseKey::setText() as a single reference (which
+		// silently truncates to the start verse, exactly like clicking
+		// a plain single-verse row) -- CombineVerseRange() builds that
+		// shape when start/end share a book/chapter, or keeps both
+		// full references (joined, not collapsed) when they don't.
 		BString line(startText);
 		if (hasRange) {
 			BString endText;
@@ -2715,38 +2769,7 @@ SGVerseListWindow::_AppendDroppedReferences(BMessage* message)
 					sourceVersification.String(), currentLocale.String(),
 					targetVersification.String(), endText)
 				&& endText != startText) {
-				// `startText`/`endText` are both "<Book> <Chapter>:<Verse>"
-				// -- VerseKey::getText() always uses ':', regardless of
-				// locale (confirmed empirically, unlike the display
-				// separator _ReferenceFor() uses for `reference`). When
-				// they share the same book/chapter, appending the bare
-				// trailing verse number keeps the stored line
-				// "<Book> <Chapter>:<Start>-<End>" -- the one shape
-				// _NavigateToRow() can feed back into VerseKey::setText()
-				// as a single reference (which silently truncates to the
-				// start verse, exactly like clicking a plain single-verse
-				// row) instead of two references awkwardly concatenated
-				// with a bare "-" between them.
-				int32 startColon = startText.FindLast(':');
-				int32 endColon = endText.FindLast(':');
-				BString startPrefix, endPrefix, endVerse;
-				if (startColon >= 0)
-					startText.CopyInto(startPrefix, 0, startColon);
-				if (endColon >= 0) {
-					endText.CopyInto(endPrefix, 0, endColon);
-					endText.CopyInto(endVerse, endColon + 1,
-						endText.Length() - endColon - 1);
-				}
-
-				if (startColon >= 0 && endColon >= 0
-					&& startPrefix == endPrefix) {
-					line << "-" << endVerse;
-				} else {
-					// Book/chapter differ (a versification-driven shift
-					// across a boundary) -- can't collapse to one
-					// trailing number, so keep both full references.
-					line << " - " << endText;
-				}
+				line = CombineVerseRange(startText, endText);
 			}
 		}
 
@@ -2811,10 +2834,6 @@ SGVerseListWindow::_RestyleDescriptionReferences()
 
 	BString text(fDescriptionDocument->Text());
 
-	int32 length = fDescriptionDocument->Length();
-	if (length > 0)
-		fDescriptionDocument->Remove(0, length);
-
 	fDescriptionReferenceLinks.clear();
 
 	CharacterStyle plainStyle;
@@ -2823,40 +2842,109 @@ SGVerseListWindow::_RestyleDescriptionReferences()
 	linkStyle.SetForegroundColor(linkColor);
 	linkStyle.SetUnderline(1);
 
-	std::vector<TextReference> references
+	// A non-overlapping, left-to-right list first (same "skip if this
+	// match starts before the previous one ended" rule the loop below
+	// used to apply inline) -- kept separate from the per-line walk
+	// just below it so that walk can stay a simple index cursor over
+	// `references`, never needing to re-check overlap itself.
+	std::vector<TextReference> allMatches
 		= FindReferencesInText(text.String());
-	int32 cursor = 0;
-	int32 insertOffset = 0;
-	for (size_t i = 0; i < references.size(); i++) {
-		const TextReference& reference = references[i];
-		if (reference.start < cursor)
-			continue; // overlapping match -- keep the earlier one
+	std::vector<TextReference> references;
+	int32 matchCursor = 0;
+	for (size_t i = 0; i < allMatches.size(); i++) {
+		if (allMatches[i].start < matchCursor)
+			continue;
+		references.push_back(allMatches[i]);
+		matchCursor = allMatches[i].start + allMatches[i].length;
+	}
 
-		if (reference.start > cursor) {
-			BString before;
-			text.CopyInto(before, cursor, reference.start - cursor);
-			fDescriptionDocument->Insert(insertOffset, before, plainStyle);
-			insertOffset += before.CountChars();
+	// Built as a whole separate TextDocument, one Paragraph per line
+	// (TextDocument has no notion of a line implicitly -- see
+	// SetParagraphsEndWithNewline()'s own comment on BibleTextDocument
+	// -- so a paragraph's own last TextSpan carries the "\n" itself),
+	// spliced into the live document with ONE Replace() at the end.
+	//
+	// This replaced a version that called TextDocument::Insert()
+	// separately for each plain/link span, back to back, directly on
+	// the live document. That silently corrupted the document instead
+	// of just re-styling it: each Insert() independently round-trips
+	// through NormalizeText() and TextDocument::Replace(offset, 0,
+	// TextDocumentRef), which splices in a whole PARAGRAPH, not a
+	// span appended to whatever paragraph is already there -- so two
+	// Insert() calls landing back to back started two paragraphs
+	// instead of one paragraph with two styled spans. Confirmed live:
+	// a reference finishing mid-sentence inserted a real line break
+	// right there, the instant its color changed, before Enter was
+	// ever pressed. Building each Paragraph's spans in memory first
+	// (Paragraph::Append(TextSpan), the same technique
+	// BibleTextDocument uses per verse) and only then handing the
+	// whole thing to the document sidesteps that entirely.
+	TextDocumentRef newDocument(new TextDocument(), true);
+
+	int32 documentOffset = 0;
+	int32 lineStart = 0;
+	size_t nextReference = 0;
+	int32 textLength = text.Length();
+	while (true) {
+		int32 newline = text.FindFirst('\n', lineStart);
+		int32 lineEnd = newline < 0 ? textLength : newline;
+
+		Paragraph paragraph;
+		int32 cursor = lineStart;
+		while (nextReference < references.size()
+				&& references[nextReference].start < lineEnd) {
+			const TextReference& reference = references[nextReference];
+			nextReference++;
+
+			if (reference.start > cursor) {
+				BString before;
+				text.CopyInto(before, cursor, reference.start - cursor);
+				paragraph.Append(TextSpan(before, plainStyle));
+				documentOffset += before.CountChars();
+			}
+
+			BString matched;
+			text.CopyInto(matched, reference.start, reference.length);
+			paragraph.Append(TextSpan(matched, linkStyle));
+
+			DescriptionReferenceLink link;
+			link.start = documentOffset;
+			link.end = documentOffset + matched.CountChars();
+			link.key = reference.normalizedKey;
+			fDescriptionReferenceLinks.push_back(link);
+
+			documentOffset += matched.CountChars();
+			cursor = reference.start + reference.length;
 		}
 
-		BString matched;
-		text.CopyInto(matched, reference.start, reference.length);
-		fDescriptionDocument->Insert(insertOffset, matched, linkStyle);
+		if (cursor < lineEnd) {
+			BString after;
+			text.CopyInto(after, cursor, lineEnd - cursor);
+			paragraph.Append(TextSpan(after, plainStyle));
+			documentOffset += after.CountChars();
+		}
 
-		DescriptionReferenceLink link;
-		link.start = insertOffset;
-		link.end = insertOffset + matched.CountChars();
-		link.key = reference.normalizedKey;
-		fDescriptionReferenceLinks.push_back(link);
+		bool hasNewline = newline >= 0;
+		if (hasNewline || paragraph.CountTextSpans() == 0) {
+			// The terminator itself (see the class comment above), or
+			// -- an empty line with no terminator, i.e. the document's
+			// very last, still-empty line -- a single empty span so
+			// Length() still counts this paragraph at all (same reason
+			// _RebuildDescription()'s own seed paragraph exists).
+			paragraph.Append(TextSpan(hasNewline ? "\n" : "", plainStyle));
+			if (hasNewline)
+				documentOffset += 1;
+		}
 
-		insertOffset += matched.CountChars();
-		cursor = reference.start + reference.length;
+		newDocument->Append(paragraph);
+
+		if (!hasNewline)
+			break;
+		lineStart = newline + 1;
 	}
-	if (cursor < text.Length()) {
-		BString after;
-		text.CopyInto(after, cursor, text.Length() - cursor);
-		fDescriptionDocument->Insert(insertOffset, after, plainStyle);
-	}
+
+	fDescriptionDocument->Replace(0, fDescriptionDocument->Length(),
+		newDocument);
 
 	fDescriptionDocument->AddListener(fDescriptionListenerRef);
 	fDescriptionView->Relayout();
