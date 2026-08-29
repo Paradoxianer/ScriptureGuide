@@ -395,6 +395,8 @@ private:
 		menu->AddItem(new BMenuItem(
 			B_TRANSLATE("Rename List" B_UTF8_ELLIPSIS),
 			new BMessage(VLIST_RENAME)));
+		menu->AddItem(new BMenuItem(B_TRANSLATE("Show in Tracker"),
+			new BMessage(VLIST_SHOW_IN_TRACKER)));
 		menu->AddItem(new BMenuItem(
 			B_TRANSLATE("Delete File" B_UTF8_ELLIPSIS),
 			new BMessage(VLIST_DELETE)));
@@ -2320,9 +2322,18 @@ PopulateCollectionMenu(BMenu* menu, BHandler* target, const char* path,
 		BMessage* select = new BMessage(what);
 		select->AddString("path", childPath.Path());
 
+		// A childless collection would otherwise become a plain leaf
+		// item below, same as one with no reason to ever be a submenu
+		// -- fine for the #58 destination pickers, but "Go to List"
+		// (addNewSubCollectionHere) needs EVERY collection to be a
+		// submenu, empty or not, so "New sub-collection here…" is
+		// reachable inside it too. Without this, a collection could
+		// only ever gain its first child from the root level's own
+		// trailing item, never from browsing into the (leaf-only)
+		// collection itself.
 		std::vector<BString> grandchildren
 			= BookmarkFile::ListCollectionNames(childPath.Path());
-		if (grandchildren.empty()) {
+		if (grandchildren.empty() && !addNewSubCollectionHere) {
 			menu->AddItem(new BMenuItem(names[i].String(), select));
 			continue;
 		}
