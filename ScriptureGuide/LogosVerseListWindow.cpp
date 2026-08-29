@@ -643,6 +643,31 @@ SGVerseListWindow::_BuildGUI()
 	fRowList->SetSelectionMessage(new BMessage(VLIST_ROW_SELECTED));
 	fRowList->SetTarget(this);
 
+	// A column-header click has no public hook at all -- BColumnListView's
+	// own click-to-sort cycling (ascending/descending, never back to
+	// unsorted) lives entirely in TitleView, a private, non-exported
+	// class (confirmed directly in Haiku's own source,
+	// src/kits/interface/ColumnListView.cpp: TitleView::MouseUp()
+	// mutates fSortAscending and fSortColumns straight through private
+	// member access, posts no BMessage, calls no virtual the app could
+	// override) -- so a third "unsorted" header state isn't something
+	// this app can add. AddStatusView() is the one public extension
+	// point BColumnListView actually offers here: a small, permanently
+	// visible corner, docked beside the horizontal scrollbar, that
+	// stays in view without going through Edit's own menu at all.
+	BButton* clearSortButton = new BButton("verseListClearSort",
+		B_TRANSLATE("Custom Order"), new BMessage(VLIST_CLEAR_SORT));
+	clearSortButton->SetTarget(this);
+	clearSortButton->SetFont(be_plain_font);
+	// AddStatusView() forces this into a strip exactly
+	// B_H_SCROLL_BAR_HEIGHT tall (its own scrollbar's own height) --
+	// far shorter than a button's normal preferred size, so it has to
+	// be told its actual size explicitly rather than left to its own
+	// PreferredSize().
+	clearSortButton->ResizeTo(clearSortButton->StringWidth(
+		B_TRANSLATE("Custom Order")) + 20.0f, B_H_SCROLL_BAR_HEIGHT);
+	fRowList->AddStatusView(clearSortButton);
+
 	fDescriptionDocument.SetTo(new TextDocument(), true);
 	// A brand-new TextDocument has ZERO paragraphs, not one empty one --
 	// confirmed the hard way: TextDocument::ParagraphIndexFor() returns
