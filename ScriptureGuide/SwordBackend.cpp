@@ -975,6 +975,66 @@ CombineVerseRange(const BString& startText, const BString& endText)
 }
 
 
+bool
+ConvertTypedVerseReference(const char* text, const char* locale,
+	const char* versification, BString& outText)
+{
+	BString trimmed(text);
+	trimmed.Trim();
+
+	int32 dash = trimmed.FindFirst('-');
+	if (dash > 0 && dash + 1 < trimmed.Length()) {
+		BString startPart(trimmed);
+		startPart.Truncate(dash);
+		startPart.Trim();
+		BString endPart;
+		trimmed.CopyInto(endPart, dash + 1, trimmed.Length() - dash - 1);
+		endPart.Trim();
+
+		BString startText;
+		if (!startPart.IsEmpty() && !endPart.IsEmpty()
+				&& ConvertVerseReference(startPart.String(), locale,
+					versification, locale, versification, startText)) {
+			// The compact shorthand ("Johannes 1,1-5") has a BARE
+			// trailing verse number after the dash, not a second full
+			// reference -- borrows startText's own book+chapter rather
+			// than trying (and failing) to parse "5" on its own as a
+			// reference.
+			bool endIsBareNumber = true;
+			for (int32 i = 0; i < endPart.Length(); i++) {
+				if (!isdigit((unsigned char)endPart.ByteAt(i))) {
+					endIsBareNumber = false;
+					break;
+				}
+			}
+
+			BString endText;
+			bool haveEnd = false;
+			if (endIsBareNumber) {
+				int32 startColon = startText.FindLast(':');
+				if (startColon >= 0) {
+					endText = startText;
+					endText.Truncate(startColon + 1);
+					endText << endPart;
+					haveEnd = true;
+				}
+			} else {
+				haveEnd = ConvertVerseReference(endPart.String(), locale,
+					versification, locale, versification, endText);
+			}
+
+			if (haveEnd && endText != startText) {
+				outText = CombineVerseRange(startText, endText);
+				return true;
+			}
+		}
+	}
+
+	return ConvertVerseReference(text, locale, versification, locale,
+		versification, outText);
+}
+
+
 std::vector<TextReference>
 FindReferencesInText(const char* text)
 {

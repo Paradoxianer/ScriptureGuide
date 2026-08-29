@@ -1597,59 +1597,23 @@ SGVerseListWindow::_AddReference()
 // canonical form, the same normalization a dropped reference already
 // gets.
 //
-// A typed RANGE ("Johannes 1,1 - Johannes 1,5") is tried first,
-// separately -- ConvertVerseReference() on the whole string below
-// actually SUCCEEDS on one of these too, just silently keeping only
-// the start (VerseKey::setText()'s own long-standing behavior with a
-// trailing "-...", see ExtractTrailingChapterVerse()'s own comment in
-// SwordBackend.cpp), so checking success alone would never catch that
-// the end got dropped. Splits on the first '-', parses both halves
-// independently, and -- when they share the same book/chapter, the
-// only shape this collapses to one line -- combines them exactly the
-// way _AppendDroppedReferences() already does for a multi-verse
-// reading-pane selection drag (this is the typed-text equivalent of
-// that same "<Book> <Chapter>:<Start>-<End>" shape). Anything that
-// isn't actually two full references either side of a dash (a bare
-// "Genesis 1:1-5" shorthand, or just a reference that happens to
-// contain no dash at all) falls through to the plain single-reference
-// parse below, unchanged.
+// A typed RANGE -- either "Johannes 3,5 - Johannes 3,7" (a full
+// reference on each side of the dash) or the compact "Johannes 1,1-5"
+// shorthand (a bare trailing verse number, borrowing the start's own
+// book/chapter) -- is handled by ConvertTypedVerseReference()
+// (SwordBackend.cpp), tried before the plain single-reference parse:
+// ConvertVerseReference() on the whole string actually SUCCEEDS on a
+// range too, just silently keeping only the start (VerseKey::
+// setText()'s own long-standing behavior with a trailing "-...", see
+// ExtractTrailingChapterVerse()'s own comment in SwordBackend.cpp), so
+// checking success alone would never catch that the end got dropped.
 static bool
 _NormalizeTypedReference(const char* text, BString& versification,
 	BString& locale, BString& normalized)
 {
 	locale = CurrentLocaleCode();
-
-	BString trimmed(text);
-	trimmed.Trim();
-	int32 dash = trimmed.FindFirst('-');
-	if (dash > 0 && dash + 1 < trimmed.Length()) {
-		BString startPart(trimmed);
-		startPart.Truncate(dash);
-		startPart.Trim();
-		BString endPart;
-		trimmed.CopyInto(endPart, dash + 1, trimmed.Length() - dash - 1);
-		endPart.Trim();
-
-		BString startText, endText;
-		if (!startPart.IsEmpty() && !endPart.IsEmpty()
-				&& ConvertVerseReference(startPart.String(), locale.String(),
-					versification.String(), locale.String(),
-					versification.String(), startText)
-				&& ConvertVerseReference(endPart.String(), locale.String(),
-					versification.String(), locale.String(),
-					versification.String(), endText)
-				&& endText != startText) {
-			// Same combiner _AppendDroppedReferences() uses for a
-			// reading-pane multi-verse selection drag -- collapses to
-			// "<Start>-<End>" when start/end share a book/chapter,
-			// otherwise keeps both full references joined by " - ".
-			normalized = CombineVerseRange(startText, endText);
-			return true;
-		}
-	}
-
-	return ConvertVerseReference(text, locale.String(), versification.String(),
-		locale.String(), versification.String(), normalized);
+	return ConvertTypedVerseReference(text, locale.String(),
+		versification.String(), normalized);
 }
 
 

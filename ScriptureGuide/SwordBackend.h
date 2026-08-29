@@ -94,6 +94,20 @@ void			SplitVerseRangeSuffix(const BString& reference,
 BString			CombineVerseRange(const BString& startText,
 					const BString& endText);
 
+// #50: parses `text` as either a single reference or a typed RANGE,
+// both forms -- "Johannes 3,5 - Johannes 3,7" (a full reference on
+// each side of the dash) and the compact "Johannes 1,1-5" shorthand (a
+// bare trailing verse number, borrowing the start's own book/chapter,
+// the same shape SplitVerseRangeSuffix() reads on the other end). Only
+// ConvertVerseReference() itself (single-reference success, silently
+// keeping just the start of anything with a "-..." tail) is NOT enough
+// to catch either shape -- this tries the range split FIRST, and only
+// falls back to a plain ConvertVerseReference() call on the whole
+// string when that split doesn't produce two real, distinct endpoints.
+bool			ConvertTypedVerseReference(const char* text,
+					const char* locale, const char* versification,
+					BString& outText);
+
 // One occurrence of a recognized verse reference embedded in a larger
 // block of free text (a commentary's prose, not a whole search/goto
 // field) -- see FindReferencesInText() below. start/length are a byte

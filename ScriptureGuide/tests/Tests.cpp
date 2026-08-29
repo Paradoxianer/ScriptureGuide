@@ -1037,10 +1037,7 @@ TestConvertVerseReferenceNormalizesCommaAndRejectsBookless()
 
 // CombineVerseRange() is the write-side counterpart used both by a
 // reading-pane multi-verse selection drag (_AppendDroppedReferences())
-// and by #50's typed-reference range support
-// (LogosVerseListWindow.cpp's _NormalizeTypedReference(), not directly
-// testable here since it's file-static and GUI-window-scoped) -- this
-// exercises the shared piece both go through directly.
+// and by ConvertTypedVerseReference() below.
 static void
 TestCombineVerseRange()
 {
@@ -1052,6 +1049,40 @@ TestCombineVerseRange()
 	Check(result == "Genesis 1:1 - Genesis 2:5",
 		"CombineVerseRange: different chapters keep both references in "
 		"full");
+}
+
+
+// Regression test for a second live-reported bug: typing a range into
+// #50's description auto-add only ever kept the START verse, both for
+// the compact "Johannes 1,1-5" shorthand (a bare trailing verse number)
+// and the "Johannes 3,5 - Johannes 3,7" full-reference-on-both-sides
+// form -- ConvertVerseReference() succeeds on either, it just silently
+// drops everything from the '-' on (see NormalizeReferenceText()'s own
+// comment on this being VerseKey::setText()'s own long-standing
+// behavior). ConvertTypedVerseReference() is the shared fix used by
+// both _NormalizeTypedReference() (LogosVerseListWindow.cpp) and this
+// test directly.
+static void
+TestConvertTypedVerseReferenceKeepsBothEndsOfARange()
+{
+	BString result;
+
+	bool ok = ConvertTypedVerseReference("Genesis 1,1-5", "", "KJV",
+		result);
+	Check(ok && result == "Genesis 1:1-5",
+		"ConvertTypedVerseReference: compact shorthand range keeps "
+		"both ends");
+
+	ok = ConvertTypedVerseReference("Genesis 3,5 - Genesis 3,7", "", "KJV",
+		result);
+	Check(ok && result == "Genesis 3:5-7",
+		"ConvertTypedVerseReference: full-reference-both-sides range "
+		"keeps both ends");
+
+	ok = ConvertTypedVerseReference("Genesis 1,1", "", "KJV", result);
+	Check(ok && result == "Genesis 1:1",
+		"ConvertTypedVerseReference: a plain single reference (no "
+		"dash) is unaffected");
 }
 
 
@@ -1077,6 +1108,7 @@ main()
 
 	TestConvertVerseReferenceNormalizesCommaAndRejectsBookless();
 	TestCombineVerseRange();
+	TestConvertTypedVerseReferenceKeepsBothEndsOfARange();
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestOnlyRawFilesModulesAreEditable(&manager);
