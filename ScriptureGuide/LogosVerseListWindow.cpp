@@ -731,8 +731,14 @@ SGVerseListWindow::_BuildGUI()
 	float padding = be_control_look->DefaultItemSpacing();
 	descriptionBoxLayout->SetInsets(padding,
 		descriptionBox->TopBorderOffset() + padding, padding, padding);
+	// Bottom gets 2px more than the other three sides here specifically
+	// (unlike descriptionBoxLayout above) -- the "Custom Order" status
+	// view AddStatusView() docks in fRowList's own bottom-left corner
+	// (see its own comment) rendered right at fRowList's bottom edge,
+	// and without this the box's own border clipped it -- reported
+	// live, looked cut off by a couple of pixels.
 	rowsBoxLayout->SetInsets(padding, rowsBox->TopBorderOffset() + padding,
-		padding, padding);
+		padding, padding + 2.0f);
 	descriptionBoxLayout->AddView(fDescriptionScroll);
 	rowsBoxLayout->AddView(fRowList);
 
