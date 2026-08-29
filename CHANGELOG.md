@@ -1,5 +1,97 @@
 # Changelog
 
+## 1.3.5 (test release)
+
+### Verse lists: add a reference from wherever you're reading
+
+Right-click a verse (or a multi-verse selection) in the reading pane,
+or a recognized cross-reference in a Notes/Commentary column, for
+"Add to Verse List ▸" -- a cascading menu of every collection, nested
+the same way *Go to List* already shows them. No detour through the
+verse-list window itself needed just to file away one reference.
+
+### Verse lists: type a reference straight into the description
+
+The description field now recognizes a Bible reference the same way
+Notes/Commentary cross-references already do -- shown blue and
+underlined, clickable to jump there. A line that's nothing BUT a
+recognized reference is picked up automatically the moment Enter is
+pressed: added as a new row below, and removed from the description
+text (it "moves" into the list rather than staying duplicated).
+Shift+Enter is the escape hatch, for a line that merely looks like a
+reference but isn't meant to become one. A range ("Johannes 3,5 -
+Johannes 3,7", or the compact "Johannes 1,1-5" shorthand) keeps both
+ends instead of just the start.
+
+Recognition itself is considerably more robust under German locale --
+a numbered book with its usual period ("1. Mose"), or one with an
+accented name ("Matthäus"), both went completely unrecognized before
+(neither the numbered-prefix pattern nor the book-name matching
+accounted for either). A typed reference using the German comma
+separator ("Johannes 3, 16") used to silently drop the verse number
+entirely, defaulting to verse 1 -- SWORD reads a bare comma as its own
+list separator, not a chapter:verse divider, unless normalized first.
+
+The Reference column in the verse list itself now displays in the
+locale's own convention too (a comma under German, matching the
+reading pane's own drag tooltip) -- what actually gets stored on disk
+is unchanged, still the colon form needed to navigate back to it.
+
+### Verse lists: the reference column is a real table
+
+Migrated from a plain outline list to BColumnListView -- multi-select,
+drag-to-reorder, and a resizable Tags column alongside Reference.
+Clicking a column header sorts by it; Reference sorts in actual Bible
+order (Genesis before Exodus), not by the displayed text.
+
+### Verse lists: other additions
+
+- **Go to List** can create a new sub-collection right where you're
+  browsing -- "New sub-collection here…", a trailing item in every
+  submenu, including the top level and any collection that has no
+  sub-collections of its own yet.
+- **Show in Tracker** opens the currently open collection's own
+  folder, from the File menu or from the list name's own right-click.
+- Dropping a reference onto the verse list window with nothing open
+  now prompts for a name and creates a list on the spot, instead of
+  doing nothing.
+- The window's header (breadcrumb + list name) takes noticeably less
+  room, and Description/Verses now share a user-draggable split
+  instead of a fixed height for Description.
+
+### Verse lists: quality-of-life pass
+
+- **Add/Edit Reference dialog.** Drag-and-drop was the only way to add
+  a reference before, and nothing in the window said so -- Edit > Add
+  Reference…/Edit Reference… (and a row's own right-click) open a
+  small prompt, validated and normalized the same way the universal Go
+  to / Search box handles typed text.
+- **Move/Copy**, both for a whole list (recursively, with any nested
+  sub-collections) and for selected entries -- File/Edit menus,
+  cascading destination pickers built from the same collection tree
+  *Go to List* uses.
+- **Export Text List…**, the reverse of Import -- one reference per
+  line, no header.
+- Open/Save As are gone; *Go to List* already reaches every nested
+  collection, and crossing the tree's own boundary goes through
+  Import/Export instead of a raw file panel.
+- A breadcrumb under the list's name shows where it actually lives
+  ("Person Studies > Adam"), now that a collection can be moved
+  anywhere in the tree.
+- ⌘E (Edit Reference) and ⌘⌦ (Remove) shortcuts, alongside the row
+  list's own existing Delete-key handling.
+- A batch of menu items, dialogs and column headers added across this
+  release that had been silently falling back to English under German
+  are now translated.
+
+### Fixed
+
+- Search could return wrong or repeated verses -- confirmed live,
+  searching "Adam" mixed in a phantom, unbolded "Revelation 1:1" that
+  was never a real match. SWORD's own search functions returned
+  pointers into a small, rotating internal buffer pool, reused by the
+  time the caller actually read the results back.
+
 ## 1.3.1 (test release)
 
 ### Import a plain-text reference list

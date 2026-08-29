@@ -6,7 +6,7 @@ resource app_signature "application/x-vnd.Scripture-Guide";
 resource app_version {
 	major  = 1,
 	middle = 3,
-	minor  = 1,
+	minor  = 5,
 
 	variety = B_APPV_GAMMA,
 	internal = 1,

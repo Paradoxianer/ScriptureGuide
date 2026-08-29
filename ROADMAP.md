@@ -74,14 +74,40 @@ attributes first (Tracker-visible columns), falling back to -- and
 self-healing from -- the plain-text mirror only when those attributes
 are missing.
 
-## Next up: 1.4.0
+## Done in 1.3.5
 
-[#56](https://github.com/Paradoxianer/ScriptureGuide/issues/56) (inline
-"New reference"/"New sub-collection" items in the Go to List menu) and
+[#67](https://github.com/Paradoxianer/ScriptureGuide/issues/67)/[#50](https://github.com/Paradoxianer/ScriptureGuide/issues/50)
+— a reference can now be added to a list from wherever it's
+encountered, not only from inside the verse-list window itself:
+right-click a verse (or selection) in the reading pane, or a
+recognized cross-reference in Notes/Commentary, for "Add to Verse
+List ▸".
+
+[#56](https://github.com/Paradoxianer/ScriptureGuide/issues/56) landed
+partly: *Go to List* can create a new sub-collection inline
+("New sub-collection here…"). The reference-creation half of the
+original issue was tried and then deliberately dropped — mixing
+navigation and content creation in the same menu didn't hold up once
+it was actually in front of a real user.
+
+[#32](https://github.com/Paradoxianer/ScriptureGuide/issues/32)
+(automatic reference recognition) is now applied to the verse list's
+own description field too, not just Notes/Commentary — and the
+recognizer itself got considerably more robust doing it: German
+numbered books with their period ("1. Mose") and accented book names
+("Matthäus") were both silently unrecognized before this, an ASCII/
+punctuation gap in the matching pattern that had nothing to do with
+which surface used it.
+
+[#57](https://github.com/Paradoxianer/ScriptureGuide/issues/57) (the
+reference column as a real table, `BColumnListView`) and
+[#99](https://github.com/Paradoxianer/ScriptureGuide/issues/99) (Show
+in Tracker) also shipped.
+
 [#59](https://github.com/Paradoxianer/ScriptureGuide/issues/59)
-(converting between the old one-file-per-list format and the new
-one-bookmark-per-reference one) sit in 1.4.0, alongside the rest of the
-near-term follow-ons on top of 1.3.0's storage.
+(converting the old one-file-per-list format) is off the table — it
+was only ever used locally during development, never by a real user,
+so there is nothing to migrate.
 
 ## After that
 
@@ -91,10 +117,6 @@ Roughly in the order I would take them.
   Dropping Bible text into a note inserts a cross-reference link.** Small:
   the drop path and the reference-link rendering both exist, they just
   don't meet.
-- **[#32](https://github.com/Paradoxianer/ScriptureGuide/issues/32)
-  Automatic reference recognition.** Partly built —
-  `FindReferencesInText()` already finds references in commentary and note
-  text. This is mostly about where else to apply it.
 - **[#18](https://github.com/Paradoxianer/ScriptureGuide/issues/18) HIG
   audit.** Marked high priority and deserves it, but it is a sweep rather
   than a feature. Best done when the UI stops moving — the Book Manager

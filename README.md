@@ -8,7 +8,7 @@ Read several translations side by side, verse aligned, with your own notes
 in a column of their own — and a Book Manager for downloading the Bibles,
 commentaries and dictionaries CrossWire publishes.
 
-**Current release: 1.3.1** (test release) — [download the
+**Current release: 1.3.5** (test release) — [download the
 package](https://github.com/Paradoxianer/ScriptureGuide/releases/latest) ·
 [changelog](CHANGELOG.md)
 
@@ -82,13 +82,13 @@ dictionaries are findable among several hundred Bibles.
 **A package**, from the
 [releases page](https://github.com/Paradoxianer/ScriptureGuide/releases/latest):
 
-    pkgman install scriptureguide-1.3.1-1-x86_64.hpkg
+    pkgman install scriptureguide-1.3.5-1-x86_64.hpkg
 
 **Build your own package.** A prebuilt `.hpkg` records the Haiku version it
 was built on and may refuse to install on another. `package.sh` builds one
 that matches your machine, and needs nothing present but itself:
 
-    sh package.sh v1.3.1
+    sh package.sh v1.3.5
 
 It installs the build dependencies, fetches the source, builds both
 applications, writes the `.hpkg` into the current directory and removes what
