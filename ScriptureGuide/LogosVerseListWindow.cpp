@@ -827,6 +827,13 @@ SGVerseListWindow::_BuildMenuBar()
 	fMoveDownItem = new BMenuItem(B_TRANSLATE("Move Down"),
 		new BMessage(VLIST_MOVE_DOWN), B_DOWN_ARROW);
 	editMenu->AddItem(fMoveDownItem);
+	editMenu->AddSeparatorItem();
+	// Always enabled, not just while a column is actually sorted --
+	// there's no public way to ask BColumnListView whether one is (see
+	// VLIST_CLEAR_SORT's own comment), and calling ClearSortColumns()
+	// when nothing is sorted is a harmless no-op anyway.
+	editMenu->AddItem(new BMenuItem(B_TRANSLATE("Custom Order"),
+		new BMessage(VLIST_CLEAR_SORT)));
 	menuBar->AddItem(editMenu);
 
 	fNavigationMenu = new BMenu(B_TRANSLATE("Go to List"));
@@ -1193,6 +1200,10 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 				_MoveRow(selected, selected + 1);
 			break;
 		}
+
+		case VLIST_CLEAR_SORT:
+			fRowList->ClearSortColumns();
+			break;
 
 		case VLIST_ROW_SELECTED:
 		{

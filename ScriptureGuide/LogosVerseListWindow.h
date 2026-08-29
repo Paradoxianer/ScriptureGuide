@@ -30,6 +30,17 @@ class VerseListRowListView;
 #define VLIST_DELETE			'VLdl'
 #define VLIST_MOVE_UP			'VLmu'
 #define VLIST_MOVE_DOWN			'VLmd'
+// #57 followup: clicking a column header engages BColumnListView's own
+// built-in sort, which has no built-in way back out of again --
+// clicking the header again only toggles ascending/descending, and
+// while a sort column is active, both drag-reorder
+// (VerseListRowListView::MessageDropped()'s own AddRow(row, to)) and
+// Move Up/Move Down silently stop having any visible effect, since
+// BColumnListView re-sorts right back over whatever position they
+// just placed a row at. Edit > Custom Order calls
+// BColumnListView::ClearSortColumns() to get back to plain insertion
+// order, the one order any of those three can actually change.
+#define VLIST_CLEAR_SORT		'VLcs'
 #define VLIST_NAV_SELECT		'VLns'
 #define VLIST_ROW_SELECTED		'VLrs'
 #define VLIST_ROW_REORDER		'VLrr'
