@@ -65,6 +65,24 @@ bool			ConvertVerseReference(const char* key,
 					const char* targetLocale,
 					const char* targetVersification, BString& outText);
 
+// Reformats an already-canonical reference (VerseKey::getText()'s own
+// ':'-separated output, e.g. "John 3:16" or a range "John 3:16-18",
+// possibly two such joined by " - ") for on-screen DISPLAY in
+// `locale`'s own convention -- German uses a comma instead
+// ("Johannes 3, 16"), matching the one place in this app that already
+// built a German-comma reference by hand
+// (BibleColumnView::_ReferenceFor()'s drag tooltip, ParallelBibleView.cpp
+// -- now itself just a caller of this). Every ':' in a canonical
+// reference is a chapter:verse separator (a book name never contains
+// one), so replacing all of them is safe and never touches a '-'
+// range suffix. Purely a display reformatting -- what actually gets
+// STORED and round-tripped through VerseKey::setText() (BookmarkFile::
+// Reference(), a drag's own "key"/"endKey") stays colon-only,
+// unconditionally, regardless of locale; conflating the two is exactly
+// the bug _ReferenceFor()'s own long-standing comment warns about.
+BString			FormatVerseReferenceForDisplay(const BString& reference,
+					const char* locale);
+
 // Splits a stored range reference ("John 3:12-16") into `base`
 // ("John 3:12") and `suffix` ("-16", including the leading '-'), or
 // leaves `base` as the whole of `reference` and `suffix` empty if it

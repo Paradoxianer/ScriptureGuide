@@ -770,6 +770,15 @@ private:
 			startParagraph);
 		int endVerse = fBibleDocument->VerseForParagraphIndex(endParagraph);
 
+		BString bookAndChapter(fBibleDocument->BookName());
+		bookAndChapter << " " << fBibleDocument->Chapter() << ":";
+
+		BString reference(bookAndChapter);
+		reference << startVerse;
+		if (endVerse > startVerse)
+			reference << "-" << endVerse;
+
+		// FormatVerseReferenceForDisplay() (SwordBackend.cpp) --
 		// German convention uses a comma between chapter and verse
 		// ("Epheser 6, 9"), not a colon -- fine for `reference`, which
 		// only ever reaches VerseKey::setText() through
@@ -778,16 +787,8 @@ private:
 		// colon before parsing.
 		BLanguage language;
 		BLocale::Default()->GetLanguage(&language);
-		const char* separator
-			= strcmp(language.Code(), "de") == 0 ? ", " : ":";
-
-		BString bookAndChapter(fBibleDocument->BookName());
-		bookAndChapter << " " << fBibleDocument->Chapter() << separator;
-
-		BString reference(bookAndChapter);
-		reference << startVerse;
-		if (endVerse > startVerse)
-			reference << "-" << endVerse;
+		reference = FormatVerseReferenceForDisplay(reference,
+			language.Code());
 
 		// `startKey`/`endKey`, unlike `reference` above, are consumed
 		// directly by VerseKey::setText() with no ParseVerseReference()

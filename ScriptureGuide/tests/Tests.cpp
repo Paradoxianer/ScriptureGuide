@@ -1086,6 +1086,31 @@ TestConvertTypedVerseReferenceKeepsBothEndsOfARange()
 }
 
 
+// Requested directly: the Verses table's Reference column (and
+// BibleColumnView::_ReferenceFor()'s own drag tooltip, now refactored
+// to share this instead of picking its own separator inline) should
+// show the German comma convention, the same one _NormalizeTypedReference()
+// already accepts on input -- FormatVerseReferenceForDisplay() is the
+// single place that now does the colon->comma reformatting for
+// on-screen text, leaving the actually-STORED/round-tripped reference
+// (BookmarkFile::Reference(), always colon, unconditionally) untouched.
+static void
+TestFormatVerseReferenceForDisplay()
+{
+	BString result = FormatVerseReferenceForDisplay("Genesis 1:1", "de");
+	Check(result == "Genesis 1, 1",
+		"FormatVerseReferenceForDisplay: German locale uses a comma");
+
+	result = FormatVerseReferenceForDisplay("Genesis 1:1-5", "de");
+	Check(result == "Genesis 1, 1-5",
+		"FormatVerseReferenceForDisplay: a range's own '-' is untouched");
+
+	result = FormatVerseReferenceForDisplay("Genesis 1:1", "en");
+	Check(result == "Genesis 1:1",
+		"FormatVerseReferenceForDisplay: non-German locale is unchanged");
+}
+
+
 int
 main()
 {
@@ -1109,6 +1134,7 @@ main()
 	TestConvertVerseReferenceNormalizesCommaAndRejectsBookless();
 	TestCombineVerseRange();
 	TestConvertTypedVerseReferenceKeepsBothEndsOfARange();
+	TestFormatVerseReferenceForDisplay();
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestOnlyRawFilesModulesAreEditable(&manager);

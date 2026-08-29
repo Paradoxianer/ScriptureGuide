@@ -2085,9 +2085,18 @@ SGVerseListWindow::_LoadFile(const char* path)
 void
 SGVerseListWindow::_RebuildRows()
 {
+	// FormatVerseReferenceForDisplay() (SwordBackend.cpp) -- the
+	// Reference column shows the German comma convention, matching
+	// BibleColumnView::_ReferenceFor()'s own drag tooltip; the row's
+	// underlying data is untouched (fBookmarks[i].Reference() itself,
+	// what _StartEditReference()/CreateNew() etc. actually read and
+	// write, stays colon-only, same as always).
+	BString locale = CurrentLocaleCode();
 	fRowList->MakeEmpty();
 	for (size_t i = 0; i < fBookmarks.size(); i++) {
-		fRowList->AddReferenceRow(fBookmarks[i].Reference(),
+		BString display = FormatVerseReferenceForDisplay(
+			fBookmarks[i].Reference(), locale.String());
+		fRowList->AddReferenceRow(display.String(),
 			fBookmarks[i].Code().String(), fBookmarks[i].Tags());
 	}
 	// MakeEmpty() clears the selection -- Edit Reference/Remove/Move Up/

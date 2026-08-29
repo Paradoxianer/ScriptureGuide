@@ -923,6 +923,18 @@ ConvertVerseReference(const char* key, const char* sourceLocale,
 }
 
 
+BString
+FormatVerseReferenceForDisplay(const BString& reference, const char* locale)
+{
+	if (locale == NULL || strcmp(locale, "de") != 0)
+		return reference;
+
+	BString display(reference);
+	display.ReplaceAll(":", ", ");
+	return display;
+}
+
+
 void
 SplitVerseRangeSuffix(const BString& reference, BString& base, BString& suffix)
 {
