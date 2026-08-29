@@ -1054,28 +1054,48 @@ FindReferencesInText(const char* text)
 	if (text == NULL || *text == '\0')
 		return result;
 
-	// A candidate: an optional "1 "/"2 "/"3 " numbered-book prefix, a
-	// capitalized book-ish word (with an optional trailing abbreviation
-	// period), then chapter/verse digits separated by ':' or ',' (see
-	// ParseVerseReference()'s own comment on the German comma
-	// convention), with an optional "-verseEnd" range. Deliberately
-	// liberal -- ParseVerseReference() below is the actual filter; this
-	// only needs to be cheap and not miss real references, not be
-	// precise on its own.
+	// A candidate: an optional "1 "/"1. "/"2 "/"2. "/"3 "/"3. "
+	// numbered-book prefix (both the English "1 Corinthians" and German
+	// "1. Mose" conventions -- confirmed live: a plain "1. Mose 3, 5"
+	// went completely unrecognized before this, the "." meant the
+	// prefix alternative never matched at all, leaving the scan to
+	// start at "Mose" alone, which ParseVerseReference() below
+	// correctly rejects since "Mose" by itself, without its "1."/"2."/
+	// etc., isn't any one of the five actual book names it's short
+	// for), a capitalized book-ish word (with an optional trailing
+	// abbreviation period), then chapter/verse digits separated by ':'
+	// or ',' (see ParseVerseReference()'s own comment on the German
+	// comma convention), with an optional "-verseEnd" range.
+	// Deliberately liberal -- ParseVerseReference() below is the actual
+	// filter; this only needs to be cheap and not miss real references,
+	// not be precise on its own.
 	//
-	// ASCII letters only ([A-Za-z], not e.g. German "ö"/"ü"): std::regex
-	// matches individual bytes, not UTF-8 codepoints, so a multi-byte
-	// accented character in a character class here would risk matching
-	// half of one and corrupting the scan. Standard SWORD locale files
-	// already register ASCII-safe alternate abbreviations for accented
-	// book names for exactly this kind of typing/matching convenience
-	// (confirmed in this file's own German-locale reference work
-	// earlier), and the one commentary this was actually tested against
-	// (GerKingComments) uses only ASCII abbreviations ("Mt", "Off") in
-	// practice -- so this is a real but narrow gap, not a blocker.
+	// The book-name word itself allows \x80-\xff (any byte with the
+	// high bit set) alongside [A-Za-z], not ASCII letters only --
+	// confirmed live: a plain "Matthäus 3, 7" went completely
+	// unrecognized before this, since std::regex matches individual
+	// BYTES, not UTF-8 codepoints, and [A-Za-z] alone doesn't match
+	// either byte of "ä"s two-byte UTF-8 encoding, so the match
+	// attempt starting at "Matth" failed the moment it reached "äus"
+	// (needed whitespace there, got a byte outside every character
+	// class in the pattern) with no other capital letter in the word to
+	// retry from. \x80-\xff is broader than just the German
+	// äöüÄÖÜß (byte pairs 0xC3 0xA4 etc, always with a
+	// 0xC3-range lead byte) actually needs, but a character class only
+	// ever matches whichever bytes are actually adjacent to the letters
+	// around it, so it can't accidentally split a multi-byte sequence
+	// in half the way the OLD comment here worried about -- both bytes
+	// of an accented letter are ≥0x80, so a greedy match against this
+	// class always consumes a complete sequence, never stops between
+	// its two bytes. Broader than strictly necessary trades a little
+	// false-positive risk (matching stray non-Latin bytes as if they
+	// were book-name letters) for not having to hand-enumerate every
+	// accented Latin letter's own UTF-8 byte pair -- ParseVerseReference()
+	// still has to actually recognize the resulting candidate as a real
+	// book before anything comes of it either way.
 	static const std::regex kReferencePattern(
-		"([1-3][ ]|)"
-		"[A-Z][A-Za-z]*\\.?"
+		"([1-3]\\.?[ ]|)"
+		"[A-Z][A-Za-z\x80-\xff]*\\.?"
 		"[ \t]+[0-9]{1,3}[,:][ \t]?[0-9]{1,3}(-[0-9]{1,3}|)");
 
 	BString source(text);

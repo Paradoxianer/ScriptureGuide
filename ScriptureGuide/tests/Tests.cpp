@@ -16,6 +16,8 @@
 #include <stdio.h>
 
 #include <Application.h>
+#include <Language.h>
+#include <Locale.h>
 #include <String.h>
 
 #include <markupfiltmgr.h>
@@ -1111,6 +1113,66 @@ TestFormatVerseReferenceForDisplay()
 }
 
 
+// Regression test for a third live-reported bug, both cases found in
+// one real Description field: "1. Mose 3, 5" (a German numbered book)
+// and "Matthäus 3, 7" (an accented book name) both went completely
+// unrecognized -- no blue link, and per this app's own whole-line #50
+// auto-add rule, never offered as something to add to the list either
+// (which only fires for a reference FindReferencesInText() itself
+// recognizes). Root causes, both in kReferencePattern
+// (FindReferencesInText()'s own regex, SwordBackend.cpp): the numbered-
+// book prefix only matched a bare "1 "/"2 "/"3 ", not the German
+// "1. "/"2. "/"3. " convention (so the scan started at "Mose" alone,
+// which ParseVerseReference() correctly rejects -- not one of the five
+// actual book names "Mose" is short for on its own); and the book-name
+// character class was ASCII letters only, so "Matthäus" broke the
+// match the moment it reached "äus" (a two-byte UTF-8 sequence, no
+// byte of which is an ASCII letter).
+static void
+TestFindReferencesInTextRecognizesGermanNumberedAndAccentedBooks()
+{
+	// Unlike ConvertVerseReference()/ConvertTypedVerseReference() (both
+	// take a locale as an explicit parameter, so those tests aren't
+	// environment-dependent), FindReferencesInText() has no locale
+	// parameter at all -- it always parses against BLocale::Default(),
+	// the SYSTEM's own configured locale, matching how the app itself
+	// calls it live. "1. Mose"/"Matthäus" only resolve under German;
+	// skip cleanly rather than fail on a system configured for anything
+	// else, same as the module-availability skips elsewhere in this
+	// file.
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+	if (strcmp(language.Code(), "de") != 0) {
+		Skip("FindReferencesInText: German numbered/accented book "
+			"recognition", "system locale is not German");
+		return;
+	}
+
+	std::vector<TextReference> refs
+		= FindReferencesInText("1. Mose 3, 5");
+	Check(refs.size() == 1 && refs[0].normalizedKey == "1. Mose 3:5",
+		"FindReferencesInText: German numbered book with a period "
+		"(\"1. Mose\") is recognized");
+
+	refs = FindReferencesInText("Matthäus 3, 7");
+	Check(refs.size() == 1 && refs[0].normalizedKey == "Matthäus 3:7",
+		"FindReferencesInText: an accented book name (\"Matthäus\") is "
+		"recognized");
+
+	// Both together, embedded in surrounding prose -- the actual shape
+	// reported (a description field with running text between and
+	// around two references).
+	refs = FindReferencesInText(
+		"Wenn ich Matthäus 3, 5 schreibe, klappt es -- 1. Mose 3, 5 "
+		"aber nicht.");
+	Check(refs.size() == 2
+			&& refs[0].normalizedKey == "Matthäus 3:5"
+			&& refs[1].normalizedKey == "1. Mose 3:5",
+		"FindReferencesInText: both recognized together, embedded in "
+		"prose");
+}
+
+
 int
 main()
 {
@@ -1135,6 +1197,7 @@ main()
 	TestCombineVerseRange();
 	TestConvertTypedVerseReferenceKeepsBothEndsOfARange();
 	TestFormatVerseReferenceForDisplay();
+	TestFindReferencesInTextRecognizesGermanNumberedAndAccentedBooks();
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestOnlyRawFilesModulesAreEditable(&manager);
