@@ -174,6 +174,25 @@ BookmarkFile::SetTo(const char* path)
 	if (file.ReadAttrString(kAttrTags, &tags) == B_OK)
 		fTags = tags;
 
+	// #101: SG:reference is editable in Tracker now, so SG:code -- read
+	// by Tracker's own "Bible Order" column, never by this app, which
+	// always calls Code() fresh -- can go stale the moment someone
+	// retypes a reference there instead of through this app's own Save().
+	// Same self-healing shape as the content-mirror fallback above:
+	// recompute from what was JUST read (fReference's own Versification/
+	// Locale, unaffected by a reference-only edit) and write back only
+	// when it actually changed, so a normal read doesn't touch the file
+	// every time. Best-effort -- a read-only volume just leaves it stale
+	// until the next Save() from inside the app, same as that fallback.
+	BString freshCode = Code();
+	BString storedCode;
+	if (file.ReadAttrString(kAttrCode, &storedCode) != B_OK
+		|| storedCode != freshCode) {
+		BFile writable(path, B_READ_WRITE);
+		if (writable.InitCheck() == B_OK)
+			writable.WriteAttrString(kAttrCode, &freshCode);
+	}
+
 	return B_OK;
 }
 
@@ -536,11 +555,18 @@ BookmarkFile::EnsureMimeTypeRegistered()
 	// VerseListFile's own four attributes have the exact same gap, which
 	// is why none of them show up there either.
 	BMessage attrInfo;
+	// #101: editable in Tracker now, unlike Versification/Locale/Code
+	// below -- SetTo() recomputes and rewrites SG:code from whatever
+	// SG:reference now says on every read, so a Tracker edit here can't
+	// leave the Bible-order attribute stale. A reference typed badly
+	// enough to not parse just leaves SG:code empty (sorts last in
+	// Tracker's own "Bible Order" column, the same place a bookmark
+	// with no position attribute at all already sorts to).
 	attrInfo.AddString("attr:name", kAttrReference);
 	attrInfo.AddString("attr:public_name", "Reference");
 	attrInfo.AddInt32("attr:type", B_STRING_TYPE);
 	attrInfo.AddBool("attr:viewable", true);
-	attrInfo.AddBool("attr:editable", false);
+	attrInfo.AddBool("attr:editable", true);
 	attrInfo.AddInt32("attr:width", 140);
 	attrInfo.AddInt32("attr:alignment", B_ALIGN_LEFT);
 
@@ -560,11 +586,20 @@ BookmarkFile::EnsureMimeTypeRegistered()
 	attrInfo.AddInt32("attr:width", 60);
 	attrInfo.AddInt32("attr:alignment", B_ALIGN_LEFT);
 
+	// #101: editable too -- ListBookmarkPaths() already sorts by
+	// whatever is here with zero validation (ties/gaps fall back to
+	// filename order, same as a file missing the attribute entirely),
+	// and any reorder driven from inside the app (drag/Move Up/Move
+	// Down, SGVerseListWindow::_MoveRow()) already renumbers every
+	// bookmark in the open collection to a clean 0..n-1 sequence on
+	// every move -- so values left messy by a Tracker edit self-heal
+	// the next time the user reorders anything from inside the app,
+	// without this attribute needing its own separate healing logic.
 	attrInfo.AddString("attr:name", kAttrPosition);
 	attrInfo.AddString("attr:public_name", "Position");
 	attrInfo.AddInt32("attr:type", B_INT32_TYPE);
 	attrInfo.AddBool("attr:viewable", true);
-	attrInfo.AddBool("attr:editable", false);
+	attrInfo.AddBool("attr:editable", true);
 	attrInfo.AddInt32("attr:width", 50);
 	attrInfo.AddInt32("attr:alignment", B_ALIGN_RIGHT);
 
