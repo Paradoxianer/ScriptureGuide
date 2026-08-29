@@ -659,6 +659,23 @@ void SGMainWindow::SavePrefsForModule(void)
 		preferences.AddString("columnModule", columns[i].moduleName);
 		preferences.AddBool("columnLinkedToNext", columns[i].linkedToNext);
 	}
+
+	// The Verse List window's own position and last-open collection,
+	// same idea as "windowframe"/"key" above -- only actually written
+	// once the window has existed this session at all (it's created
+	// lazily by EnsureVerseListWindow(), not at startup), matching how
+	// fCurrentModule guards the whole function already. Empty
+	// "verselistcollection" (nothing was open) is a valid, deliberately
+	// saved value, not skipped -- EnsureVerseListWindow() only tries to
+	// reopen it when it isn't.
+	if (fVerseListWindow != NULL) {
+		preferences.RemoveData("verselistframe");
+		preferences.AddRect("verselistframe", fVerseListWindow->Frame());
+		preferences.RemoveData("verselistcollection");
+		preferences.AddString("verselistcollection",
+			fVerseListWindow->CollectionPath());
+	}
+
 	prefsLock.Unlock();
 }
 
@@ -1547,10 +1564,32 @@ SGMainWindow::EnsureVerseListWindow(void)
 {
 	if (!fVerseListWindow)
 	{
-		BRect r(Frame().OffsetByCopy(60, 60));
-		r.right = r.left + 380;
-		r.bottom = r.top + 440;
+		// "verselistframe"/"verselistcollection" -- saved by
+		// SavePrefsForModule(), same idea as "windowframe"/"key" for
+		// the reading pane itself. Only meaningful the first time this
+		// window is actually created (it stays alive, just hidden,
+		// for the rest of the session after that -- see its own
+		// QuitRequested() comment) -- re-posting the saved collection
+		// on every later EnsureVerseListWindow() call would yank
+		// whatever the user has since navigated to back to whatever
+		// was open last SESSION, not last time this window was shown.
+		prefsLock.Lock();
+		BRect r;
+		if (preferences.FindRect("verselistframe", &r) != B_OK) {
+			r = Frame().OffsetByCopy(60, 60);
+			r.right = r.left + 380;
+			r.bottom = r.top + 440;
+		}
+		BString savedCollection;
+		preferences.FindString("verselistcollection", &savedCollection);
+		prefsLock.Unlock();
+
 		fVerseListWindow = new SGVerseListWindow(r, new BMessenger(this));
+		if (!savedCollection.IsEmpty()) {
+			BMessage restore(VLIST_NAV_SELECT);
+			restore.AddString("path", savedCollection);
+			fVerseListWindow->PostMessage(&restore);
+		}
 	}
 	fVerseListWindow->Show();
 	fVerseListWindow->Activate(true);
@@ -1559,6 +1598,15 @@ SGMainWindow::EnsureVerseListWindow(void)
 
 bool SGMainWindow::QuitRequested()
 {
+	// Before fVerseListWindow->Quit() below -- Quit() tears the window
+	// down for real (unlike its own QuitRequested(), which just Hide()s),
+	// so reading its Frame()/CollectionPath() from inside
+	// SavePrefsForModule() after that point is a use-after-free race,
+	// not a logic error -- confirmed live: "verselistframe" came back
+	// with a plausible-looking but unreliable value, "verselistcollection"
+	// came back empty every time, even with a real collection open.
+	SavePrefsForModule();
+
 	if (fFindMessenger)
 	{
 		fFindMessenger->SendMessage(B_QUIT_REQUESTED);
@@ -1585,7 +1633,6 @@ bool SGMainWindow::QuitRequested()
 		if (fFontPanel->Window()->LockLooper())
 			fFontPanel->Window()->Quit();
 	}
-	SavePrefsForModule();
 	be_app_messenger.SendMessage(new BMessage(M_WINDOW_CLOSED));
 	return true;
 }

@@ -154,6 +154,16 @@ public:
 	virtual bool			QuitRequested();
 	virtual void			MessageReceived(BMessage* message);
 
+	// SGMainWindow::SavePrefsForModule() reads this to remember which
+	// collection was open across a restart, alongside Frame() (already
+	// public, inherited) for the window's own position/size -- empty
+	// when nothing is open, matching what a freshly-posted
+	// VLIST_NAV_SELECT with this same path back at restore time
+	// (EnsureVerseListWindow()) would silently no-op on anyway.
+	BString					CollectionPath() const
+								{ return fHasOpenFile ? fCollectionPath
+									: BString(); }
+
 			// Called by VerseListRowListView's own MessageReceived()
 			// (unrelated class, not a friend -- same reasoning as
 			// ParallelBibleView's _ColumnScrolled() etc.) once a
