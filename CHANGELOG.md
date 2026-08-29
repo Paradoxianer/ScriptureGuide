@@ -42,7 +42,11 @@ is unchanged, still the colon form needed to navigate back to it.
 Migrated from a plain outline list to BColumnListView -- multi-select,
 drag-to-reorder, and a resizable Tags column alongside Reference.
 Clicking a column header sorts by it; Reference sorts in actual Bible
-order (Genesis before Exodus), not by the displayed text.
+order (Genesis before Exodus), not by the displayed text. A "Custom
+Order" button in the table's own corner (or Edit > Custom Order) gets
+back to drag order -- BColumnListView's own header click only toggles
+ascending/descending, with no way back to unsorted from the header
+itself.
 
 ### Verse lists: other additions
 
