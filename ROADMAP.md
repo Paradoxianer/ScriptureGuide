@@ -99,10 +99,9 @@ numbered books with their period ("1. Mose") and accented book names
 punctuation gap in the matching pattern that had nothing to do with
 which surface used it.
 
-[#57](https://github.com/Paradoxianer/ScriptureGuide/issues/57) (the
-reference column as a real table, `BColumnListView`) and
-[#99](https://github.com/Paradoxianer/ScriptureGuide/issues/99) (Show
-in Tracker) also shipped.
+The reference column as a real table (`BColumnListView`, no tracked
+issue) and [#99](https://github.com/Paradoxianer/ScriptureGuide/issues/99)
+(Show in Tracker) also shipped.
 
 [#59](https://github.com/Paradoxianer/ScriptureGuide/issues/59)
 (converting the old one-file-per-list format) is off the table — it
