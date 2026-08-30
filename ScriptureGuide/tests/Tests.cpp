@@ -1348,6 +1348,82 @@ TestCaretPositionAfterListenerRebuildsOnKeystroke()
 }
 
 
+// One Paragraph per line, the last TextSpan of a line carrying its own
+// "\n" -- the exact shape SGVerseListWindow::_RestyleDescriptionReferences()
+// builds when it rebuilds the description field from scratch.
+static TextDocumentRef
+BuildLineDocument(const BString& text)
+{
+	TextDocumentRef document(new TextDocument(), true);
+	CharacterStyle plainStyle;
+
+	int32 lineStart = 0;
+	int32 textLength = text.Length();
+	while (true) {
+		int32 newline = text.FindFirst('\n', lineStart);
+		int32 lineEnd = newline < 0 ? textLength : newline;
+
+		Paragraph paragraph;
+		if (lineEnd > lineStart) {
+			BString line;
+			text.CopyInto(line, lineStart, lineEnd - lineStart);
+			paragraph.Append(TextSpan(line, plainStyle));
+		}
+		bool hasNewline = newline >= 0;
+		if (hasNewline || paragraph.CountTextSpans() == 0)
+			paragraph.Append(TextSpan(hasNewline ? "\n" : "", plainStyle));
+		document->Append(paragraph);
+
+		if (!hasNewline)
+			break;
+		lineStart = newline + 1;
+	}
+	return document;
+}
+
+
+// Regression test for a live-reported bug: text in the verse list's
+// description field drifted further and further down the box (needing
+// scrolling to see) as you typed. _RestyleDescriptionReferences() runs on
+// every keystroke and swapped its freshly built document in with
+// Replace(0, Length(), newDocument) -- but Length() sums the document's
+// TEXT length, and an empty paragraph contributes zero, so trailing empty
+// paragraphs are outside the replaced range entirely and survive. Measured
+// live before the fix: the paragraph count grew by exactly 2 per rebuild
+// (5, 7, 9, 11, ... for the same unchanged four-line text).
+static void
+TestRestyleRebuildDoesNotAccumulateEmptyParagraphs()
+{
+	const char* kText = "Hallo das ist ein Test\nZweite Zeile\nDritte Zeile\n";
+
+	// First half: prove the trap is real, so this test still means
+	// something if someone ever reaches for Replace() here again.
+	TextDocumentRef viaReplace = BuildLineDocument(kText);
+	int32 initialCount = viaReplace->CountParagraphs();
+	for (int i = 0; i < 3; i++) {
+		TextDocumentRef rebuilt = BuildLineDocument(viaReplace->Text());
+		viaReplace->Replace(0, viaReplace->Length(), rebuilt);
+	}
+	Check(viaReplace->CountParagraphs() > initialCount,
+		"TextDocument: Replace(0, Length(), document) really does strand "
+		"empty paragraphs (the trap the description field fell into)");
+
+	// Second half: the fix actually in use -- TextDocument::operator=
+	// swaps the paragraph vector itself, so nothing can be stranded.
+	TextDocumentRef viaAssign = BuildLineDocument(kText);
+	for (int i = 0; i < 5; i++) {
+		TextDocumentRef rebuilt = BuildLineDocument(viaAssign->Text());
+		*viaAssign = *rebuilt;
+	}
+	Check(viaAssign->CountParagraphs() == initialCount,
+		"TextDocument: wholesale assignment keeps the paragraph count "
+		"stable across repeated rebuilds");
+	Check(BString(viaAssign->Text()) == BString(kText),
+		"TextDocument: repeated wholesale rebuilds preserve the text "
+		"exactly, spaces and line breaks included");
+}
+
+
 int
 main()
 {
@@ -1398,6 +1474,7 @@ main()
 	TestNotesColumnMatchesChainVersification(&manager, notesModule);
 
 	TestCaretPositionAfterListenerRebuildsOnKeystroke();
+	TestRestyleRebuildDoesNotAccumulateEmptyParagraphs();
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;

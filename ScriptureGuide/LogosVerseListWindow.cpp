@@ -3167,8 +3167,32 @@ SGVerseListWindow::_RestyleDescriptionReferences()
 		lineStart = newline + 1;
 	}
 
-	fDescriptionDocument->Replace(0, fDescriptionDocument->Length(),
-		newDocument);
+	// Wholesale paragraph replacement, NOT Replace(0, Length(),
+	// newDocument) -- Length() sums the document's TEXT length, and an
+	// empty paragraph contributes zero to it, so a replace over that
+	// range simply cannot reach the empty paragraphs at the end: they
+	// survive, and each rebuild then stacks its own paragraphs on top of
+	// them. Measured live: the paragraph count grew by exactly 2 on
+	// every single rebuild (5, 7, 9, 11, ... for the same unchanged
+	// four-line text), and since this function runs on EVERY keystroke,
+	// a few sentences of typing buried the actual text under dozens of
+	// blank lines -- reported as the text sitting far down the field
+	// with the box needing to be scrolled to see it.
+	//
+	// TextDocument::operator= copies fParagraphs/fEmptyLastParagraph/
+	// fDefaultCharacterStyle and deliberately leaves fTextListeners
+	// alone, so this swaps the content without disturbing the listener
+	// wiring this function is in the middle of. It notifies nobody,
+	// which is fine and in fact why the Relayout()/Invalidate() pair
+	// below already exists: Relayout() calls TextDocumentLayout::
+	// Invalidate(), which re-syncs every paragraph layout AND drops the
+	// surplus ones ("Remove any extra paragraph layouts", its own loop).
+	//
+	// Same class of bug this codebase already hit and documented once
+	// in BibleTextDocument::_Rebuild() -- guarding/sizing a clear on
+	// Length() when the thing that actually needs clearing is counted in
+	// paragraphs.
+	*fDescriptionDocument = *newDocument;
 
 	fDescriptionDocument->AddListener(fDescriptionListenerRef);
 	fDescriptionView->Relayout();
