@@ -125,6 +125,18 @@ class VerseListRowListView;
 // means no filter). Narrows what _RebuildRows() actually adds to
 // fRowList; doesn't touch fBookmarks or any file on disk.
 #define VLIST_TAG_FILTER		'VLtf'
+// #57: a plain click on a row's Tags cell opens a popup listing every
+// tag already used anywhere in the open collection, each checkmarked if
+// this row carries it -- clicking one toggles it (VLIST_TAG_TOGGLE,
+// carrying "tag" plus the bookmark's own "index"). A trailing
+// "New Tag..." entry (VLIST_TAG_NEW) opens the same name prompt every
+// other typed-text entry in this window uses, answering with
+// VLIST_TAG_NEW_RESULT. Toggling writes the bookmark's SG:tags
+// attribute straight through BookmarkFile::Save() -- there is no
+// separate tag registry to keep in sync, exactly as the issue asks.
+#define VLIST_TAG_TOGGLE		'VLtt'
+#define VLIST_TAG_NEW			'VLtn'
+#define VLIST_TAG_NEW_RESULT	'VLtN'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -244,6 +256,11 @@ public:
 			// Window()->PostMessage() -- see the .cpp for why this
 			// window in particular has to route through fMessenger.
 			void			_NavigateToKey(const char* key);
+			// Same not-a-friend reasoning as _ShowRowContextMenu(): called
+			// by VerseListRowColumn's own MouseDown() when the Tags cell
+			// of `rowIndex` is clicked. Takes a ROW index (translated to
+			// a bookmark index inside, see _BookmarkIndexForRow()).
+			void			_ShowTagMenu(int32 rowIndex, BPoint screenPoint);
 
 private:
 			void			_BuildGUI();
@@ -336,6 +353,18 @@ private:
 			// _RebuildRows() -- see there for why that single call site
 			// is enough to keep this current.
 			void			_RebuildTagFilterMenu();
+			// Every distinct tag used anywhere in the open collection,
+			// sorted -- scanned from the bookmarks themselves rather
+			// than a separate registry (#57), so it can never drift out
+			// of sync with what the files actually carry. Shared by the
+			// filter dropdown and a row's own tag menu.
+			std::vector<BString>	_CollectionTags() const;
+			// Adds `tag` to bookmark `index` if it isn't there, removes
+			// it if it is, then saves that one file and rebuilds.
+			void			_ToggleTag(int32 index, const BString& tag);
+			// "New Tag..." -- opens the name prompt, then _AddTag().
+			void			_StartNewTag(int32 index);
+			void			_AddTag(int32 index, const char* tag);
 			// A row's position in fRowList is no longer necessarily its
 			// fBookmarks[] index once a tag filter can skip entries
 			// (see fVisibleBookmarkIndices) -- this is the one place

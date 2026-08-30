@@ -153,11 +153,12 @@ class VerseListRowColumn : public BStringColumn {
 public:
 	VerseListRowColumn(SGVerseListWindow* owner, const char* title,
 		float width, float minWidth, float maxWidth,
-		bool bibleOrder = false)
+		bool bibleOrder = false, bool tagColumn = false)
 		:
 		BStringColumn(title, width, minWidth, maxWidth, B_TRUNCATE_END),
 		fOwner(owner),
-		fBibleOrder(bibleOrder)
+		fBibleOrder(bibleOrder),
+		fTagColumn(tagColumn)
 	{
 		SetWantsEvents(true);
 	}
@@ -174,6 +175,20 @@ public:
 	virtual void MouseDown(BColumnListView* parent, BRow* row, BField* field,
 		BRect fieldRect, BPoint point, uint32 buttons)
 	{
+		// #57: a plain click on the Tags cell opens that row's own tag
+		// menu. Only this one column, so clicking anywhere else on the
+		// row keeps behaving exactly as before (select + navigate). This
+		// is layered on top of the list's own click handling (see the
+		// class comment), so the row still gets selected either way --
+		// nothing needs to be re-selected by hand here.
+		if (buttons == B_PRIMARY_MOUSE_BUTTON && fTagColumn && row != NULL
+			&& fOwner != NULL) {
+			BPoint screenPoint = point;
+			parent->ConvertToScreen(&screenPoint);
+			fOwner->_ShowTagMenu(parent->IndexOf(row), screenPoint);
+			return;
+		}
+
 		if (buttons != B_SECONDARY_MOUSE_BUTTON || row == NULL
 			|| fOwner == NULL) {
 			return;
@@ -194,6 +209,7 @@ public:
 private:
 	SGVerseListWindow*	fOwner;
 	bool				fBibleOrder;
+	bool				fTagColumn;
 };
 
 
@@ -234,7 +250,7 @@ public:
 		AddColumn(new VerseListRowColumn(owner, B_TRANSLATE("Reference"),
 			referenceWidth, 60, 400, true), 0);
 		AddColumn(new VerseListRowColumn(owner, B_TRANSLATE("Tags"),
-			100, 40, 300), 1);
+			100, 40, 300, false, true), 1);
 	}
 
 	int32 CountItems()
@@ -1275,6 +1291,36 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case VLIST_TAG_TOGGLE:
+		{
+			BString tag;
+			int32 index;
+			if (message->FindString("tag", &tag) == B_OK
+				&& message->FindInt32("index", &index) == B_OK) {
+				_ToggleTag(index, tag);
+			}
+			break;
+		}
+
+		case VLIST_TAG_NEW:
+		{
+			int32 index;
+			if (message->FindInt32("index", &index) == B_OK)
+				_StartNewTag(index);
+			break;
+		}
+
+		case VLIST_TAG_NEW_RESULT:
+		{
+			BString name;
+			int32 index;
+			if (message->FindString("name", &name) == B_OK
+				&& message->FindInt32("index", &index) == B_OK) {
+				_AddTag(index, name.String());
+			}
+			break;
+		}
+
 		case VLIST_ROW_SELECTED:
 		{
 			int32 index = _BookmarkIndexForRow(fRowList->CurrentSelection());
@@ -2247,6 +2293,146 @@ SGVerseListWindow::_RebuildRows()
 }
 
 
+
+// #57: the tag menu for one row -- every tag already used anywhere in
+// the open collection, checkmarked where this bookmark carries it, plus
+// a trailing "New Tag...". A Haiku popup closes on the first pick, so
+// assigning several tags means reopening it; that is the normal idiom
+// here and keeps this a plain BPopUpMenu rather than a bespoke
+// multi-select widget.
+void
+SGVerseListWindow::_ShowTagMenu(int32 rowIndex, BPoint screenPoint)
+{
+	int32 index = _BookmarkIndexForRow(rowIndex);
+	if (!fHasOpenFile || index < 0 || index >= (int32)fBookmarks.size())
+		return;
+
+	std::vector<BString> own;
+	_SplitTags(fBookmarks[index].Tags(), own);
+	std::vector<BString> all = _CollectionTags();
+
+	BPopUpMenu* menu = new BPopUpMenu("tagMenu", false, false);
+	for (size_t i = 0; i < all.size(); i++) {
+		BMessage* toggle = new BMessage(VLIST_TAG_TOGGLE);
+		toggle->AddString("tag", all[i]);
+		toggle->AddInt32("index", index);
+		BMenuItem* item = new BMenuItem(all[i].String(), toggle);
+		item->SetMarked(
+			std::find(own.begin(), own.end(), all[i]) != own.end());
+		menu->AddItem(item);
+	}
+	if (!all.empty())
+		menu->AddSeparatorItem();
+
+	BMessage* create = new BMessage(VLIST_TAG_NEW);
+	create->AddInt32("index", index);
+	menu->AddItem(new BMenuItem(B_TRANSLATE("New Tag" B_UTF8_ELLIPSIS),
+		create));
+
+	menu->SetTargetForItems(this);
+	menu->SetAsyncAutoDestruct(true);
+	menu->Go(screenPoint, true, true, true);
+}
+
+
+// Comma is the separator inside SG:tags (see BookmarkFile::Tags()), so
+// it cannot appear inside a tag itself -- stripped rather than rejected
+// with an alert, since a comma in a typed tag reads as "two tags" far
+// more often than as a mistake worth stopping for.
+static BString
+_SanitizeTag(const char* tag)
+{
+	BString sanitized(tag);
+	sanitized.ReplaceAll(',', ' ');
+	sanitized.Trim();
+	return sanitized;
+}
+
+
+static BString
+_JoinTags(const std::vector<BString>& tags)
+{
+	BString joined;
+	for (size_t i = 0; i < tags.size(); i++) {
+		if (i > 0)
+			joined << ", ";
+		joined << tags[i];
+	}
+	return joined;
+}
+
+
+void
+SGVerseListWindow::_ToggleTag(int32 index, const BString& tag)
+{
+	if (!fHasOpenFile || index < 0 || index >= (int32)fBookmarks.size())
+		return;
+
+	std::vector<BString> own;
+	_SplitTags(fBookmarks[index].Tags(), own);
+
+	std::vector<BString>::iterator found
+		= std::find(own.begin(), own.end(), tag);
+	if (found != own.end())
+		own.erase(found);
+	else
+		own.push_back(tag);
+	std::sort(own.begin(), own.end());
+
+	fBookmarks[index].SetTags(_JoinTags(own).String());
+	if (fBookmarks[index].Save() == B_OK) {
+		// Rebuilds the Tags column AND the filter dropdown (a tag that
+		// was on its last bookmark is now gone from the collection
+		// entirely, so it must stop being offered as a filter) --
+		// _RebuildRows() does both, see its own tail.
+		_RebuildRows();
+	}
+}
+
+
+void
+SGVerseListWindow::_StartNewTag(int32 index)
+{
+	if (!fHasOpenFile || index < 0 || index >= (int32)fBookmarks.size())
+		return;
+
+	// Same non-modal prompt every other typed-text entry in this window
+	// uses, carrying the bookmark index back untouched the way Edit
+	// Reference already does.
+	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
+		BMessenger(this), VLIST_TAG_NEW_RESULT, B_TRANSLATE("New Tag"), "",
+		B_TRANSLATE("Add"), B_TRANSLATE("Tag:"), index);
+	prompt->Show();
+}
+
+
+void
+SGVerseListWindow::_AddTag(int32 index, const char* tag)
+{
+	if (!fHasOpenFile || index < 0 || index >= (int32)fBookmarks.size())
+		return;
+
+	BString sanitized = _SanitizeTag(tag);
+	if (sanitized.IsEmpty())
+		return;
+
+	std::vector<BString> own;
+	_SplitTags(fBookmarks[index].Tags(), own);
+	// Typing a tag this bookmark already has is a no-op, not a
+	// duplicate -- same reasoning _TryAutoAddDescriptionReference()
+	// already applies to a reference typed twice.
+	if (std::find(own.begin(), own.end(), sanitized) != own.end())
+		return;
+
+	own.push_back(sanitized);
+	std::sort(own.begin(), own.end());
+
+	fBookmarks[index].SetTags(_JoinTags(own).String());
+	if (fBookmarks[index].Save() == B_OK)
+		_RebuildRows();
+}
+
+
 int32
 SGVerseListWindow::_BookmarkIndexForRow(int32 rowIndex) const
 {
@@ -2256,13 +2442,15 @@ SGVerseListWindow::_BookmarkIndexForRow(int32 rowIndex) const
 }
 
 
-void
-SGVerseListWindow::_RebuildTagFilterMenu()
+std::vector<BString>
+SGVerseListWindow::_CollectionTags() const
 {
 	// Every distinct tag across the CURRENTLY open collection only --
 	// not a library-wide scan (that's the separate, not-yet-built
 	// cross-library mode the original issue left open), matching what
-	// this slice actually narrows.
+	// this slice actually covers. Scanned from the bookmarks themselves
+	// rather than a registry kept alongside them, so it cannot drift
+	// out of sync with what the files really carry (#57's own point).
 	std::vector<BString> tags;
 	for (size_t i = 0; i < fBookmarks.size(); i++) {
 		std::vector<BString> tokens;
@@ -2273,6 +2461,14 @@ SGVerseListWindow::_RebuildTagFilterMenu()
 		}
 	}
 	std::sort(tags.begin(), tags.end());
+	return tags;
+}
+
+
+void
+SGVerseListWindow::_RebuildTagFilterMenu()
+{
+	std::vector<BString> tags = _CollectionTags();
 
 	while (fTagFilterMenu->CountItems() > 0)
 		delete fTagFilterMenu->RemoveItem((int32)0);
