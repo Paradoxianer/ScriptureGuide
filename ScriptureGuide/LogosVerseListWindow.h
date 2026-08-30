@@ -16,7 +16,9 @@
 class BFilePanel;
 class BMenu;
 class BMenuBar;
+class BMenuField;
 class BMenuItem;
+class BPopUpMenu;
 class BScrollView;
 class BStringView;
 class TextDocumentView;
@@ -117,6 +119,12 @@ class VerseListRowListView;
 // was clicked). Reuses kNamePromptOK as the prompt's own resultWhat --
 // see _StartNewSubCollectionHere() in the .cpp for why that's enough.
 #define VLIST_NEW_SUBCOLLECTION_HERE	'VLsh'
+// #57 (first slice): a BMenuField above the row list, one item per
+// distinct tag found across the open collection's own bookmarks plus a
+// leading "All Tags" -- carries the chosen tag as "tag" (absent/empty
+// means no filter). Narrows what _RebuildRows() actually adds to
+// fRowList; doesn't touch fBookmarks or any file on disk.
+#define VLIST_TAG_FILTER		'VLtf'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -314,8 +322,27 @@ private:
 			// description), replacing whatever was open. Shared by
 			// _OpenList(), startup restore, and the navigation menu.
 			void			_LoadFile(const char* path);
-			// Rebuilds the row list from fBookmarks.
+			// Rebuilds the row list from fBookmarks -- applying
+			// fTagFilter (#57) if one is set, and refreshing
+			// fVisibleBookmarkIndices/the tag filter menu's own
+			// contents to match.
 			void			_RebuildRows();
+			// #57: every distinct tag across fBookmarks (each one's
+			// comma-separated Tags() split and trimmed), sorted, as
+			// fTagFilterMenu's items -- plus a leading "All Tags".
+			// Re-marks whichever one matches fTagFilter, or falls back
+			// to "All Tags" if that tag no longer exists in the
+			// (possibly just-changed) collection. Called from
+			// _RebuildRows() -- see there for why that single call site
+			// is enough to keep this current.
+			void			_RebuildTagFilterMenu();
+			// A row's position in fRowList is no longer necessarily its
+			// fBookmarks[] index once a tag filter can skip entries
+			// (see fVisibleBookmarkIndices) -- this is the one place
+			// that translates back, used at every point a row/selection
+			// index from fRowList feeds into code that indexes
+			// fBookmarks directly. -1 for an out-of-range row.
+			int32			_BookmarkIndexForRow(int32 rowIndex) const;
 			// Pushes the current description text into the (quiet, not
 			// user-edit-triggering) TextDocument.
 			void			_RebuildDescription();
@@ -390,6 +417,20 @@ private:
 			BString					fCollectionPath;
 			std::vector<BookmarkFile>	fBookmarks;
 			bool					fHasOpenFile;
+
+			// #57 (first slice): filters what _RebuildRows() actually
+			// adds to fRowList down to bookmarks carrying this tag --
+			// empty means no filter, every bookmark shown, same as
+			// before this existed. fVisibleBookmarkIndices[rowIndex] is
+			// that row's real fBookmarks[] index (see
+			// _BookmarkIndexForRow()); identity 0..n-1 when fTagFilter
+			// is empty. Reset to empty whenever a different collection
+			// loads (_LoadFile()/_CreateNewList()/_CloseList()) -- a
+			// filter chosen for one list has no reason to silently
+			// apply to the next one opened, even if it happens to share
+			// a tag name.
+			BString					fTagFilter;
+			std::vector<int32>			fVisibleBookmarkIndices;
 
 			// #97: an import's own file content, held here between
 			// _StartImportIntoNewList() showing the name/location prompt
@@ -467,6 +508,12 @@ private:
 				BString	key;
 			};
 			std::vector<DescriptionReferenceLink>	fDescriptionReferenceLinks;
+
+			// #57 (first slice): a dropdown right above fRowList,
+			// narrowing what it shows down to one tag -- see
+			// _RebuildTagFilterMenu()/VLIST_TAG_FILTER.
+			BMenuField*				fTagFilterField;
+			BPopUpMenu*				fTagFilterMenu;
 
 			// #57: BColumnListView manages its own scrolling internally
 			// (unlike the old BOutlineListView, which needed an external

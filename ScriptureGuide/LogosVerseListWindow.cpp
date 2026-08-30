@@ -547,6 +547,8 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fCopyEntriesMenu(NULL),
 	fDescriptionView(NULL),
 	fDescriptionScroll(NULL),
+	fTagFilterField(NULL),
+	fTagFilterMenu(NULL),
 	fRowList(NULL),
 	fImportPanel(NULL),
 	fExportPanel(NULL),
@@ -638,6 +640,24 @@ SGVerseListWindow::_BuildGUI()
 	fPathView->SetAlignment(B_ALIGN_CENTER);
 	fPathView->SetHighColor(
 		tint_color(ui_color(B_PANEL_BACKGROUND_COLOR), B_DARKEN_3_TINT));
+
+	// #57 (first slice): narrows fRowList down to one tag. Built empty
+	// (just "All Tags") -- _RebuildRows() populates the rest of the
+	// items once a collection is actually loaded and there's something
+	// to scan for tags.
+	fTagFilterMenu = new BPopUpMenu("tagFilterMenu", false, false);
+	// Without this, the field shows the BPopUpMenu's own construction
+	// name ("tagFilterMenu") instead of whichever item is marked --
+	// confirmed live, not just suspected: that's exactly what showed up
+	// before this was added.
+	fTagFilterMenu->SetLabelFromMarked(true);
+	BMenuItem* allTagsItem = new BMenuItem(B_TRANSLATE("All Tags"),
+		new BMessage(VLIST_TAG_FILTER));
+	fTagFilterMenu->AddItem(allTagsItem);
+	allTagsItem->SetMarked(true);
+	fTagFilterField = new BMenuField("verseListTagFilter",
+		B_TRANSLATE("Filter by tag:"), fTagFilterMenu);
+	fTagFilterMenu->SetTargetForItems(this);
 
 	fRowList = new VerseListRowListView("verseListRows", this);
 	fRowList->SetSelectionMessage(new BMessage(VLIST_ROW_SELECTED));
@@ -740,6 +760,15 @@ SGVerseListWindow::_BuildGUI()
 	rowsBoxLayout->SetInsets(padding, rowsBox->TopBorderOffset() + padding,
 		padding, padding + 2.0f);
 	descriptionBoxLayout->AddView(fDescriptionScroll);
+	// Left-aligned, not stretched to the row list's own full width --
+	// a BMenuField sized to fill the box would just leave a long
+	// stretch of empty label to the right of whatever tag is picked.
+	BView* tagFilterBar = BLayoutBuilder::Group<>(B_HORIZONTAL,
+			B_USE_SMALL_SPACING)
+		.Add(fTagFilterField)
+		.AddGlue()
+		.View();
+	rowsBoxLayout->AddView(tagFilterBar);
 	rowsBoxLayout->AddView(fRowList);
 
 	// SetInsets() applies to the whole group it's called on -- calling it
@@ -1151,7 +1180,7 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 
 		case VLIST_EDIT_REFERENCE_SELECTED:
 		{
-			int32 selected = fRowList->CurrentSelection();
+			int32 selected = _BookmarkIndexForRow(fRowList->CurrentSelection());
 			if (selected >= 0)
 				_StartEditReference(selected);
 			break;
@@ -1237,9 +1266,18 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			_RebuildRows();
 			break;
 
+		case VLIST_TAG_FILTER:
+		{
+			BString tag;
+			message->FindString("tag", &tag);
+			fTagFilter = tag;
+			_RebuildRows();
+			break;
+		}
+
 		case VLIST_ROW_SELECTED:
 		{
-			int32 index = fRowList->CurrentSelection();
+			int32 index = _BookmarkIndexForRow(fRowList->CurrentSelection());
 			if (index >= 0)
 				_NavigateToRow(index);
 			_UpdateRowActionState();
@@ -1350,6 +1388,9 @@ SGVerseListWindow::_CreateNewList(const char* name, const char* parentPath)
 	fCollectionPath = path;
 	fBookmarks.clear();
 	fHasOpenFile = true;
+	// #57: a filter chosen for whatever was open before has no reason
+	// to silently apply to this brand-new (empty) collection.
+	fTagFilter = "";
 	_WatchCollection(fCollectionPath.String());
 	_RebuildRows();
 	_RebuildDescription();
@@ -1580,8 +1621,11 @@ SGVerseListWindow::_CopyOrMoveSelectedEntries(const char* destPath, bool move)
 
 	std::vector<int32> indices;
 	int32 selected;
-	for (int32 i = 0; (selected = fRowList->CurrentSelection(i)) >= 0; i++)
-		indices.push_back(selected);
+	for (int32 i = 0; (selected = fRowList->CurrentSelection(i)) >= 0; i++) {
+		int32 bookmarkIndex = _BookmarkIndexForRow(selected);
+		if (bookmarkIndex >= 0)
+			indices.push_back(bookmarkIndex);
+	}
 	if (indices.empty())
 		return;
 	// #57: CurrentSelection(i)'s own order changed with the move to
@@ -2045,6 +2089,7 @@ SGVerseListWindow::_CloseList()
 	fCollectionPath = "";
 	fBookmarks.clear();
 	fHasOpenFile = false;
+	fTagFilter = "";
 	_RebuildRows();
 	_RebuildDescription();
 	_UpdateTitle();
@@ -2105,6 +2150,10 @@ SGVerseListWindow::_LoadFile(const char* path)
 
 	fCollectionPath = path;
 	fBookmarks.clear();
+	// #57: same reasoning as _CreateNewList()'s own -- a filter chosen
+	// for whatever was open before has no reason to silently apply to
+	// the collection being switched to.
+	fTagFilter = "";
 	_WatchCollection(fCollectionPath.String());
 
 	std::vector<BString> paths = BookmarkFile::ListBookmarkPaths(path);
@@ -2127,6 +2176,41 @@ SGVerseListWindow::_LoadFile(const char* path)
 
 
 
+// #57: a bookmark's own Tags() is one comma-separated string (see the
+// class comment on why it's not structured yet) -- split and trim each
+// token rather than a raw substring search, so a tag named "Important"
+// doesn't also match one named "Not Important" or get confused by
+// incidental whitespace around the commas. Shared by _BookmarkHasTag()
+// and _RebuildTagFilterMenu()'s own tag scan, so the two can't drift
+// apart on what counts as "the same tag".
+static void
+_SplitTags(const char* tags, std::vector<BString>& outTokens)
+{
+	BString source(tags);
+	int32 start = 0;
+	while (start <= source.Length()) {
+		int32 comma = source.FindFirst(',', start);
+		if (comma < 0)
+			comma = source.Length();
+		BString token;
+		source.CopyInto(token, start, comma - start);
+		token.Trim();
+		if (!token.IsEmpty())
+			outTokens.push_back(token);
+		start = comma + 1;
+	}
+}
+
+
+static bool
+_BookmarkHasTag(const BookmarkFile& bookmark, const BString& tag)
+{
+	std::vector<BString> tokens;
+	_SplitTags(bookmark.Tags(), tokens);
+	return std::find(tokens.begin(), tokens.end(), tag) != tokens.end();
+}
+
+
 void
 SGVerseListWindow::_RebuildRows()
 {
@@ -2136,18 +2220,93 @@ SGVerseListWindow::_RebuildRows()
 	// underlying data is untouched (fBookmarks[i].Reference() itself,
 	// what _StartEditReference()/CreateNew() etc. actually read and
 	// write, stays colon-only, same as always).
+	// Before the filter loop below, not after -- this can reset
+	// fTagFilter back to empty (the tag it named just vanished, e.g. a
+	// live-sync rescan after a Tracker edit removed the last bookmark
+	// carrying it), and that has to take effect in THIS pass, not the
+	// next one, or the row list would stay stuck showing zero rows for
+	// a filter the menu no longer even offers.
+	_RebuildTagFilterMenu();
+
 	BString locale = CurrentLocaleCode();
 	fRowList->MakeEmpty();
+	fVisibleBookmarkIndices.clear();
 	for (size_t i = 0; i < fBookmarks.size(); i++) {
+		if (!fTagFilter.IsEmpty() && !_BookmarkHasTag(fBookmarks[i], fTagFilter))
+			continue;
 		BString display = FormatVerseReferenceForDisplay(
 			fBookmarks[i].Reference(), locale.String());
 		fRowList->AddReferenceRow(display.String(),
 			fBookmarks[i].Code().String(), fBookmarks[i].Tags());
+		fVisibleBookmarkIndices.push_back((int32)i);
 	}
 	// MakeEmpty() clears the selection -- Edit Reference/Remove/Move Up/
 	// Move Down all need to fall back to disabled rather than keep
 	// whatever state a previous, now-gone selection left them in.
 	_UpdateRowActionState();
+}
+
+
+int32
+SGVerseListWindow::_BookmarkIndexForRow(int32 rowIndex) const
+{
+	if (rowIndex < 0 || rowIndex >= (int32)fVisibleBookmarkIndices.size())
+		return -1;
+	return fVisibleBookmarkIndices[rowIndex];
+}
+
+
+void
+SGVerseListWindow::_RebuildTagFilterMenu()
+{
+	// Every distinct tag across the CURRENTLY open collection only --
+	// not a library-wide scan (that's the separate, not-yet-built
+	// cross-library mode the original issue left open), matching what
+	// this slice actually narrows.
+	std::vector<BString> tags;
+	for (size_t i = 0; i < fBookmarks.size(); i++) {
+		std::vector<BString> tokens;
+		_SplitTags(fBookmarks[i].Tags(), tokens);
+		for (size_t j = 0; j < tokens.size(); j++) {
+			if (std::find(tags.begin(), tags.end(), tokens[j]) == tags.end())
+				tags.push_back(tokens[j]);
+		}
+	}
+	std::sort(tags.begin(), tags.end());
+
+	while (fTagFilterMenu->CountItems() > 0)
+		delete fTagFilterMenu->RemoveItem((int32)0);
+
+	BMenuItem* allTagsItem = new BMenuItem(B_TRANSLATE("All Tags"),
+		new BMessage(VLIST_TAG_FILTER));
+	allTagsItem->SetTarget(this);
+	fTagFilterMenu->AddItem(allTagsItem);
+
+	bool foundCurrent = fTagFilter.IsEmpty();
+	for (size_t i = 0; i < tags.size(); i++) {
+		BMessage* select = new BMessage(VLIST_TAG_FILTER);
+		select->AddString("tag", tags[i]);
+		BMenuItem* item = new BMenuItem(tags[i].String(), select);
+		item->SetTarget(this);
+		fTagFilterMenu->AddItem(item);
+		if (tags[i] == fTagFilter) {
+			item->SetMarked(true);
+			foundCurrent = true;
+		}
+	}
+	// The tag fTagFilter names might itself just have vanished (removed
+	// via Tracker, or a filter left over from a collection this one
+	// doesn't share it with -- though _LoadFile() etc. already clear
+	// fTagFilter on that path, this covers the live-sync case too) --
+	// fall back to showing no filter rather than a stuck-on-a-ghost-tag
+	// state with nothing marked in the menu at all.
+	if (foundCurrent) {
+		if (fTagFilter.IsEmpty())
+			allTagsItem->SetMarked(true);
+	} else {
+		fTagFilter = "";
+		allTagsItem->SetMarked(true);
+	}
 }
 
 
@@ -2297,8 +2456,14 @@ SGVerseListWindow::_UpdateRowActionState()
 	fRemoveItem->SetEnabled(hasSelection);
 	fMoveEntriesMenu->SetEnabled(hasSelection);
 	fCopyEntriesMenu->SetEnabled(hasSelection);
-	fMoveUpItem->SetEnabled(selectionCount == 1 && firstSelected > 0);
-	fMoveDownItem->SetEnabled(selectionCount == 1
+	// #57: reordering while a tag filter narrows what's shown is out of
+	// scope for this slice -- see _MoveRow()'s own comment -- so these
+	// stay disabled the same way they already do for an empty/multi
+	// selection, rather than being enabled and then silently no-opping.
+	bool canReorder = fTagFilter.IsEmpty();
+	fMoveUpItem->SetEnabled(canReorder && selectionCount == 1
+		&& firstSelected > 0);
+	fMoveDownItem->SetEnabled(canReorder && selectionCount == 1
 		&& firstSelected + 1 < fRowList->CountItems());
 }
 
@@ -2648,6 +2813,20 @@ SGVerseListWindow::_MoveRow(int32 from, int32 to)
 		return;
 	}
 
+	// #57: `from`/`to` are row-list positions, which only equal
+	// fBookmarks[] indices while no tag filter is narrowing what's
+	// shown -- reordering *within a filtered view* would have to
+	// decide what happens to the hidden rows in between, a real design
+	// question this slice doesn't answer. Simplest correct behavior
+	// until it is: no-op rather than silently reordering the wrong
+	// entries. Move Up/Move Down are also disabled while filtered (see
+	// _UpdateRowActionState()); drag-reorder itself isn't gated at the
+	// point it starts, so a drag can still be picked up while filtered
+	// and will just silently snap back on drop -- unpolished, not
+	// unsafe, and out of scope for this first slice.
+	if (!fTagFilter.IsEmpty())
+		return;
+
 	fRowList->MoveItem(from, to);
 	fRowList->Select(to);
 
@@ -2689,11 +2868,20 @@ SGVerseListWindow::_RemoveRow(int32 index)
 		return;
 	fBookmarks.erase(fBookmarks.begin() + index);
 
+	bool restoreSelection = fTagFilter.IsEmpty();
 	_RebuildRows();
 
-	int32 count = fRowList->CountItems();
-	if (count > 0)
-		fRowList->Select(std::min(index, count - 1));
+	// #57: `index` is a fBookmarks[] index -- reusing it as a row-list
+	// position below only holds while unfiltered (see
+	// _BookmarkIndexForRow()'s own comment); while filtered, translating
+	// it back the other way isn't worth it just to guess a "nearby" row
+	// to select, so this leaves the selection empty in that case, same
+	// as _RebuildRows() already does on its own by default.
+	if (restoreSelection) {
+		int32 count = fRowList->CountItems();
+		if (count > 0)
+			fRowList->Select(std::min(index, count - 1));
+	}
 }
 
 
@@ -2706,10 +2894,19 @@ SGVerseListWindow::_RemoveRow(int32 index)
 void
 SGVerseListWindow::_RemoveSelectedRows()
 {
+	// #57: translated to fBookmarks[] indices up front, via the mapping
+	// as it stands right now -- _RemoveRow() rebuilds it on every call
+	// inside the loop below, but that's fine, since removing highest
+	// bookmark-index first (same reasoning as the row-index comment
+	// this replaced) never invalidates an as-yet-unprocessed LOWER
+	// index, translated or not.
 	std::vector<int32> indices;
 	int32 selected;
-	for (int32 i = 0; (selected = fRowList->CurrentSelection(i)) >= 0; i++)
-		indices.push_back(selected);
+	for (int32 i = 0; (selected = fRowList->CurrentSelection(i)) >= 0; i++) {
+		int32 bookmarkIndex = _BookmarkIndexForRow(selected);
+		if (bookmarkIndex >= 0)
+			indices.push_back(bookmarkIndex);
+	}
 	std::sort(indices.begin(), indices.end());
 	for (std::vector<int32>::reverse_iterator it = indices.rbegin();
 			it != indices.rend(); ++it) {
