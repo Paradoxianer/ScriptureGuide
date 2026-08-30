@@ -1424,6 +1424,64 @@ TestRestyleRebuildDoesNotAccumulateEmptyParagraphs()
 }
 
 
+// Live-reported: a space typed into the description field is swallowed
+// outright ("es wird komplett rausgenommen in der UI"), while ordinary
+// letters go in fine. The one structural difference between a document
+// the field has just RESTYLED (built by hand, one Paragraph per line,
+// see BuildLineDocument()) and one merely LOADED (built by
+// TextDocument::NormalizeText()) is the span layout inside each
+// paragraph -- so this types into the hand-built shape specifically,
+// which is what every keystroke after the first actually lands in.
+static void
+TestTypingIntoARestyleBuiltDocument()
+{
+	const char* kText = "Hallo das\nZweite Zeile\n";
+
+	TextDocumentRef document = BuildLineDocument(kText);
+	TextDocumentLayout layout;
+	layout.SetTextDocument(document);
+	layout.SetWidth(400.0f);
+
+	TextEditorRef editor(new TextEditor(), true);
+	editor->SetDocument(document);
+	editor->SetLayout(TextDocumentLayoutRef(&layout));
+	editor->SetEditingEnabled(true);
+
+	// Right after "Hallo", i.e. mid-line, mid-document.
+	editor->SetSelection(TextSelection(5, 5));
+
+	KeyEvent spaceEvent;
+	BString spaceBytes(" ");
+	spaceEvent.bytes = spaceBytes.String();
+	spaceEvent.length = 1;
+	spaceEvent.key = ' ';
+	spaceEvent.modifiers = 0;
+	editor->KeyDown(spaceEvent);
+
+	Check(BString(document->Text()) == BString("Hallo  das\nZweite Zeile\n"),
+		"TextEditor: a space typed into a restyle-built document actually "
+		"lands in the text");
+	Check(editor->CaretOffset() == 6,
+		"TextEditor: the caret follows a space typed into a restyle-built "
+		"document");
+
+	// Same document, same shape, an ordinary letter -- the reported
+	// difference is that letters work and spaces don't, so both belong
+	// in the same test or the comparison proves nothing.
+	KeyEvent letterEvent;
+	BString letterBytes("x");
+	letterEvent.bytes = letterBytes.String();
+	letterEvent.length = 1;
+	letterEvent.key = 'x';
+	letterEvent.modifiers = 0;
+	editor->KeyDown(letterEvent);
+
+	Check(BString(document->Text()) == BString("Hallo x das\nZweite Zeile\n"),
+		"TextEditor: an ordinary letter typed into a restyle-built document "
+		"lands in the text");
+}
+
+
 int
 main()
 {
@@ -1475,6 +1533,7 @@ main()
 
 	TestCaretPositionAfterListenerRebuildsOnKeystroke();
 	TestRestyleRebuildDoesNotAccumulateEmptyParagraphs();
+	TestTypingIntoARestyleBuiltDocument();
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;
