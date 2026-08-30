@@ -24,10 +24,17 @@
 #include <swmgr.h>
 
 #include "BibleTextDocument.h"
+#include "Paragraph.h"
 #include "ParagraphLayout.h"
 #include "ParallelBibleView.h"
 #include "PersonalNotesModule.h"
 #include "SwordBackend.h"
+#include "TextDocument.h"
+#include "TextDocumentLayout.h"
+#include "TextEditor.h"
+#include "TextListener.h"
+#include "TextSelection.h"
+#include "TextSpan.h"
 #include "VerseAligner.h"
 #include "constants.h"
 
@@ -1173,6 +1180,174 @@ TestFindReferencesInTextRecognizesGermanNumberedAndAccentedBooks()
 }
 
 
+// Regression test for a real bug reported live: typing a space (or any
+// character) into the verse list's Description field, while a
+// TextListener rebuilds the whole document from scratch on every
+// keystroke (SGVerseListWindow::_RestyleDescriptionReferences(), attached
+// via DescriptionSaveListener -- mirrored here exactly, minus the
+// Bible-reference styling, which is irrelevant to the caret bug itself),
+// left the caret in the wrong place. Deliberately built at the
+// TextDocument/TextEditor level directly, not through TextDocumentView or
+// SGVerseListWindow -- GetSelection()/SetSelection() on the view are thin
+// wrappers straight onto TextEditor::SelectionStart()/End()/SetSelection()
+// (confirmed by reading TextDocumentView.cpp), so this reproduces the
+// exact mechanism without needing a live window.
+class RebuildOnChangeListener : public TextListener {
+public:
+	// Raw pointers, deliberately not TextDocumentRef/TextEditorRef --
+	// this test's own local variables already outlive the listener (C++
+	// destroys them in reverse declaration order, listener first), and
+	// storing owning references here instead created a genuine reference
+	// cycle (document->fTextListeners holds this listener,
+	// this listener holds the document right back) that kept both alive
+	// past the end of the test function -- which, in turn, kept the
+	// TextEditor's own TextDocumentLayoutRef pointing at `layout` alive
+	// past that stack variable's own C++-guaranteed destruction, a
+	// dangling-reference crash confirmed live via debug_server's own
+	// "Crashed program" dialog. Matches DescriptionSaveListener's own
+	// plain SGVerseListWindow* -- the real bug this whole test exists to
+	// chase is in there, not in ownership semantics that don't apply
+	// once this is a raw pointer instead.
+	RebuildOnChangeListener(TextDocument* document, TextEditor* editor)
+		:
+		fDocument(document),
+		fEditor(editor)
+	{
+	}
+
+	virtual void TextChanged(const TextChangedEvent& event)
+	{
+		// Same detach-before/reattach-after shape as
+		// SGVerseListWindow::_RestyleDescriptionReferences() -- without
+		// it, the nested Replace() below would recurse back into this
+		// same method.
+		fDocument->RemoveListener(TextListenerRef(this));
+
+		int32 caretStart = fEditor->SelectionStart();
+		int32 caretEnd = fEditor->SelectionEnd();
+
+		BString text(fDocument->Text());
+		TextDocumentRef newDocument(new TextDocument(), true);
+		int32 lineStart = 0;
+		int32 textLength = text.Length();
+		while (true) {
+			int32 newline = text.FindFirst('\n', lineStart);
+			int32 lineEnd = newline < 0 ? textLength : newline;
+
+			Paragraph paragraph;
+			if (lineEnd > lineStart) {
+				BString line;
+				text.CopyInto(line, lineStart, lineEnd - lineStart);
+				paragraph.Append(TextSpan(line, CharacterStyle()));
+			}
+			bool hasNewline = newline >= 0;
+			if (hasNewline || paragraph.CountTextSpans() == 0)
+				paragraph.Append(TextSpan(hasNewline ? "\n" : "",
+					CharacterStyle()));
+			newDocument->Append(paragraph);
+
+			if (!hasNewline)
+				break;
+			lineStart = newline + 1;
+		}
+
+		fDocument->Replace(0, fDocument->Length(), newDocument);
+		fDocument->AddListener(TextListenerRef(this));
+
+		int32 documentLength = fDocument->Length();
+		if (caretStart > documentLength)
+			caretStart = documentLength;
+		if (caretEnd > documentLength)
+			caretEnd = documentLength;
+		fEditor->SetSelection(TextSelection(caretStart, caretEnd));
+	}
+
+private:
+	TextDocument*	fDocument;
+	TextEditor*		fEditor;
+};
+
+
+static void
+TestCaretPositionAfterListenerRebuildsOnKeystroke()
+{
+	TextDocumentRef document(new TextDocument(), true);
+	// A brand-new TextDocument has ZERO paragraphs, not one empty one --
+	// Insert()/Replace() on it fails silently until it has at least one
+	// (see the identical comment on fDescriptionDocument's own seeding
+	// in LogosVerseListWindow.cpp -- same engine, same gotcha).
+	document->Append(Paragraph());
+	document->Insert(0, "Erste Zeile.\nZweite Zeile hier.\nDritte Zeile.");
+
+	TextDocumentLayout layout;
+	layout.SetTextDocument(document);
+	// Never set by a real TextDocumentView constructed off-screen like
+	// this one -- production always has this set to the view's real
+	// pixel width by the time anything gets typed. Left at the default
+	// 0.0f, GetTextBounds() (called from SetSelection()'s own
+	// updateAnchor path) hung indefinitely -- confirmed live by killing
+	// the process after this exact call chain sat unchanged in a debug
+	// log for several seconds straight.
+	layout.SetWidth(400.0f);
+
+	TextEditorRef editor(new TextEditor(), true);
+	editor->SetDocument(document);
+	editor->SetLayout(TextDocumentLayoutRef(&layout));
+	editor->SetEditingEnabled(true);
+
+	TextListenerRef listener(
+		new RebuildOnChangeListener(document.Get(), editor.Get()), true);
+	document->AddListener(listener);
+
+	// Caret placed right after "Zweite" in the second line -- 13
+	// (length of "Erste Zeile.\n") + 6 ("Zweite").
+	int32 caretBefore = 13 + 6;
+	editor->SetSelection(TextSelection(caretBefore, caretBefore));
+
+	KeyEvent spaceEvent;
+	BString spaceBytes(" ");
+	spaceEvent.bytes = spaceBytes.String();
+	spaceEvent.length = 1;
+	spaceEvent.key = ' ';
+	spaceEvent.modifiers = 0;
+	editor->KeyDown(spaceEvent);
+
+	Check(editor->CaretOffset() == caretBefore + 1,
+		"TextEditor: caret lands right after a space typed mid-document, "
+		"even when a listener rebuilds the whole document on every "
+		"keystroke");
+	Check(document->Text() == "Erste Zeile.\nZweite  Zeile hier.\nDritte Zeile."
+			|| document->Text()
+				== "Erste Zeile.\nZweite  Zeile hier.\nDritte Zeile.\n",
+		"TextEditor: the typed space actually landed at the caret, not "
+		"somewhere else or nowhere");
+
+	// Same check for an ordinary letter -- KeyDown()'s default case
+	// handles every printable character identically to space, so if the
+	// bug above is real, it isn't space-specific.
+	int32 caretBeforeLetter = editor->CaretOffset();
+	KeyEvent letterEvent;
+	BString letterBytes("x");
+	letterEvent.bytes = letterBytes.String();
+	letterEvent.length = 1;
+	letterEvent.key = 'x';
+	letterEvent.modifiers = 0;
+	editor->KeyDown(letterEvent);
+	Check(editor->CaretOffset() == caretBeforeLetter + 1,
+		"TextEditor: caret lands right after an ordinary letter typed "
+		"mid-document under the same rebuild-on-change listener");
+
+	// The rebuild must not accumulate extra empty paragraphs across
+	// repeated edits (three lines in, three lines typed into should
+	// still be three lines out) -- a growing paragraph count would
+	// explain "text appears further and further down" after a few
+	// keystrokes.
+	Check(document->CountParagraphs() == 3,
+		"TextEditor: repeated rebuilds-on-keystroke don't accumulate "
+		"extra empty paragraphs");
+}
+
+
 int
 main()
 {
@@ -1221,6 +1396,8 @@ main()
 	TestSoftLineBreakKeepsOneParagraphPerVerse(notesModule);
 	TestSingleVerseRendersExactlyOneVerse(&notes);
 	TestNotesColumnMatchesChainVersification(&manager, notesModule);
+
+	TestCaretPositionAfterListenerRebuildsOnKeystroke();
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;
