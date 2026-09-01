@@ -1,5 +1,67 @@
 # Changelog
 
+## 1.3.6 (test release)
+
+### Verse lists: tags you can actually assign
+
+Tags have been a real BFS attribute on every bookmark file since 1.3.0,
+but nothing in the application ever wrote them. Two ways to work with
+them now:
+
+Click a row's **Tags** cell for a popup of every tag already used
+anywhere in the open collection, each checkmarked where that row carries
+it -- clicking one toggles it on or off. The last entry, "New Tag...",
+opens the same small name prompt the rest of the window uses. Only the
+Tags column reacts; clicking anywhere else on a row still selects and
+navigates as before.
+
+A **"Filter by tag"** dropdown above the list narrows it to one tag.
+
+Tags are written straight to the bookmark's own `SG:tags` attribute, and
+the list of tags offered anywhere is always rescanned from the bookmark
+files themselves -- there is no separate registry that could drift out of
+sync with what is actually on disk. Removing a tag from its last bookmark
+therefore also stops it being offered as a filter. A typed comma becomes
+a space, since a comma is what separates one tag from the next.
+
+Not included: asking "show me everything tagged X" across the whole
+library, independent of which collection is open. That is tracked
+separately.
+
+### Verse lists: bookmark attributes are editable in Tracker
+
+`SG:reference` and `SG:position` were visible in Tracker but read-only,
+which left #55's own promise -- that a collection is genuinely a folder
+you can manage in Tracker -- only half true. Both are editable now.
+
+Retyping a reference in Tracker also keeps the Bible-order sort key
+honest: `SG:code` is recomputed from whatever the reference now says the
+next time the file is read, so the "Bible Order" column cannot silently
+go stale. A reference typed into something unparseable leaves that key
+empty and sorts last, the same place a bookmark with no position
+attribute already sorts to.
+
+### Verse lists: the window remembers where it was
+
+The Verse List window now reopens with the collection that was last open,
+at the position and size it was left at, the same way the reading window
+already remembers its own frame and reading position.
+
+### Fixed
+
+- **Text in the description field drifted further and further down the
+  box** as you typed, until it had to be scrolled to. The field rebuilds
+  its document to re-style references, and swapped the rebuilt version in
+  over a range measured in *text characters* -- so empty paragraphs,
+  which have no text length at all, fell outside that range and survived
+  every rebuild. Measured: two stray blank paragraphs accumulated per
+  keystroke.
+- **"Custom Order" did not actually restore your own order.** It stopped
+  the table re-sorting from then on, but left the rows physically where
+  the last header click had put them. It now rebuilds the list from the
+  stored order, which drag-and-drop and Move Up/Down had been maintaining
+  correctly underneath the whole time.
+
 ## 1.3.5 (test release)
 
 ### Verse lists: add a reference from wherever you're reading

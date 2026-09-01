@@ -74,6 +74,31 @@ attributes first (Tracker-visible columns), falling back to -- and
 self-healing from -- the plain-text mirror only when those attributes
 are missing.
 
+## Done in 1.3.6
+
+Tags became usable rather than merely stored
+([#57](https://github.com/Paradoxianer/ScriptureGuide/issues/57),
+closed): a row's Tags cell assigns them, a dropdown filters by them, and
+both read the tag list back out of the bookmark files themselves rather
+than a registry alongside them. The cross-library "everything tagged X"
+half is split out as
+[#104](https://github.com/Paradoxianer/ScriptureGuide/issues/104), with
+the BQuery-vs-Tracker choice still open.
+
+[#101](https://github.com/Paradoxianer/ScriptureGuide/issues/101) —
+`SG:reference`/`SG:position` are editable in Tracker now, with the
+Bible-order sort key recomputed on read so it cannot go stale behind an
+edit made there.
+
+Also: the Verse List window reopens with the collection and window frame
+it was left at, and two bugs found while testing the above — the
+description field burying its own text under empty paragraphs
+accumulating on every keystroke, and "Custom Order" not actually
+restoring the user's own row order.
+
+[#56](https://github.com/Paradoxianer/ScriptureGuide/issues/56) is
+closed as partly shipped, partly declined — see the issue.
+
 ## Done in 1.3.5
 
 [#67](https://github.com/Paradoxianer/ScriptureGuide/issues/67)/[#50](https://github.com/Paradoxianer/ScriptureGuide/issues/50)
