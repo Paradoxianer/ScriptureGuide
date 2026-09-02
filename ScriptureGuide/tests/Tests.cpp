@@ -16,6 +16,8 @@
 #include <stdio.h>
 
 #include <Application.h>
+#include <View.h>
+#include <Bitmap.h>
 #include <Language.h>
 #include <Locale.h>
 #include <String.h>
@@ -1482,6 +1484,91 @@ TestTypingIntoARestyleBuiltDocument()
 }
 
 
+// #44 (highlighting): a span carrying an explicitly set background
+// colour must actually get a rectangle painted behind it. Drawn into an
+// offscreen BBitmap so the result can be inspected pixel by pixel --
+// there is no other way to tell "the fill happened" from "the fill was
+// skipped", since both leave the glyphs looking identical.
+//
+// Guards the distinction ParagraphLayout::_DrawSpan() relies on: every
+// CharacterStyle starts at B_PANEL_BACKGROUND_COLOR, so only a colour
+// assigned as a plain rgb_color (which clears the `which` marker to
+// B_NO_COLOR) counts as a highlight. A test that merely checked "some
+// colour is set" would pass on unhighlighted text too.
+static void
+TestHighlightedSpanPaintsItsBackground()
+{
+	const rgb_color kHighlight = (rgb_color){ 255, 240, 120, 255 };
+	const rgb_color kCanvas = (rgb_color){ 255, 255, 255, 255 };
+
+	CharacterStyle plainStyle;
+	CharacterStyle highlightStyle;
+	highlightStyle.SetBackgroundColor(kHighlight);
+
+	Check(plainStyle.WhichBackgroundColor() != B_NO_COLOR,
+		"CharacterStyle: an untouched style is not mistaken for a "
+		"highlight");
+	Check(highlightStyle.WhichBackgroundColor() == B_NO_COLOR,
+		"CharacterStyle: setting a plain rgb background marks the style "
+		"as explicitly coloured");
+
+	Paragraph paragraph;
+	paragraph.Append(TextSpan("AAAA", plainStyle));
+	paragraph.Append(TextSpan("BBBB", highlightStyle));
+
+	ParagraphLayout layout;
+	layout.SetWidth(600.0f);
+	layout.SetParagraph(paragraph);
+
+	BRect bounds(0, 0, 599, 99);
+	BBitmap* bitmap = new BBitmap(bounds, B_RGBA32, true);
+	BView* view = new BView(bounds, "probe", B_FOLLOW_NONE, B_WILL_DRAW);
+	bitmap->AddChild(view);
+	if (!bitmap->Lock()) {
+		Skip("ParagraphLayout: a highlighted span paints its background",
+			"could not lock the offscreen bitmap");
+		delete bitmap;
+		return;
+	}
+	view->SetHighColor(kCanvas);
+	view->FillRect(bounds);
+	layout.Draw(view, BPoint(0, 0));
+	view->Sync();
+	bitmap->Unlock();
+
+	// Scan the first text line for the highlight colour. Sampling a
+	// single guessed coordinate would be fragile against font metrics,
+	// so this asks the simpler, robust question: does the colour appear
+	// at all, and does it appear to the RIGHT of where plain text sits?
+	// BBitmap has no GetPixel(); read the buffer directly. B_RGBA32 is
+	// stored blue-green-red-alpha per pixel in memory on this platform.
+	int32 highlightPixels = 0;
+	float leftmostHighlightX = -1.0f;
+	const uint8* bits = (const uint8*)bitmap->Bits();
+	int32 bytesPerRow = bitmap->BytesPerRow();
+	for (int32 y = 0; y < 40; y++) {
+		const uint8* row = bits + (y * bytesPerRow);
+		for (int32 x = 0; x < 600; x++) {
+			const uint8* pixel = row + (x * 4);
+			if (pixel[2] == kHighlight.red && pixel[1] == kHighlight.green
+				&& pixel[0] == kHighlight.blue) {
+				highlightPixels++;
+				if (leftmostHighlightX < 0)
+					leftmostHighlightX = (float)x;
+			}
+		}
+	}
+	delete bitmap;
+
+	Check(highlightPixels > 0,
+		"ParagraphLayout: a span with an explicit background colour "
+		"actually gets a rectangle painted behind it");
+	Check(leftmostHighlightX > 0.0f,
+		"ParagraphLayout: the highlight starts after the unhighlighted "
+		"span, not at the paragraph's left edge");
+}
+
+
 int
 main()
 {
@@ -1534,6 +1621,7 @@ main()
 	TestCaretPositionAfterListenerRebuildsOnKeystroke();
 	TestRestyleRebuildDoesNotAccumulateEmptyParagraphs();
 	TestTypingIntoARestyleBuiltDocument();
+	TestHighlightedSpanPaintsItsBackground();
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;

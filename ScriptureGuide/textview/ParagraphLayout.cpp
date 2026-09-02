@@ -966,10 +966,59 @@ ParagraphLayout::_DrawSpan(BView* view, BPoint offset,
 	const GlyphInfo& glyph = fGlyphInfos[textOffset];
 	const LineInfo& line = fLineInfos[glyph.lineIndex];
 
+	const CharacterStyle& style = span.Style();
+
+	// #44: fill the span's own background before the glyphs go down.
+	//
+	// "Has a background" is deliberately tested as WhichBackgroundColor()
+	// == B_NO_COLOR rather than by inspecting the colour itself: every
+	// CharacterStyle starts out at B_PANEL_BACKGROUND_COLOR (see
+	// CharacterStyleData's constructor), so a colour test cannot tell an
+	// untouched style from a deliberately painted one -- but
+	// SetBackgroundColor(rgb_color) clears the `which` marker to
+	// B_NO_COLOR, so only an explicitly assigned colour ever lands here.
+	// Same convention the foreground below already follows, just read in
+	// the opposite direction.
+	//
+	// No wrapping case to worry about: _DrawLine() walks
+	// line.layoutedSpans, so a span that wrapped has already been split
+	// into one piece per line by the time it arrives here.
+	int32 backgroundChars = span.CountChars();
+	int32 lastTextByte = text.Length() - 1;
+	if (lastTextByte >= 0 && is_line_break((uint8)text.ByteAt(lastTextByte)))
+		backgroundChars--;
+	if (style.WhichBackgroundColor() == B_NO_COLOR && backgroundChars > 0) {
+		// The right edge is where the FOLLOWING glyph starts, not the
+		// last glyph's x + width: glyph.x already carries whatever
+		// justification shifted it by (see the `glyph.x += spaceLeft`
+		// pass in _Layout()), so using the neighbour's own position
+		// keeps adjacent spans seamless instead of leaving a hairline
+		// of unpainted background between them. Only the last span on a
+		// line has no such neighbour to measure against.
+		int32 endGlyph = textOffset + backgroundChars;
+		float right;
+		if ((size_t)endGlyph < fGlyphInfos.size()
+			&& fGlyphInfos[endGlyph].lineIndex == glyph.lineIndex) {
+			right = fGlyphInfos[endGlyph].x;
+		} else {
+			const GlyphInfo& lastGlyph = fGlyphInfos[endGlyph - 1];
+			right = lastGlyph.x + lastGlyph.width;
+		}
+
+		// Bottom stops one pixel short of the next line's top, which
+		// line.height already measures to -- without that, a highlight
+		// bleeds a row of pixels into the line beneath it.
+		BRect background(offset.x + glyph.x, offset.y + line.y,
+			offset.x + right, offset.y + line.y + line.height - 1.0f);
+
+		rgb_color previousHighColor = view->HighColor();
+		view->SetHighColor(style.BackgroundColor());
+		view->FillRect(background);
+		view->SetHighColor(previousHighColor);
+	}
+
 	offset.x += glyph.x;
 	offset.y += line.y + line.maxAscent;
-
-	const CharacterStyle& style = span.Style();
 
 	view->SetFont(&style.Font());
 
