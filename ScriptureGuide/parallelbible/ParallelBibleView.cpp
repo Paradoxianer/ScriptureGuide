@@ -243,7 +243,10 @@ public:
 			{ "Red",    { 0xf5, 0xc6, 0xc6, 255 } },
 			{ "Blue",   { 0xc5, 0xdd, 0xf2, 255 } },
 			{ "Purple", { 0xdc, 0xcb, 0xe8, 255 } },
-			{ "Grey",   { 0xd8, 0xd8, 0xd8, 255 } }
+			// Deliberately NOT a grey: the text editor already paints its
+			// own selection in one, so a grey highlight and a selected
+			// passage are indistinguishable at a glance.
+			{ "Orange", { 0xf7, 0xd9, 0xb0, 255 } }
 		};
 		outCount = (int32)(sizeof(sPalette) / sizeof(sPalette[0]));
 		return sPalette;
@@ -342,7 +345,8 @@ private:
 			fColor(color),
 			fMessage(message),
 			fOwner(owner),
-			fIsRemove(isRemove)
+			fIsRemove(isRemove),
+			fPressed(false)
 		{
 		}
 
@@ -354,8 +358,10 @@ private:
 			SetHighColor(fColor);
 			FillRect(bounds);
 			SetHighColor(tint_color(ui_color(B_PANEL_BACKGROUND_COLOR),
-				B_DARKEN_2_TINT));
+				fPressed ? B_DARKEN_4_TINT : B_DARKEN_2_TINT));
 			StrokeRect(bounds);
+			if (fPressed)
+				StrokeRect(bounds.InsetByCopy(1, 1));
 			if (fIsRemove) {
 				// A plain diagonal cross reads as "none" without needing
 				// a glyph or a translated label in a 20px cell. Drawn in
@@ -371,8 +377,38 @@ private:
 			}
 		}
 
+		// Acts on mouse UP, not down, and not only for the usual
+		// button-like reasons. Choosing on mouse-down closed this window
+		// while the button was still held -- and the pointer was then
+		// over the reading column the palette had been covering, whose
+		// TextDocumentView::MouseMoved() extends the selection from the
+		// current anchor on any movement while a button is down
+		// (`if (buttons > 0 && dragMessage == NULL) SetCaret(where,
+		// true)`). With the anchor just reset to 0, that produced a
+		// selection running from the top of the chapter to wherever the
+		// pointer happened to be -- reported as the whole passage going
+		// grey after picking a colour.
 		virtual void MouseDown(BPoint where)
 		{
+			fPressed = true;
+			SetMouseEventMask(B_POINTER_EVENTS);
+			Invalidate();
+		}
+
+		virtual void MouseUp(BPoint where)
+		{
+			if (!fPressed)
+				return;
+			fPressed = false;
+
+			// Released outside the cell it was pressed in: treat it as
+			// cancelled, the way any button does.
+			if (!Bounds().Contains(where)) {
+				Invalidate();
+				return;
+			}
+			// Chosen() closes the window, which destroys this view --
+			// nothing may touch members afterwards.
 			if (fOwner != NULL && fMessage != NULL)
 				fOwner->Chosen(fMessage);
 		}
@@ -382,6 +418,7 @@ private:
 		BMessage*				fMessage;
 		HighlightPaletteWindow*	fOwner;
 		bool					fIsRemove;
+		bool					fPressed;
 	};
 
 	BMessenger	fTarget;
