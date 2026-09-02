@@ -1837,6 +1837,37 @@ TestHighlightBookmarkRoundTrip()
 }
 
 
+// Regression test for a bug that mislocated every highlight and, less
+// visibly, every German bookmark's Bible-order sort key: a reference
+// stored in its DISPLAY form carries the German comma ("1. Mose 1, 8"),
+// and SWORD reads that comma as its own list separator -- so the verse
+// was discarded and Code() came back pointing at verse 1.
+static void
+TestBookmarkCodeHandlesDisplayFormReferences()
+{
+	BookmarkFile commaForm;
+	commaForm.SetReference("1. Mose 1, 8");
+	commaForm.SetVersification("KJV");
+	commaForm.SetLocale("de");
+
+	BookmarkFile colonForm;
+	colonForm.SetReference("1. Mose 1:8");
+	colonForm.SetVersification("KJV");
+	colonForm.SetLocale("de");
+
+	BString commaCode = commaForm.Code();
+	BString colonCode = colonForm.Code();
+
+	Check(colonCode.Length() == 9,
+		"BookmarkFile::Code: a colon-form reference produces a code");
+	Check(commaCode == colonCode,
+		"BookmarkFile::Code: the German comma form yields the same code "
+		"as the colon form, not verse 1");
+	Check(commaCode.Length() == 9 && atoi(commaCode.String() + 6) == 8,
+		"BookmarkFile::Code: the verse number survives the comma form");
+}
+
+
 int
 main()
 {
@@ -1893,6 +1924,7 @@ main()
 	TestHighlightsSplitSpansAndBlend(moduleA);
 	TestVersePositionSurvivesDisplayOptions(moduleA);
 	TestHighlightBookmarkRoundTrip();
+	TestBookmarkCodeHandlesDisplayFormReferences();
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;

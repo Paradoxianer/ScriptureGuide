@@ -287,11 +287,15 @@ public:
 				message, this));
 		}
 
+		// Painted in the document background rather than the panel
+		// colour it sits on: as a panel-coloured cell on a panel-coloured
+		// bar it was effectively invisible, which is no use for the one
+		// control that undoes a mistake.
 		BRect removeFrame(kGap + count * (kSwatch + kGap), kGap, 0, 0);
 		removeFrame.right = removeFrame.left + kSwatch;
 		removeFrame.bottom = removeFrame.top + kSwatch;
 		backdrop->AddChild(new SwatchView(removeFrame,
-			ui_color(B_PANEL_BACKGROUND_COLOR),
+			ui_color(B_DOCUMENT_BACKGROUND_COLOR),
 			new BMessage(PARALLEL_HIGHLIGHT_APPLY), this, true));
 
 		// Keep the bar on screen when the selection ends near an edge.
@@ -354,11 +358,16 @@ private:
 			StrokeRect(bounds);
 			if (fIsRemove) {
 				// A plain diagonal cross reads as "none" without needing
-				// a glyph or a translated label in a 20px cell.
-				StrokeLine(bounds.LeftTop() + BPoint(4, 4),
-					bounds.RightBottom() - BPoint(4, 4));
-				StrokeLine(bounds.LeftBottom() + BPoint(4, -4),
-					bounds.RightTop() - BPoint(4, -4));
+				// a glyph or a translated label in a 20px cell. Drawn in
+				// a strong colour, not the border tint, so it is legible
+				// at this size.
+				SetHighColor(200, 60, 60);
+				SetPenSize(2.0f);
+				StrokeLine(bounds.LeftTop() + BPoint(5, 5),
+					bounds.RightBottom() - BPoint(5, 5));
+				StrokeLine(bounds.LeftBottom() + BPoint(5, -5),
+					bounds.RightTop() - BPoint(5, -5));
+				SetPenSize(1.0f);
 			}
 		}
 
@@ -1185,6 +1194,9 @@ private:
 			|| !fBibleDocument->VersePositionAt(end, endVerse, endOffset)) {
 			return;
 		}
+		// A selection crossing a verse boundary is declined rather than
+		// half-stored: one span describes one verse, so spanning two
+		// would need one highlight per verse.
 		if (startVerse != endVerse || endOffset <= startOffset)
 			return;
 
@@ -2191,6 +2203,16 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			}
 
 			fPendingHighlight.module = "";
+			// The documents are about to be rebuilt, which makes every
+			// existing selection offset meaningless -- exactly the same
+			// reasoning SetKey() already applies. Left alone, the old
+			// selection reappears over whatever text now happens to sit
+			// at those offsets, which reads as the highlight having
+			// landed in a completely different verse.
+			for (size_t i = 0; i < fTextViews.size(); i++) {
+				if (fTextViews[i] != NULL)
+					fTextViews[i]->SetSelection(0, 0);
+			}
 			_ReloadHighlights();
 			break;
 		}

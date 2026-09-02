@@ -180,6 +180,13 @@ struct StrongsWord {
 // one space-separated token (SWORD merges several English words
 // sharing one Greek/Hebrew word into a single tag) only keeps the
 // first.
+// Trims, rejects a reference that names no book at all, and turns the
+// German comma separator into the colon VerseKey actually understands --
+// without it "1. Mose 1, 8" parses as chapter 1 with the "8" discarded
+// as a list element, i.e. silently as verse 1. Anything that hands a
+// user-facing reference to VerseKey::setText() needs this first.
+bool NormalizeReferenceText(const char* input, BString& normalized);
+
 std::vector<StrongsWord> FindStrongsWordsInText(sword::SWModule* module,
 					const BString& renderedText);
 

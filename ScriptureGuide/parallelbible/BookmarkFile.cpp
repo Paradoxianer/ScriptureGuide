@@ -433,7 +433,19 @@ ComputeBookmarkCode(const char* reference, const char* versification,
 	key.setVersificationSystem(
 		versification != NULL && versification[0] != '\0'
 			? versification : "KJV");
-	key.setText(reference);
+
+	// Normalized first, exactly like ConvertVerseReference() already
+	// does. A reference stored in its DISPLAY form ("1. Mose 1, 8" under
+	// German) otherwise parses as chapter 1 with the verse discarded --
+	// SWORD reads the comma as its own list separator -- so Code() came
+	// back pointing at verse 1. That silently mislocated every highlight
+	// (#44) and, less visibly, every German bookmark's Bible-order sort
+	// key.
+	BString normalized;
+	if (!NormalizeReferenceText(reference, normalized))
+		return BString();
+
+	key.setText(normalized.String());
 	if (key.popError() != 0)
 		return BString();
 
