@@ -193,6 +193,19 @@ public:
 			// to highlight a verse jumped to from search (see #22).
 			// false if either end isn't part of the currently loaded
 			// chapter, leaving start/end untouched.
+			// #44: the inverse of TextRangeForVerseRange(), for a single
+			// position -- turns a document-wide CHARACTER offset (what a
+			// text view's selection reports) into the verse it lands in
+			// plus the offset within that verse's own normal-form text,
+			// i.e. with any rendered verse-number prefix already
+			// subtracted. That normal form is what a stored highlight's
+			// offsets mean, so this is the one place the two coordinate
+			// systems meet. False if the offset lands outside any verse
+			// (or inside a verse-number prefix).
+			bool				VersePositionAt(int32 documentOffset,
+									int& outVerse,
+									int32& outVerseOffset) const;
+
 			bool				TextRangeForVerseRange(int startVerse,
 									int endVerse, int32& start,
 									int32& end) const;
@@ -233,7 +246,49 @@ public:
 			void				SetVerseSpacing(
 									const std::map<int, float>& spacing);
 
+			// #44: one highlighted stretch of a single verse. `start`
+			// and `end` are CHARACTER offsets into that verse's own
+			// normal-form text -- what SWORD rendered, after the GBF
+			// cleanup in _Rebuild(), and NOT including the verse-number
+			// prefix. That form is deliberately independent of
+			// SetShowVerseNumbers()/SetShowStrongsNumbers()/
+			// SetShowCrossReferences(): none of them changes the
+			// characters, only how they get split into spans, so a
+			// highlight cannot drift when a display option is toggled.
+			struct VerseHighlight {
+				int			verse;
+				int32		start;
+				int32		end;
+				rgb_color	color;
+			};
+
+			// Replaces every highlight this document knows about and
+			// rebuilds. Ranges for verses outside the current key are
+			// harmless -- they simply never match a rendered verse.
+			void				SetHighlights(
+									const std::vector<VerseHighlight>&
+										highlights);
+			const std::vector<VerseHighlight>& Highlights() const
+									{ return fHighlights; }
+
 private:
+			// One stretch of a verse's own text with the foreground
+			// styling _Rebuild() decided for it. Offsets are BYTES into
+			// that verse's text, the same space FindReferencesInText()
+			// and BString::CopyInto() already work in.
+			struct StyledPiece {
+				int32			start;
+				int32			length;
+				CharacterStyle	style;
+			};
+
+			// #44: splits `pieces` at every highlight boundary for this
+			// verse and paints the covered parts, leaving the foreground
+			// styling each piece already carries untouched.
+			void				_ApplyHighlights(
+									std::vector<StyledPiece>& pieces,
+									const BString& text, int verse) const;
+
 			BFont				_EffectiveFont(const BFont& baseFont) const;
 			void				_Rebuild();
 			void				_ApplyVerseSpacing();
@@ -309,6 +364,22 @@ private:
 
 			// verse number -> extra SpacingBottom, set by VerseAligner
 			std::map<int, float> fVerseSpacingBottom;
+
+			// #44: highlighted ranges, applied as a background colour
+			// over whatever foreground styling Strong's numbers and
+			// cross-references already produced -- a separate layer, not
+			// another entry in the special-span list, because a
+			// highlight may legitimately overlap those where they may
+			// not overlap each other.
+			std::vector<VerseHighlight>	fHighlights;
+
+			// #44: how many CHARACTERS of each paragraph are the
+			// rendered verse-number prefix rather than the verse's own
+			// text -- built alongside fParagraphVerse in _Rebuild(), so
+			// VersePositionAt() can subtract it. Zero when verse numbers
+			// are switched off, which is exactly why a highlight's
+			// offsets must not include it.
+			std::vector<int32>	fParagraphPrefixChars;
 };
 
 #endif // BIBLE_TEXT_DOCUMENT_H

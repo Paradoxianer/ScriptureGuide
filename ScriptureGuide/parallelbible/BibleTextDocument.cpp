@@ -468,6 +468,43 @@ BibleTextDocument::IsLinkedToPrevious(int verse) const
 
 
 bool
+BibleTextDocument::VersePositionAt(int32 documentOffset, int& outVerse,
+	int32& outVerseOffset) const
+{
+	if (documentOffset < 0)
+		return false;
+
+	// Same accumulation TextRangeForVerseRange() uses -- there is no
+	// public "offset of paragraph N" lookup to reuse.
+	int32 offset = 0;
+	int32 paragraphCount = CountParagraphs();
+	for (int32 i = 0; i < paragraphCount; i++) {
+		int32 length = ParagraphAtIndex(i).Length();
+		if (documentOffset < offset + length
+			|| (i == paragraphCount - 1 && documentOffset == offset + length)) {
+			if (i >= (int32)fParagraphVerse.size())
+				return false;
+
+			int32 withinParagraph = documentOffset - offset;
+			int32 prefix = i < (int32)fParagraphPrefixChars.size()
+				? fParagraphPrefixChars[i] : 0;
+			// Inside the verse-number prefix is not a position in the
+			// verse's own text, so it cannot anchor a highlight.
+			if (withinParagraph < prefix)
+				return false;
+
+			outVerse = fParagraphVerse[i];
+			outVerseOffset = withinParagraph - prefix;
+			return true;
+		}
+		offset += length;
+	}
+
+	return false;
+}
+
+
+bool
 BibleTextDocument::TextRangeForVerseRange(int startVerse, int endVerse,
 	int32& start, int32& end) const
 {
@@ -555,6 +592,120 @@ BibleTextDocument::_ApplyVerseSpacing()
 }
 
 
+// #44: averaging is deliberate -- where two highlights overlap the
+// result reads as a genuine mix rather than one silently winning, which
+// is what was asked for and is no more work than picking a winner: the
+// splitting below has to happen either way.
+static rgb_color
+BlendHighlightColors(const std::vector<rgb_color>& colors)
+{
+	int32 red = 0;
+	int32 green = 0;
+	int32 blue = 0;
+	for (size_t i = 0; i < colors.size(); i++) {
+		red += colors[i].red;
+		green += colors[i].green;
+		blue += colors[i].blue;
+	}
+	int32 count = (int32)colors.size();
+	rgb_color blended;
+	blended.red = (uint8)(red / count);
+	blended.green = (uint8)(green / count);
+	blended.blue = (uint8)(blue / count);
+	blended.alpha = 255;
+	return blended;
+}
+
+
+void
+BibleTextDocument::_ApplyHighlights(std::vector<StyledPiece>& pieces,
+	const BString& text, int verse) const
+{
+	if (fHighlights.empty() || pieces.empty())
+		return;
+
+	// Stored offsets are CHARACTER offsets (that is what a text view's
+	// own selection reports, and what survives being written to disk
+	// meaningfully); `pieces` and `text` are in BYTES. CountBytes()
+	// converts, which matters the moment a verse contains anything
+	// non-ASCII -- German prose routinely does.
+	struct ByteRange {
+		int32		start;
+		int32		end;
+		rgb_color	color;
+	};
+	std::vector<ByteRange> ranges;
+	int32 charCount = text.CountChars();
+	for (size_t i = 0; i < fHighlights.size(); i++) {
+		const VerseHighlight& highlight = fHighlights[i];
+		if (highlight.verse != verse)
+			continue;
+		int32 startChar = std::max((int32)0, highlight.start);
+		int32 endChar = std::min(charCount, highlight.end);
+		if (endChar <= startChar)
+			continue;
+
+		ByteRange range;
+		range.start = text.CountBytes(0, startChar);
+		range.end = text.CountBytes(0, endChar);
+		range.color = highlight.color;
+		ranges.push_back(range);
+	}
+	if (ranges.empty())
+		return;
+
+	std::vector<StyledPiece> result;
+	for (size_t i = 0; i < pieces.size(); i++) {
+		const StyledPiece& piece = pieces[i];
+		int32 pieceEnd = piece.start + piece.length;
+
+		// Every highlight edge falling strictly inside this piece is a
+		// cut; the piece's own ends bound the walk.
+		std::vector<int32> cuts;
+		cuts.push_back(piece.start);
+		cuts.push_back(pieceEnd);
+		for (size_t j = 0; j < ranges.size(); j++) {
+			if (ranges[j].start > piece.start && ranges[j].start < pieceEnd)
+				cuts.push_back(ranges[j].start);
+			if (ranges[j].end > piece.start && ranges[j].end < pieceEnd)
+				cuts.push_back(ranges[j].end);
+		}
+		std::sort(cuts.begin(), cuts.end());
+		cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+
+		for (size_t c = 0; c + 1 < cuts.size(); c++) {
+			StyledPiece part;
+			part.start = cuts[c];
+			part.length = cuts[c + 1] - cuts[c];
+			part.style = piece.style;
+
+			std::vector<rgb_color> covering;
+			for (size_t j = 0; j < ranges.size(); j++) {
+				if (ranges[j].start <= part.start
+					&& ranges[j].end >= part.start + part.length) {
+					covering.push_back(ranges[j].color);
+				}
+			}
+			if (!covering.empty())
+				part.style.SetBackgroundColor(BlendHighlightColors(covering));
+
+			result.push_back(part);
+		}
+	}
+
+	pieces = result;
+}
+
+
+void
+BibleTextDocument::SetHighlights(
+	const std::vector<VerseHighlight>& highlights)
+{
+	fHighlights = highlights;
+	_Rebuild();
+}
+
+
 void
 BibleTextDocument::_Rebuild()
 {
@@ -582,6 +733,7 @@ BibleTextDocument::_Rebuild()
 	// are untouched since only the base-class subobject is reassigned.
 	TextDocument::operator=(TextDocument());
 	fParagraphVerse.clear();
+	fParagraphPrefixChars.clear();
 	fLinkedToPrevious.clear();
 	fReferenceLinks.clear();
 	fStrongsLinks.clear();
@@ -790,8 +942,20 @@ BibleTextDocument::_Rebuild()
 				return a.start < b.start;
 			});
 
+		// #44: the styled pieces are collected first, in verse-text byte
+		// coordinates, instead of going straight into the paragraph --
+		// highlights are a background layer laid over whatever foreground
+		// styling this loop produces, and they may legitimately overlap a
+		// Strong's word or a cross-reference (which may not overlap each
+		// other). Splitting has to happen after both are known.
+		std::vector<StyledPiece> pieces;
+
 		if (spans.empty()) {
-			paragraph.Append(TextSpan(text, fVerseTextStyle));
+			StyledPiece piece;
+			piece.start = 0;
+			piece.length = text.Length();
+			piece.style = fVerseTextStyle;
+			pieces.push_back(piece);
 		} else {
 			int32 cursor = 0;
 			for (size_t i = 0; i < spans.size(); i++) {
@@ -800,27 +964,30 @@ BibleTextDocument::_Rebuild()
 					continue; // overlapping match -- keep the earlier one
 
 				if (span.start > cursor) {
-					BString before;
-					text.CopyInto(before, cursor, span.start - cursor);
-					paragraph.Append(TextSpan(before, fVerseTextStyle));
+					StyledPiece before;
+					before.start = cursor;
+					before.length = span.start - cursor;
+					before.style = fVerseTextStyle;
+					pieces.push_back(before);
 				}
 
-				BString spanText;
-				text.CopyInto(spanText, span.start, span.length);
+				StyledPiece piece;
+				piece.start = span.start;
+				piece.length = span.length;
 
 				int32 linkStart = documentOffset + verseNumberLength
 					+ span.start;
 				if (span.isStrongs) {
-					paragraph.Append(
-						TextSpan(spanText, fStrongsNumberStyle));
+					piece.style = fStrongsNumberStyle;
+					pieces.push_back(piece);
 					StrongsLink link;
 					link.start = linkStart;
 					link.end = linkStart + span.length;
 					link.number = span.strongsNumber;
 					fStrongsLinks.push_back(link);
 				} else {
-					paragraph.Append(
-						TextSpan(spanText, fReferenceLinkStyle));
+					piece.style = fReferenceLinkStyle;
+					pieces.push_back(piece);
 					ReferenceLink link;
 					link.start = linkStart;
 					link.end = linkStart + span.length;
@@ -831,10 +998,22 @@ BibleTextDocument::_Rebuild()
 				cursor = span.start + span.length;
 			}
 			if (cursor < text.Length()) {
-				BString after;
-				text.CopyInto(after, cursor, text.Length() - cursor);
-				paragraph.Append(TextSpan(after, fVerseTextStyle));
+				StyledPiece after;
+				after.start = cursor;
+				after.length = text.Length() - cursor;
+				after.style = fVerseTextStyle;
+				pieces.push_back(after);
 			}
+		}
+
+		_ApplyHighlights(pieces, text, verse);
+
+		for (size_t i = 0; i < pieces.size(); i++) {
+			if (pieces[i].length <= 0)
+				continue;
+			BString pieceText;
+			text.CopyInto(pieceText, pieces[i].start, pieces[i].length);
+			paragraph.Append(TextSpan(pieceText, pieces[i].style));
 		}
 
 		// Appended last, after every styled/linked span above, so none of
@@ -848,6 +1027,9 @@ BibleTextDocument::_Rebuild()
 
 		Append(paragraph);
 		fParagraphVerse.push_back(verse);
+		// Bytes and characters coincide here: the prefix is only ever
+		// spaces and ASCII digits (" 12 "), never anything multi-byte.
+		fParagraphPrefixChars.push_back(verseNumberLength);
 		fLinkedToPrevious[verse] = linkedToPrevious;
 		documentOffset += paragraph.Length();
 

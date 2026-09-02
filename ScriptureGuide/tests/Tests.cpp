@@ -1569,6 +1569,195 @@ TestHighlightedSpanPaintsItsBackground()
 }
 
 
+// #44: highlights are a background layer over whatever foreground
+// styling a verse already carries, so they must split spans without
+// disturbing that styling, and two overlapping highlights must mix
+// rather than one silently winning.
+static void
+TestHighlightsSplitSpansAndBlend(SWModule* module)
+{
+	const char* name = "BibleTextDocument: a highlight splits the verse "
+		"into background-coloured pieces without losing text";
+	if (module == NULL) {
+		Skip(name, "no Bible module installed");
+		return;
+	}
+
+	BibleTextDocument document(module);
+	document.SetShowVerseNumbers(false);
+	document.SetKey("Gen 1:1");
+
+	BString before = document.Text();
+	int32 paragraphsBefore = document.CountParagraphs();
+
+	std::vector<BibleTextDocument::VerseHighlight> highlights;
+	BibleTextDocument::VerseHighlight first;
+	first.verse = 1;
+	first.start = 2;
+	first.end = 10;
+	first.color = (rgb_color){ 200, 0, 0, 255 };
+	highlights.push_back(first);
+	// Deliberately overlapping the first, to exercise the blend.
+	BibleTextDocument::VerseHighlight second;
+	second.verse = 1;
+	second.start = 6;
+	second.end = 14;
+	second.color = (rgb_color){ 0, 200, 0, 255 };
+	highlights.push_back(second);
+	document.SetHighlights(highlights);
+
+	Check(BString(document.Text()) == before,
+		name);
+	Check(document.CountParagraphs() == paragraphsBefore,
+		"BibleTextDocument: highlighting does not change the paragraph "
+		"count");
+
+	// Walk verse 1's spans and classify them by background.
+	const Paragraph& paragraph = document.ParagraphAtIndex(0);
+	int32 plainSpans = 0;
+	int32 redSpans = 0;
+	int32 greenSpans = 0;
+	int32 blendedSpans = 0;
+	for (int32 i = 0; i < paragraph.CountTextSpans(); i++) {
+		const CharacterStyle& style = paragraph.TextSpanAtIndex(i).Style();
+		if (style.WhichBackgroundColor() != B_NO_COLOR) {
+			plainSpans++;
+			continue;
+		}
+		rgb_color background = style.BackgroundColor();
+		if (background.red == 200 && background.green == 0)
+			redSpans++;
+		else if (background.red == 0 && background.green == 200)
+			greenSpans++;
+		else if (background.red == 100 && background.green == 100)
+			blendedSpans++;
+	}
+
+	Check(redSpans == 1 && greenSpans == 1,
+		"BibleTextDocument: each highlight's non-overlapping part keeps "
+		"its own colour");
+	Check(blendedSpans == 1,
+		"BibleTextDocument: the overlapping part is the average of both "
+		"colours, not one of them");
+	Check(plainSpans > 0,
+		"BibleTextDocument: text outside every highlight stays "
+		"unpainted");
+
+	// Clearing highlights must restore the original span structure.
+	document.SetHighlights(std::vector<BibleTextDocument::VerseHighlight>());
+	const Paragraph& cleared = document.ParagraphAtIndex(0);
+	int32 stillPainted = 0;
+	for (int32 i = 0; i < cleared.CountTextSpans(); i++) {
+		if (cleared.TextSpanAtIndex(i).Style().WhichBackgroundColor()
+				== B_NO_COLOR) {
+			stillPainted++;
+		}
+	}
+	Check(stillPainted == 0,
+		"BibleTextDocument: clearing the highlights removes every "
+		"painted background again");
+}
+
+
+// #44: the coordinate system a stored highlight lives in must not move
+// when a display option is toggled. This is the property the whole
+// feature rests on -- offsets that shift when verse numbers are switched
+// on would silently relocate every highlight.
+static void
+TestVersePositionSurvivesDisplayOptions(SWModule* module)
+{
+	const char* name = "BibleTextDocument::VersePositionAt: the same "
+		"verse offset is reported whether or not verse numbers are shown";
+	if (module == NULL) {
+		Skip(name, "no Bible module installed");
+		return;
+	}
+
+	BibleTextDocument withoutNumbers(module);
+	withoutNumbers.SetShowVerseNumbers(false);
+	withoutNumbers.SetKey("Gen 1:2");
+
+	BibleTextDocument withNumbers(module);
+	withNumbers.SetShowVerseNumbers(true);
+	withNumbers.SetKey("Gen 1:2");
+
+	// Aim at the same logical spot -- five characters into verse 2's own
+	// text -- reached through each document's own offsets.
+	int32 plainStart = 0, plainEnd = 0;
+	int32 numberedStart = 0, numberedEnd = 0;
+	if (!withoutNumbers.TextRangeForVerseRange(2, 2, plainStart, plainEnd)
+		|| !withNumbers.TextRangeForVerseRange(2, 2, numberedStart,
+			numberedEnd)) {
+		Skip(name, "verse 2 not present in this module");
+		return;
+	}
+
+	int plainVerse = 0, numberedVerse = 0;
+	int32 plainOffset = -1, numberedOffset = -1;
+	bool plainOk = withoutNumbers.VersePositionAt(plainStart + 5,
+		plainVerse, plainOffset);
+	// The numbered document carries a " 2 " prefix, so the same logical
+	// position sits further along its own offsets -- VersePositionAt()
+	// is what has to subtract that again.
+	bool numberedOk = false;
+	for (int32 probe = numberedStart; probe < numberedEnd; probe++) {
+		int verse = 0;
+		int32 verseOffset = -1;
+		if (withNumbers.VersePositionAt(probe, verse, verseOffset)
+			&& verse == 2 && verseOffset == 5) {
+			numberedOk = true;
+			numberedVerse = verse;
+			numberedOffset = verseOffset;
+			break;
+		}
+	}
+
+	Check(plainOk && plainVerse == 2 && plainOffset == 5,
+		"BibleTextDocument::VersePositionAt: reports the verse and the "
+		"offset within it");
+	Check(numberedOk && numberedVerse == 2 && numberedOffset == 5, name);
+
+	// And the payoff: the same stored highlight paints in both.
+	std::vector<BibleTextDocument::VerseHighlight> highlights;
+	BibleTextDocument::VerseHighlight highlight;
+	highlight.verse = 2;
+	highlight.start = 5;
+	highlight.end = 12;
+	highlight.color = (rgb_color){ 120, 200, 255, 255 };
+	highlights.push_back(highlight);
+
+	withoutNumbers.SetHighlights(highlights);
+	withNumbers.SetHighlights(highlights);
+
+	int32 paintedPlain = 0;
+	int32 paintedNumbered = 0;
+	int32 plainParagraph = withoutNumbers.ParagraphIndexForVerse(2);
+	int32 numberedParagraph = withNumbers.ParagraphIndexForVerse(2);
+	if (plainParagraph >= 0) {
+		const Paragraph& p = withoutNumbers.ParagraphAtIndex(plainParagraph);
+		for (int32 i = 0; i < p.CountTextSpans(); i++) {
+			if (p.TextSpanAtIndex(i).Style().WhichBackgroundColor()
+					== B_NO_COLOR) {
+				paintedPlain += p.TextSpanAtIndex(i).CountChars();
+			}
+		}
+	}
+	if (numberedParagraph >= 0) {
+		const Paragraph& p = withNumbers.ParagraphAtIndex(numberedParagraph);
+		for (int32 i = 0; i < p.CountTextSpans(); i++) {
+			if (p.TextSpanAtIndex(i).Style().WhichBackgroundColor()
+					== B_NO_COLOR) {
+				paintedNumbered += p.TextSpanAtIndex(i).CountChars();
+			}
+		}
+	}
+
+	Check(paintedPlain == 7 && paintedNumbered == 7,
+		"BibleTextDocument: one stored highlight paints the same seven "
+		"characters with verse numbers on and off");
+}
+
+
 int
 main()
 {
@@ -1622,6 +1811,8 @@ main()
 	TestRestyleRebuildDoesNotAccumulateEmptyParagraphs();
 	TestTypingIntoARestyleBuiltDocument();
 	TestHighlightedSpanPaintsItsBackground();
+	TestHighlightsSplitSpansAndBlend(moduleA);
+	TestVersePositionSurvivesDisplayOptions(moduleA);
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;
