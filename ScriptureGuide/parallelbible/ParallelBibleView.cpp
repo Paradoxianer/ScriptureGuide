@@ -501,6 +501,11 @@ public:
 			return;
 		}
 
+		// #44: any click puts the palette away again -- see
+		// _DismissHighlightPalette() for why it cannot close itself.
+		if (fOwner != NULL)
+			fOwner->_DismissHighlightPalette();
+
 		fMouseDownPoint = where;
 		fTrackingForDrag = false;
 		if (HasSelection()) {
@@ -2898,8 +2903,10 @@ ParallelBibleView::_ShowHighlightPalette(const char* module,
 
 	// Offset a little so the bar does not open directly under the
 	// pointer, where the release just happened.
+	_DismissHighlightPalette();
 	HighlightPaletteWindow* palette = new HighlightPaletteWindow(
 		BPoint(screenPoint.x, screenPoint.y + 8.0f), BMessenger(this));
+	fHighlightPalette = BMessenger(palette);
 	palette->Show();
 }
 
@@ -3031,6 +3038,15 @@ ParallelBibleView::_RemoveHighlightsIn(const BString& moduleName,
 		if (bookmark.SpanEnd() > start && bookmark.SpanStart() < end)
 			bookmark.Remove();
 	}
+}
+
+
+void
+ParallelBibleView::_DismissHighlightPalette()
+{
+	if (fHighlightPalette.IsValid())
+		fHighlightPalette.SendMessage(B_QUIT_REQUESTED);
+	fHighlightPalette = BMessenger();
 }
 
 
@@ -3608,8 +3624,10 @@ ParallelBibleView::SetKey(const char* key)
 	// ones for the chapter now being shown. Done once here rather than
 	// inside BibleTextDocument, which has no business knowing where
 	// highlights are kept.
-	if (changedAnyBible)
+	if (changedAnyBible) {
+		_DismissHighlightPalette();
 		_ReloadHighlights();
+	}
 	bigtime_t perfAfterBible = system_time();
 
 	// A notes column now navigates with its own chain exactly like a

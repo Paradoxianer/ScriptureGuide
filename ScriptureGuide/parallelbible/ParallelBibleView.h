@@ -423,6 +423,11 @@ public:
 					BString	text;
 				};
 				PendingHighlight	fPendingHighlight;
+				// A messenger rather than a raw pointer: the palette
+				// closes itself when a swatch is clicked, and a
+				// BMessenger to a gone BWindow simply reports invalid
+				// instead of dangling.
+				BMessenger			fHighlightPalette;
 				bool				_HasActiveColumnSelection() const;
 				bool				_IsColumnSelectionOwnedByOther(
 										BibleColumnView* column) const;
@@ -479,6 +484,12 @@ public:
 				// belonging to each column's own module and current
 				// chapter into that column's document.
 				void				_ReloadHighlights();
+				// #44: closes the palette if one is open. B_AVOID_FOCUS
+				// means the window may never be activated at all, so it
+				// cannot rely on WindowActivated(false) to notice it has
+				// been abandoned -- the next click anywhere in a column,
+				// and any chapter change, dismiss it explicitly instead.
+				void				_DismissHighlightPalette();
 				static BString		_HighlightColorFolder(
 										const BString& root,
 										const BString& name);
