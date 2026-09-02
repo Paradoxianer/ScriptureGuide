@@ -169,6 +169,13 @@ public:
 			void			SetColor(rgb_color color);
 
 			void			SetReference(const char* referenceLine);
+			// Companions to SetReference() -- Code()/NavigationKey() both
+			// re-parse the reference under THIS bookmark's own locale and
+			// versification, so setting a reference without them yields a
+			// key that only parses by luck (a localized book name under
+			// the default English locale simply fails).
+			void			SetVersification(const char* versification);
+			void			SetLocale(const char* locale);
 			void			SetPosition(int32 position);
 			void			SetTags(const char* tags);
 

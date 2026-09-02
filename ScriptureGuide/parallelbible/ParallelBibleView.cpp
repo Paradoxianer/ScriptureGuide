@@ -33,6 +33,8 @@
 #include <ScrollView.h>
 #include <StringView.h>
 #include <TextView.h>
+#include <Directory.h>
+#include <Screen.h>
 #include <Window.h>
 
 #include <versekey.h>
@@ -212,6 +214,171 @@ private:
 // ParallelBibleView), set by _RebuildLayout() right after construction --
 // used to find its own chain (see ScrollTo()/MessageReceived() below,
 // and _SetActiveColumn() calls).
+// #44: the little colour bar that appears next to a fresh drag-
+// selection. Deliberately a borderless window rather than a popup menu:
+// a menu grabs focus and the mouse when the user did not ask for one,
+// and the automatic appearance here is exactly the case where that
+// feels wrong.
+//
+// B_AVOID_FOCUS is the load-bearing flag. Without it this window takes
+// focus the moment it opens, the reading column loses its selection,
+// and the colour the user is about to click has nothing left to apply
+// to. It also means the window never gets key events, hence the
+// explicit dismissal paths below.
+class HighlightPaletteWindow : public BWindow {
+public:
+	struct Entry {
+		const char*	name;
+		rgb_color	color;
+	};
+
+	// Muted on purpose -- these sit behind body text that still has to
+	// read comfortably, in both light and dark appearance, so they are
+	// closer to a wash than to a marker pen.
+	static const Entry* Palette(int32& outCount)
+	{
+		static const Entry sPalette[] = {
+			{ "Green",  { 0xc8, 0xe6, 0xc9, 255 } },
+			{ "Yellow", { 0xf7, 0xec, 0xb3, 255 } },
+			{ "Red",    { 0xf5, 0xc6, 0xc6, 255 } },
+			{ "Blue",   { 0xc5, 0xdd, 0xf2, 255 } },
+			{ "Purple", { 0xdc, 0xcb, 0xe8, 255 } },
+			{ "Grey",   { 0xd8, 0xd8, 0xd8, 255 } }
+		};
+		outCount = (int32)(sizeof(sPalette) / sizeof(sPalette[0]));
+		return sPalette;
+	}
+
+	HighlightPaletteWindow(BPoint where, BMessenger target)
+		:
+		BWindow(BRect(where.x, where.y, where.x + 10, where.y + 10), "",
+			B_NO_BORDER_WINDOW_LOOK, B_FLOATING_ALL_WINDOW_FEEL,
+			B_AVOID_FOCUS | B_NOT_RESIZABLE | B_NOT_ZOOMABLE
+				| B_NOT_MINIMIZABLE | B_ASYNCHRONOUS_CONTROLS),
+		fTarget(target)
+	{
+		const float kSwatch = 20.0f;
+		const float kGap = 4.0f;
+
+		int32 count = 0;
+		const Entry* palette = Palette(count);
+
+		// One extra cell on the end for "remove the highlight here",
+		// so undoing a mis-click never needs a different gesture than
+		// making one.
+		float width = kGap + (count + 1) * (kSwatch + kGap);
+		float height = kGap * 2 + kSwatch;
+		ResizeTo(width, height);
+
+		BView* backdrop = new BView(Bounds(), "backdrop", B_FOLLOW_ALL,
+			B_WILL_DRAW);
+		backdrop->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+		AddChild(backdrop);
+
+		for (int32 i = 0; i < count; i++) {
+			BRect frame(kGap + i * (kSwatch + kGap), kGap, 0, 0);
+			frame.right = frame.left + kSwatch;
+			frame.bottom = frame.top + kSwatch;
+
+			BMessage* message = new BMessage(PARALLEL_HIGHLIGHT_APPLY);
+			message->AddInt32("color", _PackColor(palette[i].color));
+			message->AddString("name", palette[i].name);
+			backdrop->AddChild(new SwatchView(frame, palette[i].color,
+				message, this));
+		}
+
+		BRect removeFrame(kGap + count * (kSwatch + kGap), kGap, 0, 0);
+		removeFrame.right = removeFrame.left + kSwatch;
+		removeFrame.bottom = removeFrame.top + kSwatch;
+		backdrop->AddChild(new SwatchView(removeFrame,
+			ui_color(B_PANEL_BACKGROUND_COLOR),
+			new BMessage(PARALLEL_HIGHLIGHT_APPLY), this, true));
+
+		// Keep the bar on screen when the selection ends near an edge.
+		BScreen screen;
+		BRect screenFrame = screen.Frame();
+		BPoint position = where;
+		if (position.x + width > screenFrame.right)
+			position.x = screenFrame.right - width;
+		if (position.y + height > screenFrame.bottom)
+			position.y = where.y - height - 4.0f;
+		MoveTo(position);
+	}
+
+	void Chosen(BMessage* message)
+	{
+		fTarget.SendMessage(message);
+		PostMessage(B_QUIT_REQUESTED);
+	}
+
+	// B_AVOID_FOCUS means no key events and no deactivation to hook, so
+	// dismissal rides on the mouse leaving instead: anything that is not
+	// a click on a swatch closes the bar and highlights nothing, which
+	// is the "click elsewhere and the selection stays free for its other
+	// uses" behaviour this was asked to have.
+	virtual void WindowActivated(bool active)
+	{
+		if (!active)
+			PostMessage(B_QUIT_REQUESTED);
+	}
+
+private:
+	static int32 _PackColor(rgb_color color)
+	{
+		return ((int32)color.red << 16) | ((int32)color.green << 8)
+			| (int32)color.blue;
+	}
+
+	class SwatchView : public BView {
+	public:
+		SwatchView(BRect frame, rgb_color color, BMessage* message,
+			HighlightPaletteWindow* owner, bool isRemove = false)
+			:
+			BView(frame, "swatch", B_FOLLOW_NONE, B_WILL_DRAW),
+			fColor(color),
+			fMessage(message),
+			fOwner(owner),
+			fIsRemove(isRemove)
+		{
+		}
+
+		virtual ~SwatchView() { delete fMessage; }
+
+		virtual void Draw(BRect updateRect)
+		{
+			BRect bounds(Bounds());
+			SetHighColor(fColor);
+			FillRect(bounds);
+			SetHighColor(tint_color(ui_color(B_PANEL_BACKGROUND_COLOR),
+				B_DARKEN_2_TINT));
+			StrokeRect(bounds);
+			if (fIsRemove) {
+				// A plain diagonal cross reads as "none" without needing
+				// a glyph or a translated label in a 20px cell.
+				StrokeLine(bounds.LeftTop() + BPoint(4, 4),
+					bounds.RightBottom() - BPoint(4, 4));
+				StrokeLine(bounds.LeftBottom() + BPoint(4, -4),
+					bounds.RightTop() - BPoint(4, -4));
+			}
+		}
+
+		virtual void MouseDown(BPoint where)
+		{
+			if (fOwner != NULL && fMessage != NULL)
+				fOwner->Chosen(fMessage);
+		}
+
+	private:
+		rgb_color				fColor;
+		BMessage*				fMessage;
+		HighlightPaletteWindow*	fOwner;
+		bool					fIsRemove;
+	};
+
+	BMessenger	fTarget;
+};
+
+
 class BibleColumnView : public TextDocumentView {
 public:
 	BibleColumnView(const char* name, BibleTextDocument* document,
@@ -438,6 +605,15 @@ public:
 			if (wasPlainClick) {
 				if (!_TryFollowReferenceAt(where))
 					_TryFollowStrongsNumberAt(where);
+			} else {
+				// #44: a real drag-selection just ended inside this one
+				// column -- offer the highlight palette. Only here, not
+				// on a plain click, and not on the cross-column path
+				// (which routes through _ColumnSelectionMoved() and
+				// never reaches this branch), because a highlight is
+				// anchored to character offsets that only exist in this
+				// one module's text.
+				_OfferHighlight(where);
 			}
 		}
 		TextDocumentView::MouseUp(where);
@@ -980,6 +1156,61 @@ private:
 	}
 
 private:
+	// #44: turn the live selection into a verse-anchored range and ask
+	// the owner to show the palette. Bails out quietly whenever the
+	// selection cannot be expressed that way -- most importantly when it
+	// spans more than one verse, which a single stored span cannot
+	// describe (each verse would need its own).
+	void _OfferHighlight(BPoint where)
+	{
+		if (fBibleDocument == NULL || fOwner == NULL)
+			return;
+
+		int32 start = -1;
+		int32 end = -1;
+		GetSelection(start, end);
+		if (start < 0 || end <= start)
+			return;
+
+		int startVerse = 0;
+		int endVerse = 0;
+		int32 startOffset = 0;
+		int32 endOffset = 0;
+		if (!fBibleDocument->VersePositionAt(start, startVerse, startOffset)
+			|| !fBibleDocument->VersePositionAt(end, endVerse, endOffset)) {
+			return;
+		}
+		if (startVerse != endVerse || endOffset <= startOffset)
+			return;
+
+		BString reference = _ReferenceFor(start, end);
+
+		BString versification;
+		SWModule* module = fBibleDocument->Module();
+		if (module != NULL) {
+			const char* configured = module->getConfigEntry("Versification");
+			if (configured != NULL)
+				versification = configured;
+		}
+		if (versification.IsEmpty())
+			versification = "KJV";
+
+		BLanguage language;
+		BLocale::Default()->GetLanguage(&language);
+
+		// The covered text itself, kept so a module update that shifts
+		// the offsets can be healed against it later rather than
+		// silently mislocating the mark.
+		BString spanText = fBibleDocument->Text(start, end - start);
+
+		BPoint screenPoint = where;
+		ConvertToScreen(&screenPoint);
+		fOwner->_ShowHighlightPalette(fTranslationName.String(),
+			reference.String(), versification.String(), language.Code(),
+			startVerse, startOffset, endOffset, spanText.String(),
+			screenPoint);
+	}
+
 	BibleTextDocument*	fBibleDocument;
 	BString				fTranslationName;
 	ParallelBibleView*	fOwner;
@@ -1910,6 +2141,55 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case PARALLEL_HIGHLIGHT_APPLY:
+		{
+			// #44: a swatch was clicked in the palette. No "color" at
+			// all is the remove cell -- see the palette's own comment.
+			if (fPendingHighlight.module.IsEmpty()
+				|| fPendingHighlight.end <= fPendingHighlight.start) {
+				break;
+			}
+
+			int32 packed;
+			BString name;
+			if (message->FindInt32("color", &packed) == B_OK
+				&& message->FindString("name", &name) == B_OK) {
+				rgb_color color;
+				color.red = (uint8)((packed >> 16) & 0xff);
+				color.green = (uint8)((packed >> 8) & 0xff);
+				color.blue = (uint8)(packed & 0xff);
+				color.alpha = 255;
+
+				BString root = BookmarkFile::HighlightsDirectory();
+				BString folder = _HighlightColorFolder(root, name);
+				if (!folder.IsEmpty()) {
+					BookmarkFile bookmark;
+					int32 position = (int32)
+						BookmarkFile::ListBookmarkPaths(folder.String())
+							.size();
+					if (bookmark.CreateNew(folder.String(),
+							fPendingHighlight.reference.String(),
+							fPendingHighlight.versification.String(),
+							fPendingHighlight.locale.String(), position)
+								== B_OK) {
+						bookmark.SetSpan(fPendingHighlight.module.String(),
+							fPendingHighlight.start, fPendingHighlight.end,
+							fPendingHighlight.text.String());
+						bookmark.SetColor(color);
+						bookmark.Save();
+					}
+				}
+			} else {
+				_RemoveHighlightsIn(fPendingHighlight.module,
+					fPendingHighlight.reference, fPendingHighlight.verse,
+					fPendingHighlight.start, fPendingHighlight.end);
+			}
+
+			fPendingHighlight.module = "";
+			_ReloadHighlights();
+			break;
+		}
+
 		case PARALLEL_NOTES_TEXT_CHANGED:
 		{
 			// The debounce timer armed by NoteTextEdited() has expired --
@@ -2602,6 +2882,179 @@ PopulateAddToListMenu(BMenu* menu, BHandler* target, const char* path,
 
 
 void
+ParallelBibleView::_ShowHighlightPalette(const char* module,
+	const char* reference, const char* versification, const char* locale,
+	int verse, int32 start, int32 end, const char* spanText,
+	BPoint screenPoint)
+{
+	fPendingHighlight.module = module;
+	fPendingHighlight.reference = reference;
+	fPendingHighlight.versification = versification;
+	fPendingHighlight.locale = locale;
+	fPendingHighlight.verse = verse;
+	fPendingHighlight.start = start;
+	fPendingHighlight.end = end;
+	fPendingHighlight.text = spanText;
+
+	// Offset a little so the bar does not open directly under the
+	// pointer, where the release just happened.
+	HighlightPaletteWindow* palette = new HighlightPaletteWindow(
+		BPoint(screenPoint.x, screenPoint.y + 8.0f), BMessenger(this));
+	palette->Show();
+}
+
+
+// Every stored highlight that belongs to a given module and the chapter
+// a document is currently showing. Matching goes through
+// BookmarkFile::Code() -- testament+book+chapter+verse, zero-padded --
+// so the chapter test is a plain prefix comparison and no reference has
+// to be re-parsed here under a locale that may not be the one it was
+// written in.
+static std::vector<BibleTextDocument::VerseHighlight>
+HighlightsForDocument(const std::vector<BookmarkFile>& all,
+	const BString& moduleName, BibleTextDocument* document)
+{
+	std::vector<BibleTextDocument::VerseHighlight> result;
+	if (document == NULL || moduleName.IsEmpty())
+		return result;
+
+	// The code of verse 1 of whatever chapter this document shows; its
+	// first six digits (testament + book + chapter) identify the
+	// chapter. Code() is derived purely from reference/versification/
+	// locale, so a throwaway instance is enough -- nothing is written.
+	BString chapterPrefix;
+	{
+		BString chapterKey(document->Key());
+		int32 colon = chapterKey.FindLast(':');
+		if (colon > 0) {
+			chapterKey.Truncate(colon);
+			chapterKey << ":1";
+		}
+		BookmarkFile probe;
+		probe.SetReference(chapterKey.String());
+		// Both matter: Key() is kept LOCALIZED (see BibleTextDocument's
+		// own comment), so without the locale "1. Mose 1:1" does not
+		// parse at all under a default English key, Code() comes back
+		// empty and every highlight is silently dropped -- confirmed
+		// live, nothing rendered until this was set.
+		probe.SetVersification(document->Versification());
+		BLanguage probeLanguage;
+		BLocale::Default()->GetLanguage(&probeLanguage);
+		probe.SetLocale(probeLanguage.Code());
+		BString code = probe.Code();
+		if (code.Length() >= 6)
+			chapterPrefix.SetTo(code.String(), 6);
+	}
+	if (chapterPrefix.IsEmpty())
+		return result;
+
+	for (size_t i = 0; i < all.size(); i++) {
+		const BookmarkFile& bookmark = all[i];
+		if (BString(bookmark.SpanModule()) != moduleName)
+			continue;
+
+		BString code = bookmark.Code();
+		if (code.Length() < 9)
+			continue;
+		BString prefix;
+		prefix.SetTo(code.String(), 6);
+		if (prefix != chapterPrefix)
+			continue;
+
+		BibleTextDocument::VerseHighlight highlight;
+		highlight.verse = atoi(code.String() + 6);
+		highlight.start = bookmark.SpanStart();
+		highlight.end = bookmark.SpanEnd();
+		highlight.color = bookmark.Color();
+		result.push_back(highlight);
+	}
+
+	return result;
+}
+
+
+// The folder a colour's highlights live in, created on demand. Named
+// after the palette entry so the tree stays browsable in Tracker; the
+// authoritative colour is still the attribute on each bookmark, so
+// renaming a folder later cannot recolour anything.
+BString
+ParallelBibleView::_HighlightColorFolder(const BString& root,
+	const BString& name)
+{
+	if (root.IsEmpty() || name.IsEmpty())
+		return BString();
+
+	BPath path(root.String());
+	path.Append(name.String());
+	if (create_directory(path.Path(), 0755) != B_OK)
+		return BString();
+	return BString(path.Path());
+}
+
+
+// Deletes every stored highlight of this module that overlaps the given
+// range in the given verse -- the palette's "remove" cell. Overlap
+// rather than exact match on purpose: the user selects roughly over a
+// mark to clear it, not precisely the range they originally drew.
+void
+ParallelBibleView::_RemoveHighlightsIn(const BString& moduleName,
+	const BString& reference, int verse, int32 start, int32 end)
+{
+	std::vector<BookmarkFile> all = BookmarkFile::ListHighlights();
+	for (size_t i = 0; i < all.size(); i++) {
+		BookmarkFile& bookmark = all[i];
+		if (BString(bookmark.SpanModule()) != moduleName)
+			continue;
+
+		BString code = bookmark.Code();
+		if (code.Length() < 9 || atoi(code.String() + 6) != verse)
+			continue;
+
+		// Same chapter as the selection, established by comparing the
+		// whole nine-digit code's chapter part against the reference the
+		// selection itself carries.
+		BookmarkFile probe;
+		probe.SetReference(reference.String());
+		probe.SetVersification(bookmark.Versification());
+		BLanguage probeLanguage;
+		BLocale::Default()->GetLanguage(&probeLanguage);
+		probe.SetLocale(probeLanguage.Code());
+		BString selectionCode = probe.Code();
+		if (selectionCode.Length() >= 6) {
+			BString a, b;
+			a.SetTo(code.String(), 6);
+			b.SetTo(selectionCode.String(), 6);
+			if (a != b)
+				continue;
+		}
+
+		if (bookmark.SpanEnd() > start && bookmark.SpanStart() < end)
+			bookmark.Remove();
+	}
+}
+
+
+void
+ParallelBibleView::_ReloadHighlights()
+{
+	// Read once for the whole view rather than once per column: the
+	// files are tiny, but the directory walk is not free and every
+	// column would repeat exactly the same one.
+	std::vector<BookmarkFile> all = BookmarkFile::ListHighlights();
+
+	for (size_t i = 0; i < fDocuments.size(); i++) {
+		BibleTextDocument* document = fDocuments[i].Get();
+		if (document == NULL || i >= fModules.size() || fModules[i] == NULL)
+			continue;
+		document->SetHighlights(HighlightsForDocument(all,
+			BString(fModules[i]->getName()), document));
+	}
+
+	_Realign();
+}
+
+
+void
 ParallelBibleView::_ShowAddToListMenu(const char* reference,
 	const char* versification, const char* locale, BPoint screenPoint)
 {
@@ -3149,6 +3602,14 @@ ParallelBibleView::SetKey(const char* key)
 	}
 	if (changedAnyBible)
 		fLastKnownKey = key;
+	// #44: SetKey() above rebuilt each Bible document from scratch,
+	// which drops whatever highlights it was carrying -- they belong to
+	// the chapter that was showing, not this one. Re-read the stored
+	// ones for the chapter now being shown. Done once here rather than
+	// inside BibleTextDocument, which has no business knowing where
+	// highlights are kept.
+	if (changedAnyBible)
+		_ReloadHighlights();
 	bigtime_t perfAfterBible = system_time();
 
 	// A notes column now navigates with its own chain exactly like a

@@ -311,6 +311,20 @@ BookmarkFile::SetReference(const char* referenceLine)
 
 
 void
+BookmarkFile::SetVersification(const char* versification)
+{
+	fVersification = versification != NULL ? versification : "";
+}
+
+
+void
+BookmarkFile::SetLocale(const char* locale)
+{
+	fLocale = locale != NULL ? locale : "";
+}
+
+
+void
 BookmarkFile::SetPosition(int32 position)
 {
 	fPosition = position;

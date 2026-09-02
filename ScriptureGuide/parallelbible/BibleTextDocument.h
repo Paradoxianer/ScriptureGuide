@@ -81,6 +81,8 @@ public:
 			// count in German or Luther and give the chapter more verses
 			// (#46). NULL or empty restores the module's own.
 			void				SetVersification(const char* versification);
+			const char*			Versification() const
+									{ return fVersification.String(); }
 
 			void				SetShowVerseNumbers(bool show);
 			bool				ShowVerseNumbers() const

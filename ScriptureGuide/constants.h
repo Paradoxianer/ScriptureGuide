@@ -100,6 +100,11 @@ const uint32 PARALLEL_NOTES_TEXT_CHANGED = 'PVnt';
 // the already-formatted reference plus its source versification/locale
 // as "path"/"reference"/"versification"/"locale".
 const uint32 PARALLEL_ADD_TO_VERSE_LIST	= 'PVal';
+// #44: a colour was picked in the highlight palette that pops up after a
+// drag-selection. Carries "color" (an int32-packed rgb_color) and
+// "name" (the palette entry's own name, used as the colour's folder);
+// absent "color" means "remove the highlights under this selection".
+const uint32 PARALLEL_HIGHLIGHT_APPLY	= 'PVha';
 
 const uint32 MENU_HELP_LOGOS			= 'MHlo';
 const uint32 MENU_HELP_HOWTO			= 'MHho';

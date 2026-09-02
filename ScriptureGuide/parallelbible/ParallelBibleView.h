@@ -408,6 +408,21 @@ public:
 				void				_ColumnSelectionMoved(
 										BibleColumnView* source, BPoint screenPoint);
 				void				_ColumnSelectionEnded();
+				// #44: whatever the highlight palette is currently
+				// offering to act on -- held between the palette opening
+				// and a colour being clicked, since the palette answers
+				// asynchronously.
+				struct PendingHighlight {
+					BString	module;
+					BString	reference;
+					BString	versification;
+					BString	locale;
+					int		verse;
+					int32	start;
+					int32	end;
+					BString	text;
+				};
+				PendingHighlight	fPendingHighlight;
 				bool				_HasActiveColumnSelection() const;
 				bool				_IsColumnSelectionOwnedByOther(
 										BibleColumnView* column) const;
@@ -447,6 +462,31 @@ public:
 				// under. Builds the cascading collection tree (same shape
 				// as SGVerseListWindow's own "Go to List") and appends to
 				// whichever one is picked.
+				// #44: called by BibleColumnView when a drag-selection
+				// inside ONE column has just ended. `verse`/`start`/`end`
+				// are already in the verse's own normal-form character
+				// offsets (BibleTextDocument::VersePositionAt()), so
+				// nothing downstream has to know about rendering again.
+				void				_ShowHighlightPalette(
+										const char* module,
+										const char* reference,
+										const char* versification,
+										const char* locale,
+										int verse, int32 start, int32 end,
+										const char* spanText,
+										BPoint screenPoint);
+				// Re-reads every stored highlight and pushes the ones
+				// belonging to each column's own module and current
+				// chapter into that column's document.
+				void				_ReloadHighlights();
+				static BString		_HighlightColorFolder(
+										const BString& root,
+										const BString& name);
+				void				_RemoveHighlightsIn(
+										const BString& moduleName,
+										const BString& reference,
+										int verse, int32 start, int32 end);
+
 				void				_ShowAddToListMenu(
 										const char* reference,
 										const char* versification,
