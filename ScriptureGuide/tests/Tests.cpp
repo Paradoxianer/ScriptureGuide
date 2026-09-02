@@ -16,6 +16,7 @@
 #include <stdio.h>
 
 #include <Application.h>
+#include <Entry.h>
 #include <View.h>
 #include <Bitmap.h>
 #include <Language.h>
@@ -26,6 +27,7 @@
 #include <swmgr.h>
 
 #include "BibleTextDocument.h"
+#include "BookmarkFile.h"
 #include "Paragraph.h"
 #include "ParagraphLayout.h"
 #include "ParallelBibleView.h"
@@ -1758,6 +1760,83 @@ TestVersePositionSurvivesDisplayOptions(SWModule* module)
 }
 
 
+// #44: a highlight is an ordinary BookmarkFile carrying extra optional
+// attributes, so the round trip that matters is "write span + colour,
+// read them back identically" -- and, just as importantly, that an
+// ordinary bookmark is not mistaken for one.
+static void
+TestHighlightBookmarkRoundTrip()
+{
+	BString root = BookmarkFile::HighlightsDirectory();
+	if (root.IsEmpty()) {
+		Skip("BookmarkFile: highlight span/colour round-trip",
+			"could not create the highlights directory");
+		return;
+	}
+
+	BString collection = BookmarkFile::CreateCollection(root.String(),
+		"UnitTestColour");
+	if (collection.IsEmpty()) {
+		Skip("BookmarkFile: highlight span/colour round-trip",
+			"could not create a test colour folder");
+		return;
+	}
+
+	const rgb_color kColor = (rgb_color){ 0x66, 0xcc, 0x66, 255 };
+
+	BookmarkFile written;
+	Check(written.CreateNew(collection.String(), "Johannes 3:16", "KJV", "de",
+		0) == B_OK, "BookmarkFile: a highlight bookmark can be created");
+	written.SetSpan("GerSch", 12, 45, "sondern das ewige Leben hat");
+	written.SetColor(kColor);
+	Check(written.Save() == B_OK,
+		"BookmarkFile: saving a bookmark with span and colour succeeds");
+
+	BookmarkFile readBack;
+	Check(readBack.SetTo(written.Path()) == B_OK,
+		"BookmarkFile: a highlight bookmark reads back");
+	Check(readBack.HasSpan() && readBack.HasColor(),
+		"BookmarkFile: span and colour survive the round trip");
+	Check(BString(readBack.SpanModule()) == "GerSch"
+			&& readBack.SpanStart() == 12 && readBack.SpanEnd() == 45,
+		"BookmarkFile: the span's module and offsets are unchanged");
+	Check(BString(readBack.SpanText()) == "sondern das ewige Leben hat",
+		"BookmarkFile: the healing text snippet is unchanged");
+	Check(readBack.Color().red == kColor.red
+			&& readBack.Color().green == kColor.green
+			&& readBack.Color().blue == kColor.blue,
+		"BookmarkFile: the colour is unchanged");
+
+	// The same file type is used for ordinary bookmarks, so absence has
+	// to be just as reliable as presence.
+	BookmarkFile plain;
+	if (plain.CreateNew(collection.String(), "Johannes 3:17", "KJV", "de", 1)
+			== B_OK) {
+		BookmarkFile plainReadBack;
+		plainReadBack.SetTo(plain.Path());
+		Check(!plainReadBack.HasSpan() && !plainReadBack.HasColor(),
+			"BookmarkFile: an ordinary bookmark is not mistaken for a "
+			"highlight");
+		plain.Remove();
+	}
+
+	std::vector<BookmarkFile> listed = BookmarkFile::ListHighlights();
+	bool found = false;
+	for (size_t i = 0; i < listed.size(); i++) {
+		if (BString(listed[i].Path()) == BString(written.Path()))
+			found = true;
+	}
+	Check(found,
+		"BookmarkFile::ListHighlights: finds a highlight inside a colour "
+		"folder");
+
+	// Clean up after itself -- this test writes into the real settings
+	// tree, same as the personal-notes test above.
+	written.Remove();
+	BEntry(collection.String()).Remove();
+}
+
+
 int
 main()
 {
@@ -1813,6 +1892,7 @@ main()
 	TestHighlightedSpanPaintsItsBackground();
 	TestHighlightsSplitSpansAndBlend(moduleA);
 	TestVersePositionSurvivesDisplayOptions(moduleA);
+	TestHighlightBookmarkRoundTrip();
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;

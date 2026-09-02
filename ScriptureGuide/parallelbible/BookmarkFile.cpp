@@ -36,6 +36,12 @@ static const char* kAttrTags = "SG:tags";
 static const char* kAttrReference = "SG:reference";
 static const char* kAttrVersification = "SG:versification";
 static const char* kAttrLocale = "SG:locale";
+// #44 -- all optional; absent on an ordinary (whole-verse) bookmark.
+static const char* kAttrSpanModule = "SG:span:module";
+static const char* kAttrSpanStart = "SG:span:start";
+static const char* kAttrSpanEnd = "SG:span:end";
+static const char* kAttrSpanText = "SG:span:text";
+static const char* kAttrColorValue = "SG:colorvalue";
 
 static const char* kMirrorNote
 	= "# Mirror of this file's own attributes -- not authoritative; see"
@@ -84,8 +90,15 @@ ParseMirrorContent(const BString& body, BString& reference,
 
 BookmarkFile::BookmarkFile()
 	:
-	fPosition(-1)
+	fPosition(-1),
+	fSpanStart(0),
+	fSpanEnd(0),
+	fHasColor(false)
 {
+	fColor.red = 0;
+	fColor.green = 0;
+	fColor.blue = 0;
+	fColor.alpha = 255;
 }
 
 
@@ -173,6 +186,34 @@ BookmarkFile::SetTo(const char* path)
 	BString tags;
 	if (file.ReadAttrString(kAttrTags, &tags) == B_OK)
 		fTags = tags;
+
+	// #44: optional, and read as a group -- a bookmark either carries a
+	// full span (module plus both offsets) or none at all, so a partial
+	// set is treated as none rather than as a half-anchored highlight.
+	fSpanModule = "";
+	fSpanStart = 0;
+	fSpanEnd = 0;
+	fSpanText = "";
+	BString spanModule;
+	int32 spanStart = 0;
+	int32 spanEnd = 0;
+	if (file.ReadAttrString(kAttrSpanModule, &spanModule) == B_OK
+		&& !spanModule.IsEmpty()
+		&& file.ReadAttr(kAttrSpanStart, B_INT32_TYPE, 0, &spanStart,
+			sizeof(spanStart)) == (ssize_t)sizeof(spanStart)
+		&& file.ReadAttr(kAttrSpanEnd, B_INT32_TYPE, 0, &spanEnd,
+			sizeof(spanEnd)) == (ssize_t)sizeof(spanEnd)
+		&& spanEnd > spanStart) {
+		fSpanModule = spanModule;
+		fSpanStart = spanStart;
+		fSpanEnd = spanEnd;
+		file.ReadAttrString(kAttrSpanText, &fSpanText);
+	}
+
+	fHasColor = false;
+	BString colorValue;
+	if (file.ReadAttrString(kAttrColorValue, &colorValue) == B_OK)
+		fHasColor = ParseHighlightColor(colorValue.String(), fColor);
 
 	// #101: SG:reference is editable in Tracker now, so SG:code -- read
 	// by Tracker's own "Bible Order" column, never by this app, which
@@ -283,6 +324,62 @@ BookmarkFile::SetTags(const char* tags)
 }
 
 
+// "#rrggbb" -- a plain, human-readable form so the attribute stays
+// meaningful in Tracker and survives being copied off BFS in the file's
+// own content mirror, rather than an opaque packed integer.
+bool
+ParseHighlightColor(const char* value, rgb_color& outColor)
+{
+	if (value == NULL)
+		return false;
+	BString text(value);
+	text.Trim();
+	if (text.Length() != 7 || text.ByteAt(0) != '#')
+		return false;
+
+	unsigned int red = 0;
+	unsigned int green = 0;
+	unsigned int blue = 0;
+	if (sscanf(text.String() + 1, "%2x%2x%2x", &red, &green, &blue) != 3)
+		return false;
+
+	outColor.red = (uint8)red;
+	outColor.green = (uint8)green;
+	outColor.blue = (uint8)blue;
+	outColor.alpha = 255;
+	return true;
+}
+
+
+BString
+FormatHighlightColor(rgb_color color)
+{
+	char buffer[8];
+	snprintf(buffer, sizeof(buffer), "#%02x%02x%02x", color.red, color.green,
+		color.blue);
+	return BString(buffer);
+}
+
+
+void
+BookmarkFile::SetSpan(const char* module, int32 start, int32 end,
+	const char* text)
+{
+	fSpanModule = module != NULL ? module : "";
+	fSpanStart = start;
+	fSpanEnd = end;
+	fSpanText = text != NULL ? text : "";
+}
+
+
+void
+BookmarkFile::SetColor(rgb_color color)
+{
+	fColor = color;
+	fHasColor = true;
+}
+
+
 BString
 BookmarkFile::NavigationKey() const
 {
@@ -383,6 +480,21 @@ BookmarkFile::Save()
 	file.WriteAttrString(kAttrCode, &code);
 	file.WriteAttrString(kAttrTags, &fTags);
 
+	// #44: written only when actually set, so an ordinary bookmark's
+	// attribute list stays exactly as it was before highlighting existed.
+	if (HasSpan()) {
+		file.WriteAttrString(kAttrSpanModule, &fSpanModule);
+		file.WriteAttr(kAttrSpanStart, B_INT32_TYPE, 0, &fSpanStart,
+			sizeof(fSpanStart));
+		file.WriteAttr(kAttrSpanEnd, B_INT32_TYPE, 0, &fSpanEnd,
+			sizeof(fSpanEnd));
+		file.WriteAttrString(kAttrSpanText, &fSpanText);
+	}
+	if (fHasColor) {
+		BString colorValue = FormatHighlightColor(fColor);
+		file.WriteAttrString(kAttrColorValue, &colorValue);
+	}
+
 	BNodeInfo info(&file);
 	info.SetType(kMimeType);
 
@@ -445,6 +557,62 @@ BookmarkFile::ListBookmarkPaths(const char* collectionPath)
 	for (size_t i = 0; i < ordered.size(); i++)
 		paths.push_back(ordered[i].second);
 	return paths;
+}
+
+
+BString
+BookmarkFile::HighlightsDirectory()
+{
+	// A dedicated folder under the verse-list root, deliberately kept
+	// apart from ordinary reading lists (#44) -- one sub-folder per
+	// colour, each an ordinary collection of ordinary bookmark files,
+	// so Tracker browses them and Copy to... already moves one into a
+	// real verse list without any new machinery.
+	BString root = RootDirectory();
+	if (root.IsEmpty())
+		return BString();
+
+	BPath path(root.String());
+	path.Append("Highlights");
+	create_directory(path.Path(), 0755);
+	return BString(path.Path());
+}
+
+
+std::vector<BookmarkFile>
+BookmarkFile::ListHighlights()
+{
+	std::vector<BookmarkFile> highlights;
+	BString root = HighlightsDirectory();
+	if (root.IsEmpty())
+		return highlights;
+
+	// One level of colour folders, then the bookmarks inside each --
+	// same non-recursive shape ListCollectionNames()/ListBookmarkPaths()
+	// already use, rather than walking an arbitrary tree.
+	BDirectory rootDir(root.String());
+	if (rootDir.InitCheck() != B_OK)
+		return highlights;
+
+	BEntry categoryEntry;
+	while (rootDir.GetNextEntry(&categoryEntry) == B_OK) {
+		if (!categoryEntry.IsDirectory())
+			continue;
+		BPath categoryPath;
+		if (categoryEntry.GetPath(&categoryPath) != B_OK)
+			continue;
+
+		std::vector<BString> paths = ListBookmarkPaths(categoryPath.Path());
+		for (size_t i = 0; i < paths.size(); i++) {
+			BookmarkFile bookmark;
+			if (bookmark.SetTo(paths[i].String()) == B_OK
+				&& bookmark.HasSpan() && bookmark.HasColor()) {
+				highlights.push_back(bookmark);
+			}
+		}
+	}
+
+	return highlights;
 }
 
 
@@ -609,6 +777,26 @@ BookmarkFile::EnsureMimeTypeRegistered()
 	attrInfo.AddBool("attr:viewable", true);
 	attrInfo.AddBool("attr:editable", false);
 	attrInfo.AddInt32("attr:width", 80);
+	attrInfo.AddInt32("attr:alignment", B_ALIGN_LEFT);
+
+	// #44: visible in Tracker, but not editable -- unlike Reference and
+	// Position (#101), a character offset is only meaningful against the
+	// exact rendered text it was taken from, so hand-editing one has no
+	// sensible outcome to aim for.
+	attrInfo.AddString("attr:name", kAttrColorValue);
+	attrInfo.AddString("attr:public_name", "Highlight Colour");
+	attrInfo.AddInt32("attr:type", B_STRING_TYPE);
+	attrInfo.AddBool("attr:viewable", true);
+	attrInfo.AddBool("attr:editable", false);
+	attrInfo.AddInt32("attr:width", 80);
+	attrInfo.AddInt32("attr:alignment", B_ALIGN_LEFT);
+
+	attrInfo.AddString("attr:name", kAttrSpanText);
+	attrInfo.AddString("attr:public_name", "Highlighted Text");
+	attrInfo.AddInt32("attr:type", B_STRING_TYPE);
+	attrInfo.AddBool("attr:viewable", true);
+	attrInfo.AddBool("attr:editable", false);
+	attrInfo.AddInt32("attr:width", 200);
 	attrInfo.AddInt32("attr:alignment", B_ALIGN_LEFT);
 
 	attrInfo.AddString("attr:name", kAttrTags);

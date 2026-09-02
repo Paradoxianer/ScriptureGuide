@@ -5,6 +5,7 @@
 #ifndef BOOKMARK_FILE_H
 #define BOOKMARK_FILE_H
 
+#include <GraphicsDefs.h>
 #include <String.h>
 #include <SupportDefs.h>
 
@@ -55,6 +56,13 @@
 // on a localized book name under the wrong locale, or none at all) --
 // see SGVerseListWindow::_NavigateToRow(), the one place this actually
 // gets re-parsed back into a key.
+// #44: "#rrggbb" <-> rgb_color, shared by BookmarkFile and whatever
+// builds the palette. Free functions rather than members because the
+// colour also has to be read back out of a folder's own attributes.
+bool			ParseHighlightColor(const char* value, rgb_color& outColor);
+BString			FormatHighlightColor(rgb_color color);
+
+
 class BookmarkFile {
 public:
 							BookmarkFile();
@@ -120,6 +128,46 @@ public:
 			// Versification()/Locale() after SetReference().
 			BString			Code() const;
 
+			// #44: optional highlight attributes. A bookmark carrying
+			// them marks a stretch INSIDE one verse, in one specific
+			// module, rather than the whole verse -- SpanModule() empty
+			// means "no span, the whole verse". Offsets are CHARACTER
+			// offsets into that verse's own normal-form text (see
+			// BibleTextDocument::VersePositionAt()), and SpanText() is
+			// the text they covered when it was written, kept so a
+			// module update that shifts the offsets can be healed
+			// against it rather than silently mislocating the mark.
+			//
+			// Deliberately additional attributes on the existing
+			// bookmark type, not a second file type: Haiku MIME types
+			// are strictly two-level with no attribute inheritance, so a
+			// "sub-type that inherits bookmark attributes" is not a
+			// thing that exists, and maintaining two parallel attr_info
+			// blocks would be worse anyway.
+			const char*		SpanModule() const
+									{ return fSpanModule.String(); }
+			int32			SpanStart() const
+									{ return fSpanStart; }
+			int32			SpanEnd() const
+									{ return fSpanEnd; }
+			const char*		SpanText() const
+									{ return fSpanText.String(); }
+			bool			HasSpan() const
+									{ return !fSpanModule.IsEmpty()
+										&& fSpanEnd > fSpanStart; }
+			void			SetSpan(const char* module, int32 start,
+									int32 end, const char* text);
+
+			// The highlight colour, stored on the bookmark itself rather
+			// than implied by which folder it sits in, so a later
+			// "highlight manager" offering custom colours needs no
+			// migration. HasColor() is false for an ordinary bookmark.
+			bool			HasColor() const
+									{ return fHasColor; }
+			rgb_color		Color() const
+									{ return fColor; }
+			void			SetColor(rgb_color color);
+
 			void			SetReference(const char* referenceLine);
 			void			SetPosition(int32 position);
 			void			SetTags(const char* tags);
@@ -141,6 +189,16 @@ public:
 			// there was nothing to preserve by keeping the extra
 			// "library" segment around.
 			static BString	RootDirectory();
+
+			// #44: RootDirectory()/Highlights -- one sub-folder per
+			// colour, each an ordinary collection. Created on demand.
+			static BString	HighlightsDirectory();
+
+			// Every highlight in every colour folder, one level deep.
+			// Only bookmarks carrying BOTH a span and a colour are
+			// returned, so anything else that ends up in there is
+			// ignored rather than half-interpreted.
+			static std::vector<BookmarkFile>	ListHighlights();
 
 			// Every bookmark file directly inside `collectionPath` (NOT
 			// recursive -- a nested collection's own bookmarks are not
@@ -192,6 +250,14 @@ private:
 			BString			fLocale;
 			int32			fPosition;
 			BString			fTags;
+
+			// #44, all optional -- see the accessors above.
+			BString			fSpanModule;
+			int32			fSpanStart;
+			int32			fSpanEnd;
+			BString			fSpanText;
+			bool			fHasColor;
+			rgb_color		fColor;
 };
 
 #endif // BOOKMARK_FILE_H
