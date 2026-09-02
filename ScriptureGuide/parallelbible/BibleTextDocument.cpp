@@ -467,6 +467,24 @@ BibleTextDocument::IsLinkedToPrevious(int verse) const
 }
 
 
+int32
+BibleTextDocument::VerseTextLength(int verse) const
+{
+	int32 index = ParagraphIndexForVerse(verse);
+	if (index < 0)
+		return -1;
+
+	int32 length = ParagraphAtIndex(index).Length();
+	if (index < (int32)fParagraphPrefixChars.size())
+		length -= fParagraphPrefixChars[index];
+	// The terminator is appended after every styled span (see
+	// _Rebuild()), so it is part of the paragraph but not of the verse.
+	if (fParagraphsEndWithNewline && length > 0)
+		length -= 1;
+	return length > 0 ? length : 0;
+}
+
+
 bool
 BibleTextDocument::VersePositionAt(int32 documentOffset, int& outVerse,
 	int32& outVerseOffset) const
@@ -841,8 +859,15 @@ BibleTextDocument::_Rebuild()
 		// GBFPlain leaves paragraph markers behind; strip them so verses
 		// don't carry stray blank lines or pilcrows into the layout.
 		text.RemoveAll("\x0a\x0a");
-		text.RemoveAll("\xc2\xb6 ");
-		text.RemoveAll("<P> ");
+		// The pilcrow was only ever stripped when followed by a space,
+		// so one ending a verse survived and rendered as a stray control
+		// glyph -- reported live. Strip the marker itself, then the
+		// space it may or may not have left behind, then any double
+		// space that leaves mid-sentence.
+		text.RemoveAll("\xc2\xb6");
+		text.RemoveAll("<P>");
+		text.ReplaceAll("  ", " ");
+		text.Trim();
 
 		// Strong's numbers (#27): fModule->getEntryAttributes() reflects
 		// whatever the most recent renderText() call above populated --

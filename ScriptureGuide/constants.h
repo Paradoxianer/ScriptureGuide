@@ -105,6 +105,10 @@ const uint32 PARALLEL_ADD_TO_VERSE_LIST	= 'PVal';
 // "name" (the palette entry's own name, used as the colour's folder);
 // absent "color" means "remove the highlights under this selection".
 const uint32 PARALLEL_HIGHLIGHT_APPLY	= 'PVha';
+// #44: the palette's trailing "..." cell -- opens the ordinary
+// right-click menu for the same selection, so the quick colour bar and
+// the full action menu are one set of actions rather than two.
+const uint32 PARALLEL_HIGHLIGHT_MORE	= 'PVhm';
 
 const uint32 MENU_HELP_LOGOS			= 'MHlo';
 const uint32 MENU_HELP_HOWTO			= 'MHho';

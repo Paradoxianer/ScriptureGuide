@@ -412,17 +412,28 @@ public:
 				// offering to act on -- held between the palette opening
 				// and a colour being clicked, since the palette answers
 				// asynchronously.
-				struct PendingHighlight {
-					BString	module;
-					BString	reference;
-					BString	versification;
-					BString	locale;
+				// #44: one entry per verse the selection touched -- a
+				// selection crossing a verse boundary becomes one
+				// highlight per verse, since a stored span describes
+				// exactly one verse.
+				struct HighlightRange {
 					int		verse;
 					int32	start;
 					int32	end;
+					BString	reference;
 					BString	text;
 				};
+				struct PendingHighlight {
+					BString						module;
+					BString						versification;
+					BString						locale;
+					std::vector<HighlightRange>	ranges;
+					// The whole selection as one reference, for the
+					// "..." cell that hands off to the right-click menu.
+					BString						selectionReference;
+				};
 				PendingHighlight	fPendingHighlight;
+				BPoint				fPendingHighlightPoint;
 				// A messenger rather than a raw pointer: the palette
 				// closes itself when a swatch is clicked, and a
 				// BMessenger to a gone BWindow simply reports invalid
@@ -474,11 +485,11 @@ public:
 				// nothing downstream has to know about rendering again.
 				void				_ShowHighlightPalette(
 										const char* module,
-										const char* reference,
 										const char* versification,
 										const char* locale,
-										int verse, int32 start, int32 end,
-										const char* spanText,
+										const char* selectionReference,
+										const std::vector<HighlightRange>&
+											ranges,
 										BPoint screenPoint);
 				// Re-reads every stored highlight and pushes the ones
 				// belonging to each column's own module and current

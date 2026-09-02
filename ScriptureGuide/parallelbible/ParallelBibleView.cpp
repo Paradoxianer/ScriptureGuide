@@ -266,10 +266,11 @@ public:
 		int32 count = 0;
 		const Entry* palette = Palette(count);
 
-		// One extra cell on the end for "remove the highlight here",
-		// so undoing a mis-click never needs a different gesture than
-		// making one.
-		float width = kGap + (count + 1) * (kSwatch + kGap);
+		// Two extra cells on the end: "remove the highlight here", so
+		// undoing a mis-click needs no different gesture than making
+		// one, and "..." which opens the ordinary right-click menu for
+		// the same selection.
+		float width = kGap + (count + 2) * (kSwatch + kGap);
 		float height = kGap * 2 + kSwatch;
 		ResizeTo(width, height);
 
@@ -300,6 +301,13 @@ public:
 		backdrop->AddChild(new SwatchView(removeFrame,
 			ui_color(B_DOCUMENT_BACKGROUND_COLOR),
 			new BMessage(PARALLEL_HIGHLIGHT_APPLY), this, true));
+
+		BRect moreFrame(kGap + (count + 1) * (kSwatch + kGap), kGap, 0, 0);
+		moreFrame.right = moreFrame.left + kSwatch;
+		moreFrame.bottom = moreFrame.top + kSwatch;
+		backdrop->AddChild(new SwatchView(moreFrame,
+			ui_color(B_DOCUMENT_BACKGROUND_COLOR),
+			new BMessage(PARALLEL_HIGHLIGHT_MORE), this, false, true));
 
 		// Keep the bar on screen when the selection ends near an edge.
 		BScreen screen;
@@ -339,13 +347,15 @@ private:
 	class SwatchView : public BView {
 	public:
 		SwatchView(BRect frame, rgb_color color, BMessage* message,
-			HighlightPaletteWindow* owner, bool isRemove = false)
+			HighlightPaletteWindow* owner, bool isRemove = false,
+			bool isMore = false)
 			:
 			BView(frame, "swatch", B_FOLLOW_NONE, B_WILL_DRAW),
 			fColor(color),
 			fMessage(message),
 			fOwner(owner),
 			fIsRemove(isRemove),
+			fIsMore(isMore),
 			fPressed(false)
 		{
 		}
@@ -374,6 +384,17 @@ private:
 				StrokeLine(bounds.LeftBottom() + BPoint(5, -5),
 					bounds.RightTop() - BPoint(5, -5));
 				SetPenSize(1.0f);
+			}
+			if (fIsMore) {
+				// Three dots, the usual "there is more behind this".
+				SetHighColor(tint_color(ui_color(B_PANEL_BACKGROUND_COLOR),
+					B_DARKEN_4_TINT));
+				float y = bounds.top + bounds.Height() / 2.0f;
+				float x = bounds.left + 5.0f;
+				for (int i = 0; i < 3; i++) {
+					FillRect(BRect(x, y - 1, x + 1, y + 1));
+					x += 5.0f;
+				}
 			}
 		}
 
@@ -418,6 +439,7 @@ private:
 		BMessage*				fMessage;
 		HighlightPaletteWindow*	fOwner;
 		bool					fIsRemove;
+		bool					fIsMore;
 		bool					fPressed;
 	};
 
@@ -1227,17 +1249,29 @@ private:
 		int endVerse = 0;
 		int32 startOffset = 0;
 		int32 endOffset = 0;
-		if (!fBibleDocument->VersePositionAt(start, startVerse, startOffset)
-			|| !fBibleDocument->VersePositionAt(end, endVerse, endOffset)) {
+		if (!fBibleDocument->VersePositionAt(start, startVerse, startOffset))
 			return;
+		if (!fBibleDocument->VersePositionAt(end, endVerse, endOffset)) {
+			// Released past the end of the text (the empty area below or
+			// beside the last line) -- treat it as "to the end of the
+			// verse the selection started in" rather than declining,
+			// which is what made a release in the white margin do
+			// nothing at all.
+			endVerse = startVerse;
+			endOffset = fBibleDocument->VerseTextLength(startVerse);
 		}
-		// A selection crossing a verse boundary is declined rather than
-		// half-stored: one span describes one verse, so spanning two
-		// would need one highlight per verse.
-		if (startVerse != endVerse || endOffset <= startOffset)
-			return;
 
-		BString reference = _ReferenceFor(start, end);
+		// Landing exactly on a verse boundary reports the FOLLOWING
+		// verse at offset 0 -- that is the end of the previous verse,
+		// not the start of a new one, and treating it literally used to
+		// turn an ordinary release at the end of a line into a
+		// "spans two verses" case.
+		if (endVerse > startVerse && endOffset == 0) {
+			endVerse--;
+			endOffset = fBibleDocument->VerseTextLength(endVerse);
+		}
+		if (endVerse < startVerse)
+			return;
 
 		BString versification;
 		SWModule* module = fBibleDocument->Module();
@@ -1252,17 +1286,54 @@ private:
 		BLanguage language;
 		BLocale::Default()->GetLanguage(&language);
 
-		// The covered text itself, kept so a module update that shifts
-		// the offsets can be healed against it later rather than
-		// silently mislocating the mark.
-		BString spanText = fBibleDocument->Text(start, end - start);
+		// One range per verse the selection touched: the first runs from
+		// where it started to the end of that verse, the last from the
+		// verse's beginning to where it ended, and anything between is
+		// covered whole.
+		std::vector<ParallelBibleView::HighlightRange> ranges;
+		for (int verse = startVerse; verse <= endVerse; verse++) {
+			int32 verseLength = fBibleDocument->VerseTextLength(verse);
+			if (verseLength <= 0)
+				continue;
+
+			ParallelBibleView::HighlightRange range;
+			range.verse = verse;
+			range.start = verse == startVerse ? startOffset : 0;
+			range.end = verse == endVerse ? endOffset : verseLength;
+			if (range.end > verseLength)
+				range.end = verseLength;
+			if (range.end <= range.start)
+				continue;
+
+			int32 documentStart = 0;
+			int32 documentEnd = 0;
+			if (!fBibleDocument->TextRangeForVerseRange(verse, verse,
+					documentStart, documentEnd)) {
+				continue;
+			}
+			// _ReferenceFor() renders the DISPLAY form, which is what a
+			// bookmark stores everywhere else in this application.
+			range.reference = _ReferenceFor(documentStart, documentEnd);
+			// The covered text, kept so a module update that shifts the
+			// offsets can be healed against it later.
+			int32 prefix = documentEnd - documentStart - verseLength;
+			if (prefix < 0)
+				prefix = 0;
+			range.text = fBibleDocument->Text(
+				documentStart + prefix + range.start,
+				range.end - range.start);
+			ranges.push_back(range);
+		}
+		if (ranges.empty())
+			return;
+
+		BString selectionReference = _ReferenceFor(start, end);
 
 		BPoint screenPoint = where;
 		ConvertToScreen(&screenPoint);
 		fOwner->_ShowHighlightPalette(fTranslationName.String(),
-			reference.String(), versification.String(), language.Code(),
-			startVerse, startOffset, endOffset, spanText.String(),
-			screenPoint);
+			versification.String(), language.Code(),
+			selectionReference.String(), ranges, screenPoint);
 	}
 
 	BibleTextDocument*	fBibleDocument;
@@ -2195,12 +2266,27 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case PARALLEL_HIGHLIGHT_MORE:
+		{
+			// The same menu a right-click on the selection opens, so the
+			// two routes offer one set of actions rather than two lists
+			// that could drift apart.
+			if (!fPendingHighlight.selectionReference.IsEmpty()) {
+				_ShowAddToListMenu(
+					fPendingHighlight.selectionReference.String(),
+					fPendingHighlight.versification.String(),
+					fPendingHighlight.locale.String(),
+					fPendingHighlightPoint);
+			}
+			break;
+		}
+
 		case PARALLEL_HIGHLIGHT_APPLY:
 		{
 			// #44: a swatch was clicked in the palette. No "color" at
 			// all is the remove cell -- see the palette's own comment.
 			if (fPendingHighlight.module.IsEmpty()
-				|| fPendingHighlight.end <= fPendingHighlight.start) {
+				|| fPendingHighlight.ranges.empty()) {
 				break;
 			}
 
@@ -2217,26 +2303,36 @@ ParallelBibleView::MessageReceived(BMessage* message)
 				BString root = BookmarkFile::HighlightsDirectory();
 				BString folder = _HighlightColorFolder(root, name);
 				if (!folder.IsEmpty()) {
-					BookmarkFile bookmark;
+					// One bookmark per verse the selection touched: a
+					// stored span describes exactly one verse, so a
+					// selection crossing a boundary becomes several.
 					int32 position = (int32)
 						BookmarkFile::ListBookmarkPaths(folder.String())
 							.size();
-					if (bookmark.CreateNew(folder.String(),
-							fPendingHighlight.reference.String(),
-							fPendingHighlight.versification.String(),
-							fPendingHighlight.locale.String(), position)
-								== B_OK) {
+					for (size_t i = 0;
+							i < fPendingHighlight.ranges.size(); i++) {
+						const HighlightRange& range
+							= fPendingHighlight.ranges[i];
+						BookmarkFile bookmark;
+						if (bookmark.CreateNew(folder.String(),
+								range.reference.String(),
+								fPendingHighlight.versification.String(),
+								fPendingHighlight.locale.String(),
+								position++) != B_OK) {
+							continue;
+						}
 						bookmark.SetSpan(fPendingHighlight.module.String(),
-							fPendingHighlight.start, fPendingHighlight.end,
-							fPendingHighlight.text.String());
+							range.start, range.end, range.text.String());
 						bookmark.SetColor(color);
 						bookmark.Save();
 					}
 				}
 			} else {
-				_RemoveHighlightsIn(fPendingHighlight.module,
-					fPendingHighlight.reference, fPendingHighlight.verse,
-					fPendingHighlight.start, fPendingHighlight.end);
+				for (size_t i = 0; i < fPendingHighlight.ranges.size(); i++) {
+					const HighlightRange& range = fPendingHighlight.ranges[i];
+					_RemoveHighlightsIn(fPendingHighlight.module,
+						range.reference, range.verse, range.start, range.end);
+				}
 			}
 
 			fPendingHighlight.module = "";
@@ -2947,18 +3043,16 @@ PopulateAddToListMenu(BMenu* menu, BHandler* target, const char* path,
 
 void
 ParallelBibleView::_ShowHighlightPalette(const char* module,
-	const char* reference, const char* versification, const char* locale,
-	int verse, int32 start, int32 end, const char* spanText,
-	BPoint screenPoint)
+	const char* versification, const char* locale,
+	const char* selectionReference,
+	const std::vector<HighlightRange>& ranges, BPoint screenPoint)
 {
 	fPendingHighlight.module = module;
-	fPendingHighlight.reference = reference;
 	fPendingHighlight.versification = versification;
 	fPendingHighlight.locale = locale;
-	fPendingHighlight.verse = verse;
-	fPendingHighlight.start = start;
-	fPendingHighlight.end = end;
-	fPendingHighlight.text = spanText;
+	fPendingHighlight.selectionReference = selectionReference;
+	fPendingHighlight.ranges = ranges;
+	fPendingHighlightPoint = screenPoint;
 
 	// Offset a little so the bar does not open directly under the
 	// pointer, where the release just happened.

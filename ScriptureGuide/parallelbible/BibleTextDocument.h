@@ -204,6 +204,13 @@ public:
 			// offsets mean, so this is the one place the two coordinate
 			// systems meet. False if the offset lands outside any verse
 			// (or inside a verse-number prefix).
+			// #44: how many CHARACTERS of normal-form text a verse has,
+			// i.e. its paragraph minus the rendered verse-number prefix
+			// and minus the paragraph terminator an editable document
+			// carries. The upper bound for a highlight offset in that
+			// verse. -1 if the verse is not in this document.
+			int32				VerseTextLength(int verse) const;
+
 			bool				VersePositionAt(int32 documentOffset,
 									int& outVerse,
 									int32& outVerseOffset) const;
