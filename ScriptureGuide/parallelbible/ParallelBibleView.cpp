@@ -1286,46 +1286,27 @@ private:
 		BLanguage language;
 		BLocale::Default()->GetLanguage(&language);
 
-		// One range per verse the selection touched: the first runs from
-		// where it started to the end of that verse, the last from the
-		// verse's beginning to where it ended, and anything between is
-		// covered whole.
-		std::vector<ParallelBibleView::HighlightRange> ranges;
-		for (int verse = startVerse; verse <= endVerse; verse++) {
-			int32 verseLength = fBibleDocument->VerseTextLength(verse);
-			if (verseLength <= 0)
-				continue;
-
-			ParallelBibleView::HighlightRange range;
-			range.verse = verse;
-			range.start = verse == startVerse ? startOffset : 0;
-			range.end = verse == endVerse ? endOffset : verseLength;
-			if (range.end > verseLength)
-				range.end = verseLength;
-			if (range.end <= range.start)
-				continue;
-
-			int32 documentStart = 0;
-			int32 documentEnd = 0;
-			if (!fBibleDocument->TextRangeForVerseRange(verse, verse,
-					documentStart, documentEnd)) {
-				continue;
-			}
-			// _ReferenceFor() renders the DISPLAY form, which is what a
-			// bookmark stores everywhere else in this application.
-			range.reference = _ReferenceFor(documentStart, documentEnd);
-			// The covered text, kept so a module update that shifts the
-			// offsets can be healed against it later.
-			int32 prefix = documentEnd - documentStart - verseLength;
-			if (prefix < 0)
-				prefix = 0;
-			range.text = fBibleDocument->Text(
-				documentStart + prefix + range.start,
-				range.end - range.start);
-			ranges.push_back(range);
-		}
-		if (ranges.empty())
+		int32 endVerseLength = fBibleDocument->VerseTextLength(endVerse);
+		if (endVerseLength < 0)
 			return;
+		if (endOffset > endVerseLength)
+			endOffset = endVerseLength;
+		if (endVerse == startVerse && endOffset <= startOffset)
+			return;
+
+		ParallelBibleView::HighlightRange range;
+		range.verse = startVerse;
+		range.endVerse = endVerse;
+		range.start = startOffset;
+		range.end = endOffset;
+		// The whole selection as one reference -- for a range this is
+		// already the "<Book> <Chapter>:<Start>-<End>" shape a verse
+		// list stores, so turning the highlight into a list entry later
+		// needs no reconstruction.
+		range.reference = _ReferenceFor(start, end);
+		// The covered text, kept so a module update that shifts the
+		// offsets can be healed against it later.
+		range.text = fBibleDocument->Text(start, end - start);
 
 		BString selectionReference = _ReferenceFor(start, end);
 
@@ -1333,7 +1314,7 @@ private:
 		ConvertToScreen(&screenPoint);
 		fOwner->_ShowHighlightPalette(fTranslationName.String(),
 			versification.String(), language.Code(),
-			selectionReference.String(), ranges, screenPoint);
+			selectionReference.String(), range, screenPoint);
 	}
 
 	BibleTextDocument*	fBibleDocument;
@@ -2286,7 +2267,7 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			// #44: a swatch was clicked in the palette. No "color" at
 			// all is the remove cell -- see the palette's own comment.
 			if (fPendingHighlight.module.IsEmpty()
-				|| fPendingHighlight.ranges.empty()) {
+				|| fPendingHighlight.range.reference.IsEmpty()) {
 				break;
 			}
 
@@ -2303,36 +2284,26 @@ ParallelBibleView::MessageReceived(BMessage* message)
 				BString root = BookmarkFile::HighlightsDirectory();
 				BString folder = _HighlightColorFolder(root, name);
 				if (!folder.IsEmpty()) {
-					// One bookmark per verse the selection touched: a
-					// stored span describes exactly one verse, so a
-					// selection crossing a boundary becomes several.
+					const HighlightRange& range = fPendingHighlight.range;
+					BookmarkFile bookmark;
 					int32 position = (int32)
 						BookmarkFile::ListBookmarkPaths(folder.String())
 							.size();
-					for (size_t i = 0;
-							i < fPendingHighlight.ranges.size(); i++) {
-						const HighlightRange& range
-							= fPendingHighlight.ranges[i];
-						BookmarkFile bookmark;
-						if (bookmark.CreateNew(folder.String(),
-								range.reference.String(),
-								fPendingHighlight.versification.String(),
-								fPendingHighlight.locale.String(),
-								position++) != B_OK) {
-							continue;
-						}
+					if (bookmark.CreateNew(folder.String(),
+							range.reference.String(),
+							fPendingHighlight.versification.String(),
+							fPendingHighlight.locale.String(), position)
+								== B_OK) {
 						bookmark.SetSpan(fPendingHighlight.module.String(),
-							range.start, range.end, range.text.String());
+							range.start, range.end, range.text.String(),
+							range.endVerse);
 						bookmark.SetColor(color);
 						bookmark.Save();
 					}
 				}
 			} else {
-				for (size_t i = 0; i < fPendingHighlight.ranges.size(); i++) {
-					const HighlightRange& range = fPendingHighlight.ranges[i];
-					_RemoveHighlightsIn(fPendingHighlight.module,
-						range.reference, range.verse, range.start, range.end);
-				}
+				_RemoveHighlightsIn(fPendingHighlight.module,
+					fPendingHighlight.range);
 			}
 
 			fPendingHighlight.module = "";
@@ -3044,14 +3015,14 @@ PopulateAddToListMenu(BMenu* menu, BHandler* target, const char* path,
 void
 ParallelBibleView::_ShowHighlightPalette(const char* module,
 	const char* versification, const char* locale,
-	const char* selectionReference,
-	const std::vector<HighlightRange>& ranges, BPoint screenPoint)
+	const char* selectionReference, const HighlightRange& range,
+	BPoint screenPoint)
 {
 	fPendingHighlight.module = module;
 	fPendingHighlight.versification = versification;
 	fPendingHighlight.locale = locale;
 	fPendingHighlight.selectionReference = selectionReference;
-	fPendingHighlight.ranges = ranges;
+	fPendingHighlight.range = range;
 	fPendingHighlightPoint = screenPoint;
 
 	// Offset a little so the bar does not open directly under the
@@ -3121,12 +3092,31 @@ HighlightsForDocument(const std::vector<BookmarkFile>& all,
 		if (prefix != chapterPrefix)
 			continue;
 
-		BibleTextDocument::VerseHighlight highlight;
-		highlight.verse = atoi(code.String() + 6);
-		highlight.start = bookmark.SpanStart();
-		highlight.end = bookmark.SpanEnd();
-		highlight.color = bookmark.Color();
-		result.push_back(highlight);
+		// A stored range is ONE bookmark covering several verses; the
+		// renderer works one verse at a time, so expand it here: the
+		// first verse from its start offset to its end, the last from
+		// its beginning to the end offset, everything between whole.
+		int firstVerse = atoi(code.String() + 6);
+		int lastVerse = bookmark.SpanEndVerse() > firstVerse
+			? bookmark.SpanEndVerse() : firstVerse;
+
+		for (int verse = firstVerse; verse <= lastVerse; verse++) {
+			int32 verseLength = document->VerseTextLength(verse);
+			if (verseLength <= 0)
+				continue;
+
+			BibleTextDocument::VerseHighlight highlight;
+			highlight.verse = verse;
+			highlight.start = verse == firstVerse ? bookmark.SpanStart() : 0;
+			highlight.end = verse == lastVerse ? bookmark.SpanEnd()
+				: verseLength;
+			if (highlight.end > verseLength)
+				highlight.end = verseLength;
+			if (highlight.end <= highlight.start)
+				continue;
+			highlight.color = bookmark.Color();
+			result.push_back(highlight);
+		}
 	}
 
 	return result;
@@ -3158,39 +3148,51 @@ ParallelBibleView::_HighlightColorFolder(const BString& root,
 // mark to clear it, not precisely the range they originally drew.
 void
 ParallelBibleView::_RemoveHighlightsIn(const BString& moduleName,
-	const BString& reference, int verse, int32 start, int32 end)
+	const HighlightRange& range)
 {
 	std::vector<BookmarkFile> all = BookmarkFile::ListHighlights();
+
+	// The chapter the selection is in, as a Code() prefix.
+	BookmarkFile probe;
+	probe.SetReference(range.reference.String());
+	BLanguage probeLanguage;
+	BLocale::Default()->GetLanguage(&probeLanguage);
+	probe.SetLocale(probeLanguage.Code());
+	BString selectionCode = probe.Code();
+	if (selectionCode.Length() < 6)
+		return;
+	BString selectionChapter;
+	selectionChapter.SetTo(selectionCode.String(), 6);
+
 	for (size_t i = 0; i < all.size(); i++) {
 		BookmarkFile& bookmark = all[i];
 		if (BString(bookmark.SpanModule()) != moduleName)
 			continue;
 
 		BString code = bookmark.Code();
-		if (code.Length() < 9 || atoi(code.String() + 6) != verse)
+		if (code.Length() < 9)
+			continue;
+		BString chapter;
+		chapter.SetTo(code.String(), 6);
+		if (chapter != selectionChapter)
 			continue;
 
-		// Same chapter as the selection, established by comparing the
-		// whole nine-digit code's chapter part against the reference the
-		// selection itself carries.
-		BookmarkFile probe;
-		probe.SetReference(reference.String());
-		probe.SetVersification(bookmark.Versification());
-		BLanguage probeLanguage;
-		BLocale::Default()->GetLanguage(&probeLanguage);
-		probe.SetLocale(probeLanguage.Code());
-		BString selectionCode = probe.Code();
-		if (selectionCode.Length() >= 6) {
-			BString a, b;
-			a.SetTo(code.String(), 6);
-			b.SetTo(selectionCode.String(), 6);
-			if (a != b)
-				continue;
+		// Verse ranges overlap when neither ends before the other
+		// begins; within a shared verse the character offsets decide.
+		int firstVerse = atoi(code.String() + 6);
+		int lastVerse = bookmark.SpanEndVerse() > firstVerse
+			? bookmark.SpanEndVerse() : firstVerse;
+		if (lastVerse < range.verse || firstVerse > range.endVerse)
+			continue;
+		if (firstVerse == lastVerse && range.verse == range.endVerse
+			&& (bookmark.SpanEnd() <= range.start
+				|| bookmark.SpanStart() >= range.end)) {
+			continue;
 		}
 
-		if (bookmark.SpanEnd() > start && bookmark.SpanStart() < end)
-			bookmark.Remove();
+		bookmark.Remove();
 	}
+
 }
 
 

@@ -1868,6 +1868,62 @@ TestBookmarkCodeHandlesDisplayFormReferences()
 }
 
 
+// #44: a highlight spanning several verses must stay ONE bookmark --
+// splitting it per verse would make the obvious next step, turning it
+// into a verse-list entry like "1. Mose 1:4-10", impossible to
+// reconstruct.
+static void
+TestHighlightSpanCoversAVerseRange()
+{
+	BString root = BookmarkFile::HighlightsDirectory();
+	BString collection = BookmarkFile::CreateCollection(root.String(),
+		"UnitTestRange");
+	if (collection.IsEmpty()) {
+		Skip("BookmarkFile: a span can cover a verse range",
+			"could not create a test colour folder");
+		return;
+	}
+
+	BookmarkFile written;
+	Check(written.CreateNew(collection.String(), "1. Mose 1:5-8", "KJV", "de",
+		0) == B_OK, "BookmarkFile: a range highlight can be created");
+	written.SetSpan("AKJV", 12, 30, "some text", 8);
+	written.SetColor((rgb_color){ 0xc5, 0xdd, 0xf2, 255 });
+	written.Save();
+
+	BookmarkFile readBack;
+	readBack.SetTo(written.Path());
+	Check(readBack.SpanEndVerse() == 8,
+		"BookmarkFile: the span's last verse survives the round trip");
+	Check(readBack.SpanStart() == 12 && readBack.SpanEnd() == 30,
+		"BookmarkFile: a range span keeps its first and last offsets");
+
+	// Code() must resolve to the range's FIRST verse, which is what the
+	// renderer expands forward from.
+	BString code = readBack.Code();
+	Check(code.Length() == 9 && atoi(code.String() + 6) == 5,
+		"BookmarkFile::Code: a range reference resolves to its first "
+		"verse");
+
+	// A single-verse highlight must still report no range.
+	BookmarkFile single;
+	if (single.CreateNew(collection.String(), "1. Mose 1:3", "KJV", "de", 1)
+			== B_OK) {
+		single.SetSpan("AKJV", 4, 9, "", 0);
+		single.SetColor((rgb_color){ 0xf7, 0xec, 0xb3, 255 });
+		single.Save();
+		BookmarkFile singleReadBack;
+		singleReadBack.SetTo(single.Path());
+		Check(singleReadBack.SpanEndVerse() == 0,
+			"BookmarkFile: a single-verse span records no end verse");
+		single.Remove();
+	}
+
+	written.Remove();
+	BEntry(collection.String()).Remove();
+}
+
+
 int
 main()
 {
@@ -1925,6 +1981,7 @@ main()
 	TestVersePositionSurvivesDisplayOptions(moduleA);
 	TestHighlightBookmarkRoundTrip();
 	TestBookmarkCodeHandlesDisplayFormReferences();
+	TestHighlightSpanCoversAVerseRange();
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;

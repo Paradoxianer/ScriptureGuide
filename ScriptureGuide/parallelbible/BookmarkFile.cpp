@@ -41,6 +41,7 @@ static const char* kAttrSpanModule = "SG:span:module";
 static const char* kAttrSpanStart = "SG:span:start";
 static const char* kAttrSpanEnd = "SG:span:end";
 static const char* kAttrSpanText = "SG:span:text";
+static const char* kAttrSpanEndVerse = "SG:span:endverse";
 static const char* kAttrColorValue = "SG:colorvalue";
 
 static const char* kMirrorNote
@@ -93,6 +94,7 @@ BookmarkFile::BookmarkFile()
 	fPosition(-1),
 	fSpanStart(0),
 	fSpanEnd(0),
+	fSpanEndVerse(0),
 	fHasColor(false)
 {
 	fColor.red = 0;
@@ -193,6 +195,7 @@ BookmarkFile::SetTo(const char* path)
 	fSpanModule = "";
 	fSpanStart = 0;
 	fSpanEnd = 0;
+	fSpanEndVerse = 0;
 	fSpanText = "";
 	BString spanModule;
 	int32 spanStart = 0;
@@ -208,6 +211,13 @@ BookmarkFile::SetTo(const char* path)
 		fSpanStart = spanStart;
 		fSpanEnd = spanEnd;
 		file.ReadAttrString(kAttrSpanText, &fSpanText);
+		// Optional even within a span: absent means the span stays
+		// inside the bookmark's own single verse.
+		int32 endVerse = 0;
+		if (file.ReadAttr(kAttrSpanEndVerse, B_INT32_TYPE, 0, &endVerse,
+				sizeof(endVerse)) == (ssize_t)sizeof(endVerse)) {
+			fSpanEndVerse = endVerse;
+		}
 	}
 
 	fHasColor = false;
@@ -377,12 +387,13 @@ FormatHighlightColor(rgb_color color)
 
 void
 BookmarkFile::SetSpan(const char* module, int32 start, int32 end,
-	const char* text)
+	const char* text, int32 endVerse)
 {
 	fSpanModule = module != NULL ? module : "";
 	fSpanStart = start;
 	fSpanEnd = end;
 	fSpanText = text != NULL ? text : "";
+	fSpanEndVerse = endVerse;
 }
 
 
@@ -515,6 +526,10 @@ BookmarkFile::Save()
 		file.WriteAttr(kAttrSpanEnd, B_INT32_TYPE, 0, &fSpanEnd,
 			sizeof(fSpanEnd));
 		file.WriteAttrString(kAttrSpanText, &fSpanText);
+		if (fSpanEndVerse > 0) {
+			file.WriteAttr(kAttrSpanEndVerse, B_INT32_TYPE, 0,
+				&fSpanEndVerse, sizeof(fSpanEndVerse));
+		}
 	}
 	if (fHasColor) {
 		BString colorValue = FormatHighlightColor(fColor);

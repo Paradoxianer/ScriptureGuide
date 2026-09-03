@@ -506,13 +506,15 @@ BibleTextDocument::VersePositionAt(int32 documentOffset, int& outVerse,
 			int32 withinParagraph = documentOffset - offset;
 			int32 prefix = i < (int32)fParagraphPrefixChars.size()
 				? fParagraphPrefixChars[i] : 0;
-			// Inside the verse-number prefix is not a position in the
-			// verse's own text, so it cannot anchor a highlight.
-			if (withinParagraph < prefix)
-				return false;
-
+			// Inside the rendered verse-number prefix means the very
+			// start of that verse's own text -- reporting failure here
+			// instead made an ordinary drag that ended just before the
+			// next verse's first word (i.e. somewhere in its " 8 ")
+			// look like "this offset is nowhere", which collapsed a
+			// five-verse selection down to its first verse.
 			outVerse = fParagraphVerse[i];
-			outVerseOffset = withinParagraph - prefix;
+			outVerseOffset = withinParagraph > prefix
+				? withinParagraph - prefix : 0;
 			return true;
 		}
 		offset += length;

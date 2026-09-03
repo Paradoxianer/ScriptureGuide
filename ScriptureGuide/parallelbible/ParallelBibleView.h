@@ -412,12 +412,16 @@ public:
 				// offering to act on -- held between the palette opening
 				// and a colour being clicked, since the palette answers
 				// asynchronously.
-				// #44: one entry per verse the selection touched -- a
-				// selection crossing a verse boundary becomes one
-				// highlight per verse, since a stored span describes
-				// exactly one verse.
+				// #44: the selection as ONE contiguous range. A range
+				// spanning several verses stays a single bookmark --
+				// `start` is an offset into `verse`, `end` one into
+				// `endVerse`, everything between is covered whole --
+				// because splitting it per verse would throw away the
+				// very thing that makes it convertible into a verse-list
+				// entry like "1. Mose 1:4-10" later.
 				struct HighlightRange {
 					int		verse;
+					int		endVerse;
 					int32	start;
 					int32	end;
 					BString	reference;
@@ -427,7 +431,7 @@ public:
 					BString						module;
 					BString						versification;
 					BString						locale;
-					std::vector<HighlightRange>	ranges;
+					HighlightRange				range;
 					// The whole selection as one reference, for the
 					// "..." cell that hands off to the right-click menu.
 					BString						selectionReference;
@@ -488,8 +492,7 @@ public:
 										const char* versification,
 										const char* locale,
 										const char* selectionReference,
-										const std::vector<HighlightRange>&
-											ranges,
+										const HighlightRange& range,
 										BPoint screenPoint);
 				// Re-reads every stored highlight and pushes the ones
 				// belonging to each column's own module and current
@@ -506,8 +509,7 @@ public:
 										const BString& name);
 				void				_RemoveHighlightsIn(
 										const BString& moduleName,
-										const BString& reference,
-										int verse, int32 start, int32 end);
+										const HighlightRange& range);
 
 				void				_ShowAddToListMenu(
 										const char* reference,

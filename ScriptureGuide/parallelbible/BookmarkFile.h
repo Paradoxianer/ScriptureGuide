@@ -150,13 +150,25 @@ public:
 									{ return fSpanStart; }
 			int32			SpanEnd() const
 									{ return fSpanEnd; }
+			// The LAST verse a span covers. Equal to the bookmark's own
+			// verse for the ordinary single-verse case; greater when the
+			// highlight runs across a contiguous range, in which case
+			// SpanStart() is an offset into the first verse and
+			// SpanEnd() one into the last, with everything between
+			// covered whole. Stored so a range stays ONE bookmark --
+			// splitting it into one file per verse would make the
+			// obvious next step, turning it into a verse-list entry like
+			// "1. Mose 1:4-10", impossible to reconstruct.
+			int32			SpanEndVerse() const
+									{ return fSpanEndVerse; }
 			const char*		SpanText() const
 									{ return fSpanText.String(); }
 			bool			HasSpan() const
 									{ return !fSpanModule.IsEmpty()
 										&& fSpanEnd > fSpanStart; }
 			void			SetSpan(const char* module, int32 start,
-									int32 end, const char* text);
+									int32 end, const char* text,
+									int32 endVerse = 0);
 
 			// The highlight colour, stored on the bookmark itself rather
 			// than implied by which folder it sits in, so a later
@@ -262,6 +274,7 @@ private:
 			BString			fSpanModule;
 			int32			fSpanStart;
 			int32			fSpanEnd;
+			int32			fSpanEndVerse;
 			BString			fSpanText;
 			bool			fHasColor;
 			rgb_color		fColor;
