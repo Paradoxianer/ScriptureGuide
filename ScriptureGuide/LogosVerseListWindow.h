@@ -176,6 +176,16 @@ public:
 	// no self-messaging needed, unlike SGSearchWindow's RunSearch(),
 	// because nothing here is called from another window's thread while
 	// expecting to touch this window's own fields synchronously.
+	// Rebuilds the collection tree right before any menu opens. The
+	// node monitor is per-directory and deliberately shallow -- it
+	// watches the verse-list root and the one open collection, not the
+	// arbitrarily deep tree #78 allows -- so a collection created
+	// further down (a highlight colour folder under Highlights/, say)
+	// was invisible until something else happened to trigger a rebuild.
+	// Rebuilding here means the menu is current whatever changed it and
+	// wherever, without watching the whole tree.
+	virtual void			MenusBeginning();
+
 	virtual bool			QuitRequested();
 	virtual void			MessageReceived(BMessage* message);
 

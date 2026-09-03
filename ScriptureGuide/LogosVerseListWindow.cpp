@@ -620,6 +620,14 @@ SGVerseListWindow::~SGVerseListWindow()
 }
 
 
+void
+SGVerseListWindow::MenusBeginning()
+{
+	_RebuildNavigationMenu();
+	BWindow::MenusBeginning();
+}
+
+
 bool
 SGVerseListWindow::QuitRequested()
 {

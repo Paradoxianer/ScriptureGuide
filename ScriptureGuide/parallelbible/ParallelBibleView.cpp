@@ -458,6 +458,7 @@ public:
 		fOwner(owner),
 		fPosition(-1),
 		fTrackingForDrag(false),
+		fDragAndDropStarted(false),
 		fShowingLinkCursor(false)
 	{
 	}
@@ -576,6 +577,7 @@ public:
 
 		fMouseDownPoint = where;
 		fTrackingForDrag = false;
+		fDragAndDropStarted = false;
 		if (HasSelection()) {
 			int32 start, end;
 			GetSelection(start, end);
@@ -678,7 +680,7 @@ public:
 			if (wasPlainClick) {
 				if (!_TryFollowReferenceAt(where))
 					_TryFollowStrongsNumberAt(where);
-			} else {
+			} else if (!fDragAndDropStarted) {
 				// #44: a real drag-selection just ended inside this one
 				// column -- offer the highlight palette. Only here, not
 				// on a plain click, and not on the cross-column path
@@ -743,6 +745,13 @@ private:
 	{
 		if (fOwner == NULL)
 			return;
+
+		// #44: a drag-and-drop gesture ends with a MouseUp() in this
+		// view just like a fresh selection does, and by then
+		// fTrackingForDrag has already been cleared -- so without this
+		// the highlight palette popped up after dropping a verse into a
+		// verse list, on top of the window it was just dropped on.
+		fDragAndDropStarted = true;
 
 		// Gather every column (this one included) that currently has a
 		// non-empty selection -- a fresh cross-column gesture (see
@@ -1322,6 +1331,10 @@ private:
 	ParallelBibleView*	fOwner;
 	int32				fPosition;
 	bool				fTrackingForDrag;
+	// #44: true once this gesture became a drag-and-drop, so the
+	// MouseUp() that ends it is not mistaken for the end of a fresh
+	// selection.
+	bool				fDragAndDropStarted;
 	BPoint				fDragStartPoint;
 	BPoint				fMouseDownPoint;
 	bool				fShowingLinkCursor;
