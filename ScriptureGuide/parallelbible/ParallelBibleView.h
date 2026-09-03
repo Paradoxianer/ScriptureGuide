@@ -504,9 +504,6 @@ public:
 				// been abandoned -- the next click anywhere in a column,
 				// and any chapter change, dismiss it explicitly instead.
 				void				_DismissHighlightPalette();
-				static BString		_HighlightColorFolder(
-										const BString& root,
-										const BString& name);
 				void				_RemoveHighlightsIn(
 										const BString& moduleName,
 										const HighlightRange& range);

@@ -219,6 +219,17 @@ public:
 			// ignored rather than half-interpreted.
 			static std::vector<BookmarkFile>	ListHighlights();
 
+			// #44: the folder highlights of `color` belong in, created
+			// on demand. Matched by the folder's OWN SG:colorvalue
+			// attribute, never by its name, so a colour folder can be
+			// renamed freely -- to "Was Gott für mich getan hat", say,
+			// with its own Description.txt -- and the next highlight of
+			// that colour still lands in it instead of resurrecting a
+			// fresh "Red" beside it. `fallbackName` only names a folder
+			// that has to be created.
+			static BString	HighlightFolderForColor(rgb_color color,
+											const char* fallbackName);
+
 			// Every bookmark file directly inside `collectionPath` (NOT
 			// recursive -- a nested collection's own bookmarks are not
 			// walked), sorted by their SG:position attribute (a file

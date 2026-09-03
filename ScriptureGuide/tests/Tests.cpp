@@ -17,6 +17,7 @@
 
 #include <Application.h>
 #include <Entry.h>
+#include <Path.h>
 #include <View.h>
 #include <Bitmap.h>
 #include <Language.h>
@@ -1924,6 +1925,65 @@ TestHighlightSpanCoversAVerseRange()
 }
 
 
+// #44: a colour folder is matched by its own SG:colorvalue attribute,
+// never by its name -- so it can be renamed (to something meaningful,
+// with its own Description.txt) and the next highlight of that colour
+// still lands in it instead of resurrecting a fresh "Red" beside it.
+static void
+TestHighlightFolderSurvivesRenaming()
+{
+	const rgb_color kRed = (rgb_color){ 0xf5, 0xc6, 0xc6, 255 };
+
+	BString first = BookmarkFile::HighlightFolderForColor(kRed,
+		"UnitTestRed");
+	if (first.IsEmpty()) {
+		Skip("BookmarkFile::HighlightFolderForColor: survives a rename",
+			"could not create the colour folder");
+		return;
+	}
+
+	// Asking again must reuse it rather than make a second one.
+	BString again = BookmarkFile::HighlightFolderForColor(kRed,
+		"UnitTestRed");
+	Check(again == first,
+		"BookmarkFile::HighlightFolderForColor: the same colour reuses "
+		"the same folder");
+
+	// Rename it the way a user would, then ask again.
+	BEntry entry(first.String());
+	BString renamed;
+	if (entry.Rename("UnitTestRenamedColour") == B_OK) {
+		BPath renamedPath;
+		entry.GetPath(&renamedPath);
+		renamed = renamedPath.Path();
+
+		BString afterRename = BookmarkFile::HighlightFolderForColor(kRed,
+			"UnitTestRed");
+		Check(afterRename == renamed,
+			"BookmarkFile::HighlightFolderForColor: survives a rename "
+			"instead of creating a fresh folder under the old name");
+	} else {
+		Skip("BookmarkFile::HighlightFolderForColor: survives a rename",
+			"could not rename the test folder");
+	}
+
+	// A different colour must NOT reuse it.
+	const rgb_color kBlue = (rgb_color){ 0xc5, 0xdd, 0xf2, 255 };
+	BString other = BookmarkFile::HighlightFolderForColor(kBlue,
+		"UnitTestBlue");
+	Check(!other.IsEmpty() && other != renamed && other != first,
+		"BookmarkFile::HighlightFolderForColor: a different colour gets "
+		"its own folder");
+
+	if (!renamed.IsEmpty())
+		BEntry(renamed.String()).Remove();
+	else
+		BEntry(first.String()).Remove();
+	if (!other.IsEmpty())
+		BEntry(other.String()).Remove();
+}
+
+
 int
 main()
 {
@@ -1982,6 +2042,7 @@ main()
 	TestHighlightBookmarkRoundTrip();
 	TestBookmarkCodeHandlesDisplayFormReferences();
 	TestHighlightSpanCoversAVerseRange();
+	TestHighlightFolderSurvivesRenaming();
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;

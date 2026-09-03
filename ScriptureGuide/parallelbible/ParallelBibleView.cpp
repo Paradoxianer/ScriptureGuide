@@ -2294,8 +2294,8 @@ ParallelBibleView::MessageReceived(BMessage* message)
 				color.blue = (uint8)(packed & 0xff);
 				color.alpha = 255;
 
-				BString root = BookmarkFile::HighlightsDirectory();
-				BString folder = _HighlightColorFolder(root, name);
+				BString folder = BookmarkFile::HighlightFolderForColor(
+					color, name.String());
 				if (!folder.IsEmpty()) {
 					const HighlightRange& range = fPendingHighlight.range;
 					BookmarkFile bookmark;
@@ -3136,23 +3136,6 @@ HighlightsForDocument(const std::vector<BookmarkFile>& all,
 }
 
 
-// The folder a colour's highlights live in, created on demand. Named
-// after the palette entry so the tree stays browsable in Tracker; the
-// authoritative colour is still the attribute on each bookmark, so
-// renaming a folder later cannot recolour anything.
-BString
-ParallelBibleView::_HighlightColorFolder(const BString& root,
-	const BString& name)
-{
-	if (root.IsEmpty() || name.IsEmpty())
-		return BString();
-
-	BPath path(root.String());
-	path.Append(name.String());
-	if (create_directory(path.Path(), 0755) != B_OK)
-		return BString();
-	return BString(path.Path());
-}
 
 
 // Deletes every stored highlight of this module that overlaps the given

@@ -620,6 +620,66 @@ BookmarkFile::HighlightsDirectory()
 }
 
 
+BString
+BookmarkFile::HighlightFolderForColor(rgb_color color,
+	const char* fallbackName)
+{
+	BString root = HighlightsDirectory();
+	if (root.IsEmpty())
+		return BString();
+
+	BString wanted = FormatHighlightColor(color);
+	BString byName;
+
+	BDirectory rootDir(root.String());
+	if (rootDir.InitCheck() == B_OK) {
+		BEntry entry;
+		while (rootDir.GetNextEntry(&entry) == B_OK) {
+			if (!entry.IsDirectory())
+				continue;
+			BPath path;
+			if (entry.GetPath(&path) != B_OK)
+				continue;
+
+			BNode node(&entry);
+			BString stored;
+			if (node.InitCheck() == B_OK
+				&& node.ReadAttrString(kAttrColorValue, &stored) == B_OK
+				&& stored == wanted) {
+				return BString(path.Path());
+			}
+
+			// Remember a name match as a fallback: folders created
+			// before the attribute existed carry no colour, and should
+			// be adopted rather than duplicated.
+			char leaf[B_FILE_NAME_LENGTH];
+			if (stored.IsEmpty() && fallbackName != NULL
+				&& entry.GetName(leaf) == B_OK
+				&& BString(leaf) == BString(fallbackName)) {
+				byName = path.Path();
+			}
+		}
+	}
+
+	BString folder = byName;
+	if (folder.IsEmpty()) {
+		folder = CreateCollection(root.String(),
+			fallbackName != NULL ? fallbackName : "Highlight");
+		if (folder.IsEmpty())
+			return BString();
+	}
+
+	// Stamp the colour on it, both for a folder just created and for one
+	// adopted by name, so the next lookup goes through the attribute and
+	// the folder is free to be renamed from then on.
+	BNode node(folder.String());
+	if (node.InitCheck() == B_OK)
+		node.WriteAttrString(kAttrColorValue, &wanted);
+
+	return folder;
+}
+
+
 std::vector<BookmarkFile>
 BookmarkFile::ListHighlights()
 {
