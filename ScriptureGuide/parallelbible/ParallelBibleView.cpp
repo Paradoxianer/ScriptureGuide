@@ -268,9 +268,20 @@ public:
 
 		// Two extra cells on the end: "remove the highlight here", so
 		// undoing a mis-click needs no different gesture than making
-		// one, and "..." which opens the ordinary right-click menu for
-		// the same selection.
-		float width = kGap + (count + 2) * (kSwatch + kGap);
+		// one, and a labelled one that opens the collection tree.
+		//
+		// This one window is what BOTH routes show -- the automatic
+		// popup after a drag and a right-click on a selection -- so
+		// there is one implementation and one look, rather than a
+		// window for one and a menu for the other. The colours stay
+		// immediately visible rather than sitting behind an entry:
+		// highlighting is the common case right after selecting, and a
+		// step in front of it would be paid on every single use.
+		BString listLabel(B_TRANSLATE("To Verse List" B_UTF8_ELLIPSIS));
+		float listWidth = be_plain_font->StringWidth(listLabel.String())
+			+ 12.0f;
+		float width = kGap + (count + 1) * (kSwatch + kGap) + listWidth
+			+ kGap;
 		float height = kGap * 2 + kSwatch;
 		ResizeTo(width, height);
 
@@ -303,11 +314,12 @@ public:
 			new BMessage(PARALLEL_HIGHLIGHT_APPLY), this, true));
 
 		BRect moreFrame(kGap + (count + 1) * (kSwatch + kGap), kGap, 0, 0);
-		moreFrame.right = moreFrame.left + kSwatch;
+		moreFrame.right = moreFrame.left + listWidth;
 		moreFrame.bottom = moreFrame.top + kSwatch;
 		backdrop->AddChild(new SwatchView(moreFrame,
 			ui_color(B_DOCUMENT_BACKGROUND_COLOR),
-			new BMessage(PARALLEL_HIGHLIGHT_MORE), this, false, true));
+			new BMessage(PARALLEL_HIGHLIGHT_MORE), this, false, true,
+			listLabel.String()));
 
 		// Keep the bar on screen when the selection ends near an edge.
 		BScreen screen;
@@ -348,7 +360,7 @@ private:
 	public:
 		SwatchView(BRect frame, rgb_color color, BMessage* message,
 			HighlightPaletteWindow* owner, bool isRemove = false,
-			bool isMore = false)
+			bool isMore = false, const char* label = NULL)
 			:
 			BView(frame, "swatch", B_FOLLOW_NONE, B_WILL_DRAW),
 			fColor(color),
@@ -356,6 +368,7 @@ private:
 			fOwner(owner),
 			fIsRemove(isRemove),
 			fIsMore(isMore),
+			fLabel(label != NULL ? label : ""),
 			fPressed(false)
 		{
 		}
@@ -386,15 +399,14 @@ private:
 				SetPenSize(1.0f);
 			}
 			if (fIsMore) {
-				// Three dots, the usual "there is more behind this".
-				SetHighColor(tint_color(ui_color(B_PANEL_BACKGROUND_COLOR),
-					B_DARKEN_4_TINT));
-				float y = bounds.top + bounds.Height() / 2.0f;
-				float x = bounds.left + 5.0f;
-				for (int i = 0; i < 3; i++) {
-					FillRect(BRect(x, y - 1, x + 1, y + 1));
-					x += 5.0f;
-				}
+				SetHighColor(ui_color(B_PANEL_TEXT_COLOR));
+				SetLowColor(fColor);
+				font_height height;
+				GetFontHeight(&height);
+				float baseline = bounds.top
+					+ (bounds.Height() + height.ascent - height.descent) / 2.0f;
+				DrawString(fLabel.String(),
+					BPoint(bounds.left + 6.0f, baseline));
 			}
 		}
 
@@ -440,6 +452,7 @@ private:
 		HighlightPaletteWindow*	fOwner;
 		bool					fIsRemove;
 		bool					fIsMore;
+		BString					fLabel;
 		bool					fPressed;
 	};
 
@@ -571,14 +584,22 @@ public:
 
 					BPoint screenPoint = where;
 					ConvertToScreen(&screenPoint);
+					// The same window the automatic popup shows -- one
+					// implementation, one look. Only when the selection
+					// resolves to a verse-anchored range; otherwise fall
+					// back to the collection tree on its own, since there
+					// is nothing to highlight.
 					if (haveHighlightRange) {
-						fOwner->_ArmHighlight(fTranslationName.String(),
+						fOwner->_ShowHighlightPalette(
+							fTranslationName.String(),
 							versification.String(), language.Code(),
-							highlightRange);
+							reference.String(), highlightRange,
+							screenPoint);
+					} else {
+						fOwner->_ShowAddToListMenu(reference.String(),
+							versification.String(), language.Code(),
+							screenPoint);
 					}
-					fOwner->_ShowAddToListMenu(reference.String(),
-						versification.String(), language.Code(),
-						screenPoint, haveHighlightRange);
 				}
 			}
 			return;
@@ -3061,17 +3082,6 @@ PopulateAddToListMenu(BMenu* menu, BHandler* target, const char* path,
 }
 
 
-void
-ParallelBibleView::_ArmHighlight(const char* module,
-	const char* versification, const char* locale,
-	const HighlightRange& range)
-{
-	fPendingHighlight.module = module;
-	fPendingHighlight.versification = versification;
-	fPendingHighlight.locale = locale;
-	fPendingHighlight.selectionReference = range.reference;
-	fPendingHighlight.range = range;
-}
 
 
 void
@@ -3293,8 +3303,7 @@ ParallelBibleView::_ReloadHighlights()
 
 void
 ParallelBibleView::_ShowAddToListMenu(const char* reference,
-	const char* versification, const char* locale, BPoint screenPoint,
-	bool withHighlightActions)
+	const char* versification, const char* locale, BPoint screenPoint)
 {
 	BPopUpMenu* menu = new BPopUpMenu("addToList", false, false);
 
@@ -3316,33 +3325,7 @@ ParallelBibleView::_ShowAddToListMenu(const char* reference,
 	addToListMenu->SetTargetForItems(this);
 	menu->AddItem(addToListMenu);
 
-	// #44: the same actions the colour bar offers, reachable from any
-	// selection rather than only from one made by dragging. Same
-	// messages, same palette definition -- one set of actions, two ways
-	// in.
-	if (withHighlightActions) {
-		BMenu* highlightMenu = new BMenu(B_TRANSLATE("Highlight"));
 
-		int32 colorCount = 0;
-		const HighlightPaletteWindow::Entry* palette
-			= HighlightPaletteWindow::Palette(colorCount);
-		for (int32 i = 0; i < colorCount; i++) {
-			BMessage* apply = new BMessage(PARALLEL_HIGHLIGHT_APPLY);
-			apply->AddInt32("color", ((int32)palette[i].color.red << 16)
-				| ((int32)palette[i].color.green << 8)
-				| (int32)palette[i].color.blue);
-			apply->AddString("name", palette[i].name);
-			highlightMenu->AddItem(new BMenuItem(palette[i].name, apply));
-		}
-		highlightMenu->AddSeparatorItem();
-		// No "color" field at all is the remove case -- see the palette's
-		// own crossed cell.
-		highlightMenu->AddItem(new BMenuItem(
-			B_TRANSLATE("Remove Highlight"),
-			new BMessage(PARALLEL_HIGHLIGHT_APPLY)));
-		highlightMenu->SetTargetForItems(this);
-		menu->AddItem(highlightMenu);
-	}
 
 	menu->SetTargetForItems(this);
 	menu->SetAsyncAutoDestruct(true);
