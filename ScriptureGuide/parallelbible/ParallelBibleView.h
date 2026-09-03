@@ -487,6 +487,14 @@ public:
 				// are already in the verse's own normal-form character
 				// offsets (BibleTextDocument::VersePositionAt()), so
 				// nothing downstream has to know about rendering again.
+				// #44: remembers what the next highlight action applies
+				// to, without showing the palette -- used by the
+				// right-click menu, which offers the same actions for a
+				// selection made any other way.
+				void				_ArmHighlight(const char* module,
+										const char* versification,
+										const char* locale,
+										const HighlightRange& range);
 				void				_ShowHighlightPalette(
 										const char* module,
 										const char* versification,
@@ -521,7 +529,8 @@ public:
 										const char* reference,
 										const char* versification,
 										const char* locale,
-										BPoint screenPoint);
+										BPoint screenPoint,
+										bool withHighlightActions = false);
 				// Called by NotesSaveListener (an unrelated class, not a
 				// friend -- same reasoning as _ColumnScrolled() etc.
 				// above) -- not meant for other callers.

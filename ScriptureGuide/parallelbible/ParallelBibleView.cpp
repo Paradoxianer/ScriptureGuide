@@ -546,6 +546,15 @@ public:
 				if (start >= 0 && end > start) {
 					BString reference = _ReferenceFor(start, end);
 
+					// #44: the palette only appears after a drag, so a
+					// selection made any other way (Select All from the
+					// keyboard, most obviously) had no route to the
+					// highlight actions at all. Arm them here so the
+					// menu below can offer them.
+					ParallelBibleView::HighlightRange highlightRange;
+					bool haveHighlightRange
+						= _ComputeHighlightRange(highlightRange);
+
 					BString versification;
 					SWModule* module = fBibleDocument->Module();
 					if (module != NULL) {
@@ -562,9 +571,14 @@ public:
 
 					BPoint screenPoint = where;
 					ConvertToScreen(&screenPoint);
+					if (haveHighlightRange) {
+						fOwner->_ArmHighlight(fTranslationName.String(),
+							versification.String(), language.Code(),
+							highlightRange);
+					}
 					fOwner->_ShowAddToListMenu(reference.String(),
 						versification.String(), language.Code(),
-						screenPoint);
+						screenPoint, haveHighlightRange);
 				}
 			}
 			return;
@@ -1245,29 +1259,69 @@ private:
 	// describe (each verse would need its own).
 	void _OfferHighlight(BPoint where)
 	{
-		if (fBibleDocument == NULL || fOwner == NULL)
+		ParallelBibleView::HighlightRange range;
+		if (!_ComputeHighlightRange(range))
 			return;
+
+		BString versification = _SelectionVersification();
+		BLanguage language;
+		BLocale::Default()->GetLanguage(&language);
+
+		BPoint screenPoint = where;
+		ConvertToScreen(&screenPoint);
+		fOwner->_ShowHighlightPalette(fTranslationName.String(),
+			versification.String(), language.Code(),
+			range.reference.String(), range, screenPoint);
+	}
+
+	BString _SelectionVersification() const
+	{
+		BString versification;
+		SWModule* module = fBibleDocument != NULL
+			? fBibleDocument->Module() : NULL;
+		if (module != NULL) {
+			const char* configured = module->getConfigEntry("Versification");
+			if (configured != NULL)
+				versification = configured;
+		}
+		if (versification.IsEmpty())
+			versification = "KJV";
+		return versification;
+	}
+
+	// The current selection as one verse-anchored range. Shared by the
+	// palette that pops up after a drag and by the right-click menu,
+	// which is the only way to reach a selection made any other way --
+	// Select All from the keyboard, most obviously.
+	bool _ComputeHighlightRange(ParallelBibleView::HighlightRange& outRange)
+	{
+		if (fBibleDocument == NULL || fOwner == NULL)
+			return false;
 
 		int32 start = -1;
 		int32 end = -1;
 		GetSelection(start, end);
 		if (start < 0 || end <= start)
-			return;
+			return false;
 
 		int startVerse = 0;
 		int endVerse = 0;
 		int32 startOffset = 0;
 		int32 endOffset = 0;
 		if (!fBibleDocument->VersePositionAt(start, startVerse, startOffset))
-			return;
+			return false;
 		if (!fBibleDocument->VersePositionAt(end, endVerse, endOffset)) {
-			// Released past the end of the text (the empty area below or
-			// beside the last line) -- treat it as "to the end of the
-			// verse the selection started in" rather than declining,
-			// which is what made a release in the white margin do
-			// nothing at all.
-			endVerse = startVerse;
-			endOffset = fBibleDocument->VerseTextLength(startVerse);
+			// Past the end of the text -- the empty area below the last
+			// line, or the exclusive end offset a Select All reports.
+			// Retry one character back so a whole-document selection
+			// still resolves to the LAST verse; only if that fails too
+			// does this fall back to the verse it started in.
+			if (end <= 0
+				|| !fBibleDocument->VersePositionAt(end - 1, endVerse,
+					endOffset)) {
+				endVerse = startVerse;
+			}
+			endOffset = fBibleDocument->VerseTextLength(endVerse);
 		}
 
 		// Landing exactly on a verse boundary reports the FOLLOWING
@@ -1280,28 +1334,15 @@ private:
 			endOffset = fBibleDocument->VerseTextLength(endVerse);
 		}
 		if (endVerse < startVerse)
-			return;
-
-		BString versification;
-		SWModule* module = fBibleDocument->Module();
-		if (module != NULL) {
-			const char* configured = module->getConfigEntry("Versification");
-			if (configured != NULL)
-				versification = configured;
-		}
-		if (versification.IsEmpty())
-			versification = "KJV";
-
-		BLanguage language;
-		BLocale::Default()->GetLanguage(&language);
+			return false;
 
 		int32 endVerseLength = fBibleDocument->VerseTextLength(endVerse);
 		if (endVerseLength < 0)
-			return;
+			return false;
 		if (endOffset > endVerseLength)
 			endOffset = endVerseLength;
 		if (endVerse == startVerse && endOffset <= startOffset)
-			return;
+			return false;
 
 		ParallelBibleView::HighlightRange range;
 		range.verse = startVerse;
@@ -1317,13 +1358,8 @@ private:
 		// offsets can be healed against it later.
 		range.text = fBibleDocument->Text(start, end - start);
 
-		BString selectionReference = _ReferenceFor(start, end);
-
-		BPoint screenPoint = where;
-		ConvertToScreen(&screenPoint);
-		fOwner->_ShowHighlightPalette(fTranslationName.String(),
-			versification.String(), language.Code(),
-			selectionReference.String(), range, screenPoint);
+		outRange = range;
+		return true;
 	}
 
 	BibleTextDocument*	fBibleDocument;
@@ -3026,6 +3062,19 @@ PopulateAddToListMenu(BMenu* menu, BHandler* target, const char* path,
 
 
 void
+ParallelBibleView::_ArmHighlight(const char* module,
+	const char* versification, const char* locale,
+	const HighlightRange& range)
+{
+	fPendingHighlight.module = module;
+	fPendingHighlight.versification = versification;
+	fPendingHighlight.locale = locale;
+	fPendingHighlight.selectionReference = range.reference;
+	fPendingHighlight.range = range;
+}
+
+
+void
 ParallelBibleView::_ShowHighlightPalette(const char* module,
 	const char* versification, const char* locale,
 	const char* selectionReference, const HighlightRange& range,
@@ -3244,7 +3293,8 @@ ParallelBibleView::_ReloadHighlights()
 
 void
 ParallelBibleView::_ShowAddToListMenu(const char* reference,
-	const char* versification, const char* locale, BPoint screenPoint)
+	const char* versification, const char* locale, BPoint screenPoint,
+	bool withHighlightActions)
 {
 	BPopUpMenu* menu = new BPopUpMenu("addToList", false, false);
 
@@ -3265,6 +3315,34 @@ ParallelBibleView::_ShowAddToListMenu(const char* reference,
 		versification, locale);
 	addToListMenu->SetTargetForItems(this);
 	menu->AddItem(addToListMenu);
+
+	// #44: the same actions the colour bar offers, reachable from any
+	// selection rather than only from one made by dragging. Same
+	// messages, same palette definition -- one set of actions, two ways
+	// in.
+	if (withHighlightActions) {
+		BMenu* highlightMenu = new BMenu(B_TRANSLATE("Highlight"));
+
+		int32 colorCount = 0;
+		const HighlightPaletteWindow::Entry* palette
+			= HighlightPaletteWindow::Palette(colorCount);
+		for (int32 i = 0; i < colorCount; i++) {
+			BMessage* apply = new BMessage(PARALLEL_HIGHLIGHT_APPLY);
+			apply->AddInt32("color", ((int32)palette[i].color.red << 16)
+				| ((int32)palette[i].color.green << 8)
+				| (int32)palette[i].color.blue);
+			apply->AddString("name", palette[i].name);
+			highlightMenu->AddItem(new BMenuItem(palette[i].name, apply));
+		}
+		highlightMenu->AddSeparatorItem();
+		// No "color" field at all is the remove case -- see the palette's
+		// own crossed cell.
+		highlightMenu->AddItem(new BMenuItem(
+			B_TRANSLATE("Remove Highlight"),
+			new BMessage(PARALLEL_HIGHLIGHT_APPLY)));
+		highlightMenu->SetTargetForItems(this);
+		menu->AddItem(highlightMenu);
+	}
 
 	menu->SetTargetForItems(this);
 	menu->SetAsyncAutoDestruct(true);
