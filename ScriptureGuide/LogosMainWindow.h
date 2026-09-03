@@ -149,6 +149,21 @@ private:
 	BMenuItem		*fShowStrongsNumItem;
 	BMenuItem		*fShowCrossRefItem;
 
+	// #44: rebuilt every time Options opens, since a colour category is
+	// just a folder the user can add, rename or delete at any moment.
+	BMenu			*fHighlightColorsMenu;
+	// Colours switched off, as "#rrggbb" -- keyed on the colour, not on
+	// the category's name, so renaming a folder cannot silently bring
+	// its highlights back.
+	std::vector<BString>	fHiddenHighlightColors;
+	void			_RebuildHighlightColorsMenu();
+	void			_ApplyHiddenHighlightColors();
+
+public:
+	virtual void	MenusBeginning();
+
+private:
+
 	BMenu			*fBookMenu;
 
 	BTextControl	*fChapterBox;

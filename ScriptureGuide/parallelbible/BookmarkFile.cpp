@@ -620,6 +620,54 @@ BookmarkFile::HighlightsDirectory()
 }
 
 
+std::vector<BookmarkFile::HighlightCategory>
+BookmarkFile::ListHighlightCategories()
+{
+	std::vector<HighlightCategory> categories;
+	BString root = HighlightsDirectory();
+	if (root.IsEmpty())
+		return categories;
+
+	BDirectory rootDir(root.String());
+	if (rootDir.InitCheck() != B_OK)
+		return categories;
+
+	BEntry entry;
+	while (rootDir.GetNextEntry(&entry) == B_OK) {
+		if (!entry.IsDirectory())
+			continue;
+
+		BNode node(&entry);
+		BString stored;
+		HighlightCategory category;
+		if (node.InitCheck() != B_OK
+			|| node.ReadAttrString(kAttrColorValue, &stored) != B_OK
+			|| !ParseHighlightColor(stored.String(), category.color)) {
+			// A folder with no colour of its own is not a category --
+			// it may be anything the user filed in here by hand.
+			continue;
+		}
+
+		char leaf[B_FILE_NAME_LENGTH];
+		if (entry.GetName(leaf) != B_OK)
+			continue;
+		BPath path;
+		if (entry.GetPath(&path) != B_OK)
+			continue;
+
+		category.name = leaf;
+		category.path = path.Path();
+		categories.push_back(category);
+	}
+
+	std::sort(categories.begin(), categories.end(),
+		[](const HighlightCategory& a, const HighlightCategory& b) {
+			return a.name.Compare(b.name) < 0;
+		});
+	return categories;
+}
+
+
 BString
 BookmarkFile::HighlightFolderForColor(rgb_color color,
 	const char* fallbackName)

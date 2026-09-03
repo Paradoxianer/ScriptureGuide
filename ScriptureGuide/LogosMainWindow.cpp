@@ -1,5 +1,9 @@
 #include "LogosMainWindow.h"
 
+#include <algorithm>
+
+#include "parallelbible/BookmarkFile.h"
+
 #include <Alert.h>
 #include <Application.h>
 #include <AboutWindow.h>
@@ -210,6 +214,18 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	// last time it was closed. Absent one (fresh install, or a
 	// preferences file from before this existed), the single column
 	// already built stands as-is.
+	// #44: restore which highlight colours are switched off before the
+	// first render, so hidden ones never flash up on startup.
+	prefsLock.Lock();
+	BString hiddenColor;
+	for (int32 i = 0;
+			preferences.FindString("hiddenhighlightcolor", i, &hiddenColor)
+				== B_OK; i++) {
+		fHiddenHighlightColors.push_back(hiddenColor);
+	}
+	prefsLock.Unlock();
+	_ApplyHiddenHighlightColors();
+
 	RestoreColumnLayout();
 
 	// Load the preferences for the individual module
@@ -324,6 +340,12 @@ void SGMainWindow::BuildGUI(void)
 		new BMessage(MENU_OPTIONS_CROSSREF));
 	fShowCrossRefItem->SetMarked(fShowCrossReferences);
 	menu->AddItem(fShowCrossRefItem);
+	// #44: one checkable entry per highlight colour that actually
+	// exists. Filled in by MenusBeginning(), not here -- a category is a
+	// folder the user can add, rename or delete while the window is
+	// open, so building it once at startup would go stale.
+	fHighlightColorsMenu = new BMenu(B_TRANSLATE("Highlight Colours"));
+	menu->AddItem(fHighlightColorsMenu);
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Choose Font…"),
 		new BMessage(MENU_OPTIONS_FONT)));
 	fMenuBar->AddItem(menu);
@@ -668,6 +690,15 @@ void SGMainWindow::SavePrefsForModule(void)
 	// "verselistcollection" (nothing was open) is a valid, deliberately
 	// saved value, not skipped -- EnsureVerseListWindow() only tries to
 	// reopen it when it isn't.
+	// #44: which highlight colours are switched off. Stored as
+	// "#rrggbb" strings rather than category names, so renaming a colour
+	// folder cannot silently bring its highlights back.
+	preferences.RemoveName("hiddenhighlightcolor");
+	for (size_t i = 0; i < fHiddenHighlightColors.size(); i++) {
+		preferences.AddString("hiddenhighlightcolor",
+			fHiddenHighlightColors[i]);
+	}
+
 	if (fVerseListWindow != NULL) {
 		preferences.RemoveData("verselistframe");
 		preferences.AddRect("verselistframe", fVerseListWindow->Frame());
@@ -1006,6 +1037,25 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fShowCrossReferences = !fShowCrossReferences;
 			fShowCrossRefItem->SetMarked(fShowCrossReferences);
 			fParallelView->SetShowCrossReferences(fShowCrossReferences);
+			SavePrefsForModule();
+			break;
+		}
+
+		case MENU_OPTIONS_HIGHLIGHT_COLOR:
+		{
+			BString color;
+			if (msg->FindString("color", &color) != B_OK)
+				break;
+
+			std::vector<BString>::iterator found
+				= std::find(fHiddenHighlightColors.begin(),
+					fHiddenHighlightColors.end(), color);
+			if (found != fHiddenHighlightColors.end())
+				fHiddenHighlightColors.erase(found);
+			else
+				fHiddenHighlightColors.push_back(color);
+
+			_ApplyHiddenHighlightColors();
 			SavePrefsForModule();
 			break;
 		}
@@ -1593,6 +1643,60 @@ SGMainWindow::EnsureVerseListWindow(void)
 	}
 	fVerseListWindow->Show();
 	fVerseListWindow->Activate(true);
+}
+
+
+void
+SGMainWindow::_RebuildHighlightColorsMenu()
+{
+	if (fHighlightColorsMenu == NULL)
+		return;
+
+	while (fHighlightColorsMenu->CountItems() > 0)
+		delete fHighlightColorsMenu->RemoveItem((int32)0);
+
+	std::vector<BookmarkFile::HighlightCategory> categories
+		= BookmarkFile::ListHighlightCategories();
+	if (categories.empty()) {
+		BMenuItem* empty = new BMenuItem(
+			B_TRANSLATE("(No highlights yet)"), NULL);
+		empty->SetEnabled(false);
+		fHighlightColorsMenu->AddItem(empty);
+		return;
+	}
+
+	for (size_t i = 0; i < categories.size(); i++) {
+		BString value = FormatHighlightColor(categories[i].color);
+		BMessage* message = new BMessage(MENU_OPTIONS_HIGHLIGHT_COLOR);
+		message->AddString("color", value);
+
+		// The folder's own name is the label -- renaming it to something
+		// meaningful is the whole point of #44's "a category is a verse
+		// list with a colour".
+		BMenuItem* item = new BMenuItem(categories[i].name.String(),
+			message);
+		item->SetMarked(std::find(fHiddenHighlightColors.begin(),
+			fHiddenHighlightColors.end(), value)
+				== fHiddenHighlightColors.end());
+		fHighlightColorsMenu->AddItem(item);
+	}
+	fHighlightColorsMenu->SetTargetForItems(this);
+}
+
+
+void
+SGMainWindow::_ApplyHiddenHighlightColors()
+{
+	if (fParallelView != NULL)
+		fParallelView->SetHiddenHighlightColors(fHiddenHighlightColors);
+}
+
+
+void
+SGMainWindow::MenusBeginning()
+{
+	_RebuildHighlightColorsMenu();
+	BWindow::MenusBeginning();
 }
 
 

@@ -497,6 +497,15 @@ public:
 				// Re-reads every stored highlight and pushes the ones
 				// belonging to each column's own module and current
 				// chapter into that column's document.
+				// #44: colours the user has switched off. Stored as
+				// "#rrggbb" strings so the setting survives a folder
+				// being renamed -- it is the colour that is hidden, not
+				// the category's current name. Called by SGMainWindow,
+				// same not-a-friend reasoning as the other entry points
+				// in this section.
+				void				SetHiddenHighlightColors(
+										const std::vector<BString>& colors);
+				std::vector<BString>	fHiddenHighlightColors;
 				void				_ReloadHighlights();
 				// #44: closes the palette if one is open. B_AVOID_FOCUS
 				// means the window may never be activated at all, so it

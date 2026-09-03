@@ -3056,7 +3056,8 @@ ParallelBibleView::_ShowHighlightPalette(const char* module,
 // written in.
 static std::vector<BibleTextDocument::VerseHighlight>
 HighlightsForDocument(const std::vector<BookmarkFile>& all,
-	const BString& moduleName, BibleTextDocument* document)
+	const BString& moduleName, BibleTextDocument* document,
+	const std::vector<BString>& hiddenColors)
 {
 	std::vector<BibleTextDocument::VerseHighlight> result;
 	if (document == NULL || moduleName.IsEmpty())
@@ -3096,6 +3097,17 @@ HighlightsForDocument(const std::vector<BookmarkFile>& all,
 		const BookmarkFile& bookmark = all[i];
 		if (BString(bookmark.SpanModule()) != moduleName)
 			continue;
+
+		// Switched off in Options -- matched on the colour rather than
+		// the category's name, so renaming a folder does not silently
+		// bring its highlights back.
+		if (!hiddenColors.empty()) {
+			BString value = FormatHighlightColor(bookmark.Color());
+			if (std::find(hiddenColors.begin(), hiddenColors.end(), value)
+					!= hiddenColors.end()) {
+				continue;
+			}
+		}
 
 		BString code = bookmark.Code();
 		if (code.Length() < 9)
@@ -3202,6 +3214,14 @@ ParallelBibleView::_DismissHighlightPalette()
 
 
 void
+ParallelBibleView::SetHiddenHighlightColors(const std::vector<BString>& colors)
+{
+	fHiddenHighlightColors = colors;
+	_ReloadHighlights();
+}
+
+
+void
 ParallelBibleView::_ReloadHighlights()
 {
 	// Read once for the whole view rather than once per column: the
@@ -3214,7 +3234,8 @@ ParallelBibleView::_ReloadHighlights()
 		if (document == NULL || i >= fModules.size() || fModules[i] == NULL)
 			continue;
 		document->SetHighlights(HighlightsForDocument(all,
-			BString(fModules[i]->getName()), document));
+			BString(fModules[i]->getName()), document,
+			fHiddenHighlightColors));
 	}
 
 	_Realign();

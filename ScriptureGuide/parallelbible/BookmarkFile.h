@@ -230,6 +230,18 @@ public:
 			static BString	HighlightFolderForColor(rgb_color color,
 											const char* fallbackName);
 
+			// #44: every colour folder that exists, with the name the
+			// user gave it and the colour it collects. What an
+			// "on/off per colour" menu is built from, so the menu shows
+			// whatever categories actually exist rather than the six the
+			// palette happens to offer.
+			struct HighlightCategory {
+				BString		name;
+				BString		path;
+				rgb_color	color;
+			};
+			static std::vector<HighlightCategory>	ListHighlightCategories();
+
 			// Every bookmark file directly inside `collectionPath` (NOT
 			// recursive -- a nested collection's own bookmarks are not
 			// walked), sorted by their SG:position attribute (a file

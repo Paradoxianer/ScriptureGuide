@@ -109,6 +109,10 @@ const uint32 PARALLEL_HIGHLIGHT_APPLY	= 'PVha';
 // right-click menu for the same selection, so the quick colour bar and
 // the full action menu are one set of actions rather than two.
 const uint32 PARALLEL_HIGHLIGHT_MORE	= 'PVhm';
+// #44: a colour was switched on or off in Options > Highlight Colours.
+// Carries "color" as the "#rrggbb" string, which is what the setting is
+// keyed on -- renaming a category must not change what is hidden.
+const uint32 MENU_OPTIONS_HIGHLIGHT_COLOR	= 'MOhc';
 
 const uint32 MENU_HELP_LOGOS			= 'MHlo';
 const uint32 MENU_HELP_HOWTO			= 'MHho';
