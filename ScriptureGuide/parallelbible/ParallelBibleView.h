@@ -15,6 +15,7 @@
 #include <swmodule.h>
 
 #include "BibleTextDocument.h"
+#include "HighlightStore.h"
 #include "PersonalNotesModule.h"
 #include "TextDocumentView.h"
 
@@ -416,21 +417,10 @@ public:
 				// offering to act on -- held between the palette opening
 				// and a colour being clicked, since the palette answers
 				// asynchronously.
-				// #44: the selection as ONE contiguous range. A range
-				// spanning several verses stays a single bookmark --
-				// `start` is an offset into `verse`, `end` one into
-				// `endVerse`, everything between is covered whole --
-				// because splitting it per verse would throw away the
-				// very thing that makes it convertible into a verse-list
-				// entry like "1. Mose 1:4-10" later.
-				struct HighlightRange {
-					int		verse;
-					int		endVerse;
-					int32	start;
-					int32	end;
-					BString	reference;
-					BString	text;
-				};
+				// #44: the range type now lives with the rest of the
+				// highlight handling; kept under the old name here so
+				// every existing use reads unchanged.
+				typedef HighlightStore::HighlightRange HighlightRange;
 				struct PendingHighlight {
 					BString						module;
 					BString						versification;
@@ -528,9 +518,6 @@ public:
 				// been abandoned -- the next click anywhere in a column,
 				// and any chapter change, dismiss it explicitly instead.
 				void				_DismissHighlightPalette();
-				void				_RemoveHighlightsIn(
-										const BString& moduleName,
-										const HighlightRange& range);
 
 				// #44: the ONE menu a right-click on a selection opens
 				// -- the reference, then the highlight colours, then the

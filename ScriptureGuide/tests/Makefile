@@ -16,6 +16,7 @@ SRCS = \
 	 \
 	 ../parallelbible/BibleTextDocument.cpp  \
 	 ../parallelbible/BookmarkFile.cpp  \
+	 ../parallelbible/HighlightStore.cpp  \
 	 ../parallelbible/ParallelBibleView.cpp  \
 	 ../parallelbible/PersonalNotesModule.cpp  \
 	 ../parallelbible/VerseAligner.cpp  \
