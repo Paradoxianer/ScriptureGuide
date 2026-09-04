@@ -517,6 +517,10 @@ public:
 				void				SetHiddenHighlightColors(
 										const std::vector<BString>& colors);
 				std::vector<BString>	fHiddenHighlightColors;
+				void				_ChangeColumnFromMessage(
+										BMessage* message);
+				void				_ApplyHighlightMessage(
+										BMessage* message);
 				void				_ReloadHighlights();
 				// #44: closes the palette if one is open. B_AVOID_FOCUS
 				// means the window may never be activated at all, so it

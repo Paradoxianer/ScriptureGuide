@@ -1993,64 +1993,8 @@ ParallelBibleView::MessageReceived(BMessage* message)
 		case PARALLEL_REMOVE_COLUMN:
 		case PARALLEL_INSERT_MODULE:
 		case PARALLEL_INSERT_NOTES:
-		{
-			// Selecting an item in a column's own dropdown, or clicking
-			// its remove button, ultimately calls _RebuildLayout(),
-			// which deletes and recreates every header BMenuField --
-			// including, in the dropdown case, the very one whose click
-			// this message came from. BMenuField::MouseDown() (Haiku's
-			// Interface Kit) spawns a background thread ("_m_task_") to
-			// track the very click that produced this rebuild, and
-			// ~BMenuField() blocks in wait_for_thread() for it; if that
-			// thread still needs this window's lock for its own
-			// post-click cleanup while this dispatch already holds it
-			// (BLooper holds its lock for a dispatch's full duration),
-			// deleting the field synchronously here deadlocks the whole
-			// window -- reproduced live, not just theoretical. Structural
-			// changes (a column added or removed, below) don't have this
-			// risk: those are triggered by a plain BButton click
-			// ("+"/"x"), which tracks synchronously with no spawned
-			// thread, so by the time this runs no *other* field's
-			// tracking thread should still be active.
-			if (!message->HasBool("deferred")) {
-				BMessage deferred(*message);
-				deferred.AddBool("deferred", true);
-				BMessenger(this).SendMessage(&deferred);
-				break;
-			}
-
-			int32 index;
-			if (message->FindInt32("index", &index) == B_OK)
-				_SetActiveColumn(index);
-
-			if (message->what == PARALLEL_SELECT_MODULE) {
-				BString module;
-				if (message->FindInt32("index", &index) == B_OK
-					&& message->FindString("module", &module) == B_OK) {
-					_SetColumnToBible(index, module.String());
-				}
-			} else if (message->what == PARALLEL_SELECT_NOTES) {
-				if (message->FindInt32("index", &index) == B_OK)
-					_SetColumnToNotes(index);
-			} else if (message->what == PARALLEL_REMOVE_COLUMN) {
-				if (message->FindInt32("index", &index) == B_OK)
-					RemoveColumn(index);
-			} else if (message->what == PARALLEL_INSERT_MODULE) {
-				BString module;
-				if (message->FindInt32("index", &index) == B_OK
-					&& message->FindString("module", &module) == B_OK) {
-					InsertColumn(index, module.String());
-					_SetActiveColumn(index + 1);
-				}
-			} else {
-				if (message->FindInt32("index", &index) == B_OK) {
-					InsertNotesColumn(index);
-					_SetActiveColumn(index + 1);
-				}
-			}
+			_ChangeColumnFromMessage(message);
 			break;
-		}
-
 		case PARALLEL_TOGGLE_LINK:
 		{
 			// A plain BButton click (see _RebuildHeader()) -- no spawned
@@ -2104,65 +2048,8 @@ ParallelBibleView::MessageReceived(BMessage* message)
 		}
 
 		case PARALLEL_HIGHLIGHT_APPLY:
-		{
-			// #44: a swatch was clicked in the palette. No "color" at
-			// all is the remove cell -- see the palette's own comment.
-			// An empty module is legitimate here: that is a verse-wide
-			// highlight. Only a missing reference means there is
-			// nothing to act on.
-			if (fPendingHighlight.range.reference.IsEmpty())
-				break;
-
-			int32 packed;
-			BString name;
-			if (message->FindInt32("color", &packed) == B_OK
-				&& message->FindString("name", &name) == B_OK) {
-				rgb_color color;
-				color.red = (uint8)((packed >> 16) & 0xff);
-				color.green = (uint8)((packed >> 8) & 0xff);
-				color.blue = (uint8)(packed & 0xff);
-				color.alpha = 255;
-
-				BString folder = BookmarkFile::HighlightFolderForColor(
-					color, name.String());
-				if (!folder.IsEmpty()) {
-					const HighlightRange& range = fPendingHighlight.range;
-					BookmarkFile bookmark;
-					int32 position = (int32)
-						BookmarkFile::ListBookmarkPaths(folder.String())
-							.size();
-					if (bookmark.CreateNew(folder.String(),
-							range.reference.String(),
-							fPendingHighlight.versification.String(),
-							fPendingHighlight.locale.String(), position)
-								== B_OK) {
-						bookmark.SetSpan(fPendingHighlight.module.String(),
-							range.start, range.end, range.text.String(),
-							range.endVerse);
-						bookmark.SetColor(color);
-						bookmark.Save();
-					}
-				}
-			} else {
-				_RemoveHighlightsIn(fPendingHighlight.module,
-					fPendingHighlight.range);
-			}
-
-			fPendingHighlight.module = "";
-			// The documents are about to be rebuilt, which makes every
-			// existing selection offset meaningless -- exactly the same
-			// reasoning SetKey() already applies. Left alone, the old
-			// selection reappears over whatever text now happens to sit
-			// at those offsets, which reads as the highlight having
-			// landed in a completely different verse.
-			for (size_t i = 0; i < fTextViews.size(); i++) {
-				if (fTextViews[i] != NULL)
-					fTextViews[i]->SetSelection(0, 0);
-			}
-			_ReloadHighlights();
+			_ApplyHighlightMessage(message);
 			break;
-		}
-
 		case PARALLEL_NOTES_TEXT_CHANGED:
 		{
 			// The debounce timer armed by NoteTextEdited() has expired --
@@ -3101,6 +2988,132 @@ void
 ParallelBibleView::SetHiddenHighlightColors(const std::vector<BString>& colors)
 {
 	fHiddenHighlightColors = colors;
+	_ReloadHighlights();
+}
+
+
+// #44: everything a swatch click (or the matching menu entry) sets in
+// motion -- find or create the colour's folder, write the bookmark,
+// clear the now-meaningless selection, re-read the store. Pulled out of
+// MessageReceived() because at sixty lines it was the one case there
+// long enough to hide its own shape.
+// One handler for every message that changes what a column shows or
+// whether it exists at all -- select a module, switch to notes, insert
+// or remove a column. Pulled out of MessageReceived() for its length;
+// the deadlock the deferral below avoids is the part worth reading.
+void
+ParallelBibleView::_ChangeColumnFromMessage(BMessage* message)
+{
+	// Selecting an item in a column's own dropdown, or clicking its
+	// remove button, ultimately calls _RebuildLayout(), which deletes
+	// and recreates every header BMenuField -- including, in the
+	// dropdown case, the very one whose click this message came from.
+	// BMenuField::MouseDown() (Haiku's Interface Kit) spawns a
+	// background thread ("_m_task_") to track the very click that
+	// produced this rebuild, and ~BMenuField() blocks in
+	// wait_for_thread() for it; if that thread still needs this window's
+	// lock for its own post-click cleanup while this dispatch already
+	// holds it (BLooper holds its lock for a dispatch's full duration),
+	// deleting the field synchronously here deadlocks the whole window
+	// -- reproduced live, not just theoretical. Structural changes (a
+	// column added or removed, below) don't have this risk: those are
+	// triggered by a plain BButton click ("+"/"x"), which tracks
+	// synchronously with no spawned thread, so by the time this runs no
+	// *other* field's tracking thread should still be active.
+	if (!message->HasBool("deferred")) {
+		BMessage deferred(*message);
+		deferred.AddBool("deferred", true);
+		BMessenger(this).SendMessage(&deferred);
+		return;
+	}
+
+	int32 index;
+	if (message->FindInt32("index", &index) == B_OK)
+		_SetActiveColumn(index);
+
+	if (message->what == PARALLEL_SELECT_MODULE) {
+		BString module;
+		if (message->FindInt32("index", &index) == B_OK
+			&& message->FindString("module", &module) == B_OK) {
+			_SetColumnToBible(index, module.String());
+		}
+	} else if (message->what == PARALLEL_SELECT_NOTES) {
+		if (message->FindInt32("index", &index) == B_OK)
+			_SetColumnToNotes(index);
+	} else if (message->what == PARALLEL_REMOVE_COLUMN) {
+		if (message->FindInt32("index", &index) == B_OK)
+			RemoveColumn(index);
+	} else if (message->what == PARALLEL_INSERT_MODULE) {
+		BString module;
+		if (message->FindInt32("index", &index) == B_OK
+			&& message->FindString("module", &module) == B_OK) {
+			InsertColumn(index, module.String());
+			_SetActiveColumn(index + 1);
+		}
+	} else {
+		if (message->FindInt32("index", &index) == B_OK) {
+			InsertNotesColumn(index);
+			_SetActiveColumn(index + 1);
+		}
+	}
+}
+
+
+void
+ParallelBibleView::_ApplyHighlightMessage(BMessage* message)
+{
+	// An empty module is legitimate: that is a verse-wide highlight.
+	// Only a missing reference means there is nothing to act on.
+	if (fPendingHighlight.range.reference.IsEmpty())
+		return;
+
+	int32 packed;
+	BString name;
+	if (message->FindInt32("color", &packed) == B_OK
+		&& message->FindString("name", &name) == B_OK) {
+		rgb_color color;
+		color.red = (uint8)((packed >> 16) & 0xff);
+		color.green = (uint8)((packed >> 8) & 0xff);
+		color.blue = (uint8)(packed & 0xff);
+		color.alpha = 255;
+
+		BString folder = BookmarkFile::HighlightFolderForColor(color,
+			name.String());
+		if (!folder.IsEmpty()) {
+			const HighlightRange& range = fPendingHighlight.range;
+			BookmarkFile bookmark;
+			int32 position = (int32)BookmarkFile::ListBookmarkPaths(
+				folder.String()).size();
+			if (bookmark.CreateNew(folder.String(),
+					range.reference.String(),
+					fPendingHighlight.versification.String(),
+					fPendingHighlight.locale.String(), position) == B_OK) {
+				bookmark.SetSpan(fPendingHighlight.module.String(),
+					range.start, range.end, range.text.String(),
+					range.endVerse);
+				bookmark.SetColor(color);
+				bookmark.Save();
+			}
+		}
+	} else {
+		// No "color" field at all is the remove case -- see the
+		// palette's own crossed cell.
+		_RemoveHighlightsIn(fPendingHighlight.module,
+			fPendingHighlight.range);
+	}
+
+	fPendingHighlight.module = "";
+
+	// The documents are about to be rebuilt, which makes every existing
+	// selection offset meaningless -- exactly the reasoning SetKey()
+	// already applies. Left alone, the old selection reappears over
+	// whatever text now happens to sit at those offsets, which reads as
+	// the highlight having landed in a completely different verse.
+	for (size_t i = 0; i < fTextViews.size(); i++) {
+		if (fTextViews[i] != NULL)
+			fTextViews[i]->SetSelection(0, 0);
+	}
+
 	_ReloadHighlights();
 }
 
