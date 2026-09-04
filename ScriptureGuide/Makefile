@@ -47,7 +47,6 @@ SRCS = \
 	 parallelbible/HighlightStore.cpp  \
 	 parallelbible/PersonalNotesModule.cpp  \
 	 parallelbible/VerseAligner.cpp  \
-	 parallelbible/VerseListFile.cpp  \
 	 parallelbible/ParallelBibleView.cpp  \
 	 \
 	 textview/Bullet.cpp  \

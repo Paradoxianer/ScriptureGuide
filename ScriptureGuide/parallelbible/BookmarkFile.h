@@ -22,10 +22,10 @@
 //
 // Why this replaces VerseListFile rather than living alongside it: a
 // second, competing structured format in the same library folder is worse
-// than one -- see issue #55's own reasoning. VerseListFile itself is left
-// in place (issue #59, import/export between the two shapes, still needs
-// it to read an old-style whole-list file), it is just no longer what
-// SGVerseListWindow writes going forward.
+// than one -- see issue #55's own reasoning. VerseListFile, the class
+// that implemented the old shape, has since been deleted: issue #59
+// (import/export between the two) is off the table because that format
+// never reached a real user, so there was nothing left for it to read.
 //
 // What this buys, once a reference IS a file: Tracker becomes a free
 // browser for a collection (sortable by whatever attributes below expose,
