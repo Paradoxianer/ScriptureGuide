@@ -517,10 +517,18 @@ public:
 										const BString& moduleName,
 										const HighlightRange& range);
 
-				void				_ShowAddToListMenu(
+				// #44: the ONE menu a right-click on a selection opens
+				// -- the reference, then the highlight colours, then the
+				// cascading collection tree. `range` is NULL when the
+				// selection does not resolve to a verse-anchored range,
+				// in which case the colour entries are simply left out
+				// rather than a different menu being shown.
+				void				_ShowSelectionMenu(
+										const char* module,
 										const char* reference,
 										const char* versification,
 										const char* locale,
+										const HighlightRange* range,
 										BPoint screenPoint);
 				// Called by NotesSaveListener (an unrelated class, not a
 				// friend -- same reasoning as _ColumnScrolled() etc.

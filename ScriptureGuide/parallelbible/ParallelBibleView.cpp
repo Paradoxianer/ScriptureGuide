@@ -460,6 +460,65 @@ private:
 };
 
 
+// #44: swatch geometry for the colour items below.
+static const float kHighlightSwatchWidth = 16.0f;
+static const float kHighlightSwatchGap = 6.0f;
+
+
+// #44: a menu item that shows the colour it stands for. Lets the
+// highlight colours live in the ordinary right-click menu -- one menu
+// for everything that acts on a selection -- instead of needing a
+// second, differently-styled window beside it.
+class HighlightColorMenuItem : public BMenuItem {
+public:
+	HighlightColorMenuItem(const char* label, rgb_color color,
+		BMessage* message)
+		:
+		BMenuItem(label, message),
+		fColor(color)
+	{
+	}
+
+	virtual void GetContentSize(float* width, float* height)
+	{
+		BMenuItem::GetContentSize(width, height);
+		if (width != NULL)
+			*width += kHighlightSwatchWidth + kHighlightSwatchGap;
+	}
+
+	virtual void DrawContent()
+	{
+		BMenu* menu = Menu();
+		if (menu == NULL) {
+			BMenuItem::DrawContent();
+			return;
+		}
+
+		BPoint where = ContentLocation();
+		float height = 0.0f;
+		float width = 0.0f;
+		BMenuItem::GetContentSize(&width, &height);
+
+		BRect swatch(where.x, where.y + 2.0f,
+			where.x + kHighlightSwatchWidth, where.y + height - 3.0f);
+		rgb_color previous = menu->HighColor();
+		menu->SetHighColor(fColor);
+		menu->FillRect(swatch);
+		menu->SetHighColor(tint_color(ui_color(B_PANEL_BACKGROUND_COLOR),
+			B_DARKEN_2_TINT));
+		menu->StrokeRect(swatch);
+		menu->SetHighColor(previous);
+
+		menu->MovePenTo(where.x + kHighlightSwatchWidth + kHighlightSwatchGap,
+			menu->PenLocation().y);
+		BMenuItem::DrawContent();
+	}
+
+private:
+	rgb_color			fColor;
+};
+
+
 class BibleColumnView : public TextDocumentView {
 public:
 	BibleColumnView(const char* name, BibleTextDocument* document,
@@ -584,22 +643,17 @@ public:
 
 					BPoint screenPoint = where;
 					ConvertToScreen(&screenPoint);
-					// The same window the automatic popup shows -- one
-					// implementation, one look. Only when the selection
-					// resolves to a verse-anchored range; otherwise fall
-					// back to the collection tree on its own, since there
-					// is nothing to highlight.
-					if (haveHighlightRange) {
-						fOwner->_ShowHighlightPalette(
-							fTranslationName.String(),
-							versification.String(), language.Code(),
-							reference.String(), highlightRange,
-							screenPoint);
-					} else {
-						fOwner->_ShowAddToListMenu(reference.String(),
-							versification.String(), language.Code(),
-							screenPoint);
-					}
+					// One menu, always: the reference at the top, the
+					// highlight colours under it, the collection tree
+					// below. A right-click never opens the colour
+					// window -- that is the automatic popup's own
+					// gesture, and having two different things appear
+					// on the same click was the confusing part.
+					fOwner->_ShowSelectionMenu(fTranslationName.String(),
+						reference.String(), versification.String(),
+						language.Code(),
+						haveHighlightRange ? &highlightRange : NULL,
+						screenPoint);
 				}
 			}
 			return;
@@ -1514,8 +1568,11 @@ public:
 						language.Code(), "KJV", displayReference)) {
 					BPoint screenPoint = where;
 					ConvertToScreen(&screenPoint);
-					fOwner->_ShowAddToListMenu(displayReference.String(),
-						"KJV", language.Code(), screenPoint);
+					// Notes columns are excluded from highlighting (they
+					// are editable, so offsets move as you type), hence
+					// no range -- the menu simply omits the colours.
+					fOwner->_ShowSelectionMenu("", displayReference.String(),
+						"KJV", language.Code(), NULL, screenPoint);
 				}
 			}
 			return;
@@ -2297,7 +2354,7 @@ ParallelBibleView::MessageReceived(BMessage* message)
 		case PARALLEL_ADD_TO_VERSE_LIST:
 		{
 			// #67: whichever "Go to List"-style tree item was clicked in
-			// _ShowAddToListMenu()'s popup. Appended after whatever is
+			// _ShowSelectionMenu()'s popup. Appended after whatever is
 			// already in that collection -- if SGVerseListWindow happens
 			// to have this same one open, its own node-monitor watch
 			// (#79) already picks up the new file with no extra call
@@ -2322,11 +2379,14 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			// The same menu a right-click on the selection opens, so the
 			// two routes offer one set of actions rather than two lists
 			// that could drift apart.
+			// The same menu a right-click opens, minus the colours --
+			// the bar the user just clicked this cell on is showing
+			// them already.
 			if (!fPendingHighlight.selectionReference.IsEmpty()) {
-				_ShowAddToListMenu(
+				_ShowSelectionMenu(fPendingHighlight.module.String(),
 					fPendingHighlight.selectionReference.String(),
 					fPendingHighlight.versification.String(),
-					fPendingHighlight.locale.String(),
+					fPendingHighlight.locale.String(), NULL,
 					fPendingHighlightPoint);
 			}
 			break;
@@ -3302,10 +3362,21 @@ ParallelBibleView::_ReloadHighlights()
 
 
 void
-ParallelBibleView::_ShowAddToListMenu(const char* reference,
-	const char* versification, const char* locale, BPoint screenPoint)
+ParallelBibleView::_ShowSelectionMenu(const char* module,
+	const char* reference, const char* versification, const char* locale,
+	const HighlightRange* range, BPoint screenPoint)
 {
-	BPopUpMenu* menu = new BPopUpMenu("addToList", false, false);
+	// Remember what the highlight entries below act on. Done before the
+	// menu is built so the entries can simply post their message.
+	if (range != NULL) {
+		fPendingHighlight.module = module;
+		fPendingHighlight.versification = versification;
+		fPendingHighlight.locale = locale;
+		fPendingHighlight.selectionReference = range->reference;
+		fPendingHighlight.range = *range;
+	}
+
+	BPopUpMenu* menu = new BPopUpMenu("selection", false, false);
 
 	// Read-only, for context -- shown exactly as it will be stored
 	// (already locale-formatted by BibleColumnView::_ReferenceFor()).
@@ -3313,6 +3384,32 @@ ParallelBibleView::_ShowAddToListMenu(const char* reference,
 	heading->SetEnabled(false);
 	menu->AddItem(heading);
 	menu->AddSeparatorItem();
+
+	// #44: the highlight colours, directly in this menu rather than
+	// behind a submenu -- they are the shortest path from "I selected
+	// something" to "I marked it", and burying them would put a step in
+	// front of the most common action. Same palette definition and same
+	// message the automatic colour bar uses, so the two cannot drift
+	// apart.
+	if (range != NULL) {
+		int32 colorCount = 0;
+		const HighlightPaletteWindow::Entry* palette
+			= HighlightPaletteWindow::Palette(colorCount);
+		for (int32 i = 0; i < colorCount; i++) {
+			BMessage* apply = new BMessage(PARALLEL_HIGHLIGHT_APPLY);
+			apply->AddInt32("color", ((int32)palette[i].color.red << 16)
+				| ((int32)palette[i].color.green << 8)
+				| (int32)palette[i].color.blue);
+			apply->AddString("name", palette[i].name);
+			menu->AddItem(new HighlightColorMenuItem(palette[i].name,
+				palette[i].color, apply));
+		}
+		// No "color" field at all is the remove case -- see the
+		// palette's own crossed cell.
+		menu->AddItem(new BMenuItem(B_TRANSLATE("Remove Highlight"),
+			new BMessage(PARALLEL_HIGHLIGHT_APPLY)));
+		menu->AddSeparatorItem();
+	}
 
 	// The collection tree lives inside its own "Add to Verse List ▸"
 	// submenu, not as this popup's direct contents -- this menu is
