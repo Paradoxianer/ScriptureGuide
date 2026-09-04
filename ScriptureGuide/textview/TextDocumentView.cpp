@@ -211,10 +211,15 @@ TextDocumentView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragM
 	// a drag silently extended the text selection to wherever the
 	// pointer currently is, which is confusing to watch and not what a
 	// drag is supposed to do to the selection it's dragging.
+	// The PRIMARY button specifically, not "any button down": a
+	// right-click inside an existing selection moves the mouse a pixel
+	// or two before the popup menu takes the pointer, and extending the
+	// selection to there collapsed it onto the click -- so asking for a
+	// menu about a selection destroyed the selection it was about.
 	uint32 buttons = 0;
 	if (Window() != NULL)
 		Window()->CurrentMessage()->FindInt32("buttons", (int32*)&buttons);
-	if (buttons > 0 && dragMessage == NULL)
+	if ((buttons & B_PRIMARY_MOUSE_BUTTON) != 0 && dragMessage == NULL)
 		SetCaret(where, true);
 
 	BView::MouseMoved(where, transit, dragMessage);

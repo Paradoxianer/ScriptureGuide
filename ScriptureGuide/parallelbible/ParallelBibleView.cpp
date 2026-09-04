@@ -422,7 +422,10 @@ public:
 				Window()->CurrentMessage()->FindInt32("buttons",
 					(int32*)&buttons);
 			}
-			if (buttons > 0) {
+			// Primary button only, same reason as TextDocumentView's own
+			// check: a right-drag must not reshape the selection it is
+			// about to offer a menu for.
+			if ((buttons & B_PRIMARY_MOUSE_BUTTON) != 0) {
 				fOwner->_ColumnSelectionMoved(this, ConvertToScreen(where));
 				return;
 			}
