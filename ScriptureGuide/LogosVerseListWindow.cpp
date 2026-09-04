@@ -56,15 +56,6 @@
 // point: a German reader should see German book names on disk and in
 // Tracker, not an English-only canonical form -- portability comes from
 // recording which locale was used, not from forcing one.
-static BString
-CurrentLocaleCode()
-{
-	BLanguage language;
-	BLocale::Default()->GetLanguage(&language);
-	return BString(language.Code());
-}
-
-
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "VerseListWindow"

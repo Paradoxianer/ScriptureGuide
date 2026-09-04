@@ -2952,33 +2952,17 @@ HighlightsForDocument(const std::vector<BookmarkFile>& all,
 	if (document == NULL || moduleName.IsEmpty())
 		return result;
 
-	// The code of verse 1 of whatever chapter this document shows; its
-	// first six digits (testament + book + chapter) identify the
-	// chapter. Code() is derived purely from reference/versification/
-	// locale, so a throwaway instance is enough -- nothing is written.
-	BString chapterPrefix;
-	{
-		BString chapterKey(document->Key());
-		int32 colon = chapterKey.FindLast(':');
-		if (colon > 0) {
-			chapterKey.Truncate(colon);
-			chapterKey << ":1";
-		}
-		BookmarkFile probe;
-		probe.SetReference(chapterKey.String());
-		// Both matter: Key() is kept LOCALIZED (see BibleTextDocument's
-		// own comment), so without the locale "1. Mose 1:1" does not
-		// parse at all under a default English key, Code() comes back
-		// empty and every highlight is silently dropped -- confirmed
-		// live, nothing rendered until this was set.
-		probe.SetVersification(document->Versification());
-		BLanguage probeLanguage;
-		BLocale::Default()->GetLanguage(&probeLanguage);
-		probe.SetLocale(probeLanguage.Code());
-		BString code = probe.Code();
-		if (code.Length() >= 6)
-			chapterPrefix.SetTo(code.String(), 6);
+	// The chapter this document is showing, as a Code() prefix --
+	// comparing those answers "same chapter?" without re-parsing any
+	// reference under a locale it may not have been written in.
+	BString chapterKey(document->Key());
+	int32 colon = chapterKey.FindLast(':');
+	if (colon > 0) {
+		chapterKey.Truncate(colon);
+		chapterKey << ":1";
 	}
+	BString chapterPrefix = BookmarkFile::ChapterCodeFor(chapterKey.String(),
+		document->Versification(), CurrentLocaleCode().String());
 	if (chapterPrefix.IsEmpty())
 		return result;
 
@@ -3003,11 +2987,7 @@ HighlightsForDocument(const std::vector<BookmarkFile>& all,
 		}
 
 		BString code = bookmark.Code();
-		if (code.Length() < 9)
-			continue;
-		BString prefix;
-		prefix.SetTo(code.String(), 6);
-		if (prefix != chapterPrefix)
+		if (code.Length() < 9 || bookmark.ChapterCode() != chapterPrefix)
 			continue;
 
 		// A stored range is ONE bookmark covering several verses; the
@@ -3074,17 +3054,11 @@ ParallelBibleView::_RemoveHighlightsIn(const BString& moduleName,
 {
 	std::vector<BookmarkFile> all = BookmarkFile::ListHighlights();
 
-	// The chapter the selection is in, as a Code() prefix.
-	BookmarkFile probe;
-	probe.SetReference(range.reference.String());
-	BLanguage probeLanguage;
-	BLocale::Default()->GetLanguage(&probeLanguage);
-	probe.SetLocale(probeLanguage.Code());
-	BString selectionCode = probe.Code();
-	if (selectionCode.Length() < 6)
+	// The chapter the selection is in, same prefix comparison.
+	BString selectionChapter = BookmarkFile::ChapterCodeFor(
+		range.reference.String(), "", CurrentLocaleCode().String());
+	if (selectionChapter.IsEmpty())
 		return;
-	BString selectionChapter;
-	selectionChapter.SetTo(selectionCode.String(), 6);
 
 	for (size_t i = 0; i < all.size(); i++) {
 		BookmarkFile& bookmark = all[i];
@@ -3092,11 +3066,7 @@ ParallelBibleView::_RemoveHighlightsIn(const BString& moduleName,
 			continue;
 
 		BString code = bookmark.Code();
-		if (code.Length() < 9)
-			continue;
-		BString chapter;
-		chapter.SetTo(code.String(), 6);
-		if (chapter != selectionChapter)
+		if (code.Length() < 9 || bookmark.ChapterCode() != selectionChapter)
 			continue;
 
 		// Verse ranges overlap when neither ends before the other

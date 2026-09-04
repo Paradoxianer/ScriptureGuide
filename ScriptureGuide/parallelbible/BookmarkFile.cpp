@@ -472,6 +472,29 @@ ComputeBookmarkCode(const char* reference, const char* versification,
 
 
 BString
+BookmarkFile::ChapterCode() const
+{
+	BString code = Code();
+	BString chapter;
+	if (code.Length() >= 6)
+		chapter.SetTo(code.String(), 6);
+	return chapter;
+}
+
+
+BString
+BookmarkFile::ChapterCodeFor(const char* reference,
+	const char* versification, const char* locale)
+{
+	BookmarkFile probe;
+	probe.SetReference(reference);
+	probe.SetVersification(versification);
+	probe.SetLocale(locale);
+	return probe.ChapterCode();
+}
+
+
+BString
 BookmarkFile::Code() const
 {
 	return ComputeBookmarkCode(fReference.String(), fVersification.String(),

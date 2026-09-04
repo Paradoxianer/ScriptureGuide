@@ -798,6 +798,15 @@ ExtractTrailingChapterVerse(const BString& text, int& chapter, int& verse,
 // comma read as SWORD's own list separator, "16" discarded) instead of
 // failing loudly or working correctly. Trims and lowercases neither --
 // only the two things VerseKey itself gets wrong on its own.
+BString
+CurrentLocaleCode()
+{
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+	return BString(language.Code());
+}
+
+
 bool
 NormalizeReferenceText(const char* input, BString& trimmed)
 {

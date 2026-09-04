@@ -185,6 +185,13 @@ struct StrongsWord {
 // without it "1. Mose 1, 8" parses as chapter 1 with the "8" discarded
 // as a list element, i.e. silently as verse 1. Anything that hands a
 // user-facing reference to VerseKey::setText() needs this first.
+// The interface language's own code ("de", "en", ...) -- what a
+// reference has to be parsed and rendered under, and what a bookmark
+// records so its own text stays readable later. Spelled out inline in
+// two dozen places before this existed.
+BString CurrentLocaleCode();
+
+
 bool NormalizeReferenceText(const char* input, BString& normalized);
 
 std::vector<StrongsWord> FindStrongsWordsInText(sword::SWModule* module,

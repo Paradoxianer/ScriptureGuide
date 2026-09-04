@@ -128,6 +128,20 @@ public:
 			// Versification()/Locale() after SetReference().
 			BString			Code() const;
 
+			// The chapter part of Code() -- testament + book + chapter,
+			// without the verse. Comparing two of these answers "same
+			// chapter?" without re-parsing either reference under a
+			// locale it may not have been written in, which is why
+			// highlight lookup and removal both work this way. Empty
+			// when the reference does not parse at all.
+			BString			ChapterCode() const;
+
+			// Same, for a reference that is not (yet) a bookmark --
+			// a document's current key, say.
+			static BString	ChapterCodeFor(const char* reference,
+										const char* versification,
+										const char* locale);
+
 			// #44: optional highlight attributes. A bookmark carrying
 			// them marks a stretch INSIDE one verse, in one specific
 			// module, rather than the whole verse -- SpanModule() empty
