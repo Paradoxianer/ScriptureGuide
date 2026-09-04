@@ -257,7 +257,7 @@ FontWindow::FontWindow(const BRect& frame, float fontsize, BHandler* target,
 	font_style plain_style;
 	be_plain_font->GetFamilyAndStyle(&plain_family,&plain_style);
 	int32 rowsize= int32(4*fontsize)/3;
-	BRow* selectionrow;
+	BRow* selectionrow = NULL;
 	
 	int32 numFamilies = count_font_families();
 	for ( int32 i = 0; i < numFamilies; i++ )
@@ -289,7 +289,10 @@ FontWindow::FontWindow(const BRect& frame, float fontsize, BHandler* target,
 			}
 		}
 	}
-	fFontList->SetFocusRow(selectionrow, true);
+	// stays NULL when no installed font matches the configured one --
+	// it used to be an uninitialised pointer handed straight to the list
+	if (selectionrow != NULL)
+		fFontList->SetFocusRow(selectionrow, true);
 }
 
 

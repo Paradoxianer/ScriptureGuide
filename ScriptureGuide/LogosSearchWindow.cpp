@@ -449,7 +449,7 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 		case FIND_CHECK_CASE_SENSITIVE:
 		{
 			fSearchFlags = (caseSensitiveCheckBox->Value() == B_CONTROL_ON) ?
-						fSearchFlags = 0 :
+						0 :
 						REG_ICASE;
 			break;
 		}
@@ -500,23 +500,28 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 		case B_COPY:
 		{
 			BString		clipBoardString= BString();
-			int32 i = 0;
-			int32 selected =searchResults->FullListCurrentSelection(i);
-			BibleItem *item = NULL;
-			while ( (item =dynamic_cast<BibleItem*>(searchResults->FullListItemAt(selected))) != 0 )
+			// FullListCurrentSelection(i) yields the i-th selected index
+			// and -1 once they run out -- so it has to be re-read every
+			// pass. Reading it once before the loop, as this did, left
+			// the condition permanently true and hung the window thread
+			// on the first selected row.
+			int32 selected;
+			for (int32 i = 0;
+					(selected = searchResults->FullListCurrentSelection(i)) >= 0;
+					i++)
 			{
-				i++;
-				if (i < verseList.size())
-				{
-					clipBoardString << item->GetKey();
-					clipBoardString << "   " << item->GetText();
-				}
+				BibleItem* item = dynamic_cast<BibleItem*>(
+					searchResults->FullListItemAt(selected));
+				if (item == NULL)
+					continue;
+				clipBoardString << item->GetKey();
+				clipBoardString << "   " << item->GetText() << "\n";
 			}
 			BMessage* clip = NULL;
 			if (be_clipboard->Lock())
 			{
 				be_clipboard->Clear();
-    			if (clip = be_clipboard->Data())
+    			if ((clip = be_clipboard->Data()) != NULL)
 				{
 					clip->AddData("text/plain", B_MIME_TYPE,
 						clipBoardString.String(), clipBoardString.Length());
