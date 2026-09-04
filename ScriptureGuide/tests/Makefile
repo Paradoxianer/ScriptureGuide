@@ -72,9 +72,33 @@ WARNINGS = ALL
 
 SYMBOLS := TRUE
 
-DEBUGGER := TRUE
+# Deliberately NOT TRUE, and not about debugging at all: the engine
+# derives the object directory name from it --
+#   OBJ_DIR := objects.$(CPU)-$(CC)$(CC_VER)-$(if $(DEBUGGER),debug,release)
+# -- and the application next door builds with DEBUGGER := TRUE. With
+# both using the same name, and the application's source directories on
+# this makefile's own VPATH, make resolves "objects.../Foo.o" to the
+# APPLICATION's copy: building the tests wrote its objects into ../, and
+# the tests then linked whatever happened to be lying around here.
+#
+# Measured, not assumed: touching ../textview/ParagraphLayout.cpp and
+# running make here recompiled it into ../objects.../ParagraphLayout.o
+# while the copy in this directory kept its hours-old timestamp. The
+# practical damage was worse than a stale binary -- a test once passed
+# while measuring a version of the code whose behaviour had been
+# disabled, which is a test proving nothing at all.
+#
+# Must be EMPTY, not FALSE: $(if $(DEBUGGER),debug,release) tests for a
+# non-empty string, so "FALSE" would still select "debug" and change
+# nothing.
+#
+# The flags DEBUGGER would have set are in COMPILER_FLAGS above instead,
+# so nothing is lost but the name collision.
+DEBUGGER :=
 
-COMPILER_FLAGS =
+# -g -O0 explicitly rather than via DEBUGGER below -- see there for why
+# that switch has to stay off.
+COMPILER_FLAGS = -g -O0
 
 LINKER_FLAGS =
 

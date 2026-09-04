@@ -163,11 +163,6 @@ Roughly in the order I would take them.
 
 Small, known, and each one already documented where it bites:
 
-- **The tests only build after the application does.** Their makefile
-  reaches into `../` for sources, which puts `..` on make's VPATH — and
-  VPATH applies to targets, so make finds the application's objects and
-  compiles none of its own. Giving the tests a distinct object directory
-  would fix it.
 - **Dictionary choice ignores the interface language.** With a German and
   an English Strong's dictionary installed, whichever comes first in the
   module list wins.
