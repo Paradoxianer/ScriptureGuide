@@ -485,6 +485,31 @@ BibleTextDocument::VerseTextLength(int verse) const
 }
 
 
+BString
+BibleTextDocument::VerseText(int verse) const
+{
+	int32 index = ParagraphIndexForVerse(verse);
+	if (index < 0)
+		return BString();
+
+	int32 length = VerseTextLength(verse);
+	if (length <= 0)
+		return BString();
+
+	// The paragraph's text with the rendered verse-number prefix and any
+	// terminator trimmed off -- Text() works in characters, same space
+	// the prefix count is kept in.
+	int32 documentStart = 0;
+	int32 documentEnd = 0;
+	if (!TextRangeForVerseRange(verse, verse, documentStart, documentEnd))
+		return BString();
+
+	int32 prefix = index < (int32)fParagraphPrefixChars.size()
+		? fParagraphPrefixChars[index] : 0;
+	return Text(documentStart + prefix, length);
+}
+
+
 bool
 BibleTextDocument::VersePositionAt(int32 documentOffset, int& outVerse,
 	int32& outVerseOffset) const

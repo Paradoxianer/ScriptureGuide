@@ -408,6 +408,10 @@ public:
 				void				_ColumnSelectionMoved(
 										BibleColumnView* source, BPoint screenPoint);
 				void				_ColumnSelectionEnded();
+				// #44: whether the gesture that just ended spanned more
+				// than one column -- see fSelectionCrossedColumns.
+				bool				SelectionCrossedColumns() const
+										{ return fSelectionCrossedColumns; }
 				// #44: whatever the highlight palette is currently
 				// offering to act on -- held between the palette opening
 				// and a colour being clicked, since the palette answers
@@ -438,6 +442,13 @@ public:
 				};
 				PendingHighlight	fPendingHighlight;
 				BPoint				fPendingHighlightPoint;
+				// #44: set once a selection gesture has spanned more
+				// than one column. That is the switch between a
+				// highlight tied to one translation's character offsets
+				// and a verse-wide one that shows in every column --
+				// dragging across columns already snaps to whole verses,
+				// so the gesture itself says which of the two is meant.
+				bool				fSelectionCrossedColumns;
 				// A messenger rather than a raw pointer: the palette
 				// closes itself when a swatch is clicked, and a
 				// BMessenger to a gone BWindow simply reports invalid

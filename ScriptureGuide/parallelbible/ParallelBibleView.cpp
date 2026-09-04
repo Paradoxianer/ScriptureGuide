@@ -1338,13 +1338,25 @@ private:
 		if (!_ComputeHighlightRange(range))
 			return;
 
+		// #44: a gesture that crossed columns means the mark belongs to
+		// the VERSES, not to this translation's characters -- that drag
+		// already snapped to whole verses, so the gesture itself is the
+		// switch. Clearing the module is what makes it verse-wide;
+		// clearing the offsets is what makes it cover the verses whole.
+		bool verseWide = fOwner->SelectionCrossedColumns();
+		if (verseWide) {
+			range.start = 0;
+			range.end = 0;
+		}
+
 		BString versification = _SelectionVersification();
 		BLanguage language;
 		BLocale::Default()->GetLanguage(&language);
 
 		BPoint screenPoint = where;
 		ConvertToScreen(&screenPoint);
-		fOwner->_ShowHighlightPalette(fTranslationName.String(),
+		fOwner->_ShowHighlightPalette(
+			verseWide ? "" : fTranslationName.String(),
 			versification.String(), language.Code(),
 			range.reference.String(), range, screenPoint);
 	}
@@ -2396,10 +2408,11 @@ ParallelBibleView::MessageReceived(BMessage* message)
 		{
 			// #44: a swatch was clicked in the palette. No "color" at
 			// all is the remove cell -- see the palette's own comment.
-			if (fPendingHighlight.module.IsEmpty()
-				|| fPendingHighlight.range.reference.IsEmpty()) {
+			// An empty module is legitimate here: that is a verse-wide
+			// highlight. Only a missing reference means there is
+			// nothing to act on.
+			if (fPendingHighlight.range.reference.IsEmpty())
 				break;
-			}
 
 			int32 packed;
 			BString name;
@@ -3173,6 +3186,65 @@ ParallelBibleView::_ShowHighlightPalette(const char* module,
 // so the chapter test is a plain prefix comparison and no reference has
 // to be re-parsed here under a locale that may not be the one it was
 // written in.
+// #44: a stored highlight's offsets can stop matching the text they
+// were taken from -- a module update for Bible text, an edit for a
+// note. SG:span:text is the anchor for putting them right: look for the
+// snippet again and move the offsets to where it actually is now.
+//
+// Deliberately the occurrence NEAREST the stored offset, not the first
+// one: the same wording can legitimately appear twice in one verse, and
+// "first match wins" would silently relocate a highlight to the wrong
+// half of it.
+//
+// Only single-verse spans are healed. A range's offsets belong to two
+// different verses with whole verses in between, so the snippet does not
+// describe a searchable stretch of any one of them -- see the range
+// handling in the caller.
+static bool
+HealHighlightOffsets(const BString& verseText, const BString& snippet,
+	int32& start, int32& end)
+{
+	if (snippet.IsEmpty() || verseText.IsEmpty())
+		return false;
+
+	// Offsets are characters, BString::FindFirst() works in bytes.
+	int32 startByte = verseText.CountBytes(0, start);
+	int32 endByte = verseText.CountBytes(0, end);
+	BString current;
+	if (startByte >= 0 && endByte > startByte
+		&& endByte <= verseText.Length()) {
+		verseText.CopyInto(current, startByte, endByte - startByte);
+		if (current == snippet)
+			return false; // still correct, nothing to do
+	}
+
+	int32 bestByte = -1;
+	int32 searchFrom = 0;
+	while (searchFrom <= verseText.Length()) {
+		int32 found = verseText.FindFirst(snippet, searchFrom);
+		if (found < 0)
+			break;
+		if (bestByte < 0
+			|| labs((long)found - (long)startByte)
+				< labs((long)bestByte - (long)startByte)) {
+			bestByte = found;
+		}
+		searchFrom = found + 1;
+	}
+	if (bestByte < 0)
+		return false;
+
+	// Byte offset back to a character offset: there is no CountChars()
+	// over a byte range, so count the prefix itself.
+	BString prefix;
+	verseText.CopyInto(prefix, 0, bestByte);
+	int32 newStart = prefix.CountChars();
+	start = newStart;
+	end = newStart + snippet.CountChars();
+	return true;
+}
+
+
 static std::vector<BibleTextDocument::VerseHighlight>
 HighlightsForDocument(const std::vector<BookmarkFile>& all,
 	const BString& moduleName, BibleTextDocument* document,
@@ -3214,7 +3286,11 @@ HighlightsForDocument(const std::vector<BookmarkFile>& all,
 
 	for (size_t i = 0; i < all.size(); i++) {
 		const BookmarkFile& bookmark = all[i];
-		if (BString(bookmark.SpanModule()) != moduleName)
+		// A highlight with no span module is verse-wide: it belongs to
+		// the verse rather than to one translation's character offsets,
+		// so it shows in every column (#44's cross-column gesture).
+		bool verseWide = !bookmark.HasSpan();
+		if (!verseWide && BString(bookmark.SpanModule()) != moduleName)
 			continue;
 
 		// Switched off in Options -- matched on the colour rather than
@@ -3244,6 +3320,27 @@ HighlightsForDocument(const std::vector<BookmarkFile>& all,
 		int lastVerse = bookmark.SpanEndVerse() > firstVerse
 			? bookmark.SpanEndVerse() : firstVerse;
 
+		// Heal a single-verse span whose offsets no longer describe the
+		// text they were taken from, and write the correction back so it
+		// only has to happen once -- the same self-healing shape
+		// BookmarkFile::SetTo() already applies to SG:code.
+		int32 healedStart = bookmark.SpanStart();
+		int32 healedEnd = bookmark.SpanEnd();
+		if (!verseWide && firstVerse == lastVerse
+			&& bookmark.SpanText()[0] != '\0') {
+			BString verseText = document->VerseText(firstVerse);
+			if (HealHighlightOffsets(verseText, BString(bookmark.SpanText()),
+					healedStart, healedEnd)) {
+				BookmarkFile healed;
+				if (healed.SetTo(bookmark.Path()) == B_OK) {
+					healed.SetSpan(healed.SpanModule(), healedStart,
+						healedEnd, healed.SpanText(),
+						healed.SpanEndVerse());
+					healed.Save();
+				}
+			}
+		}
+
 		for (int verse = firstVerse; verse <= lastVerse; verse++) {
 			int32 verseLength = document->VerseTextLength(verse);
 			if (verseLength <= 0)
@@ -3251,9 +3348,10 @@ HighlightsForDocument(const std::vector<BookmarkFile>& all,
 
 			BibleTextDocument::VerseHighlight highlight;
 			highlight.verse = verse;
-			highlight.start = verse == firstVerse ? bookmark.SpanStart() : 0;
-			highlight.end = verse == lastVerse ? bookmark.SpanEnd()
-				: verseLength;
+			highlight.start = (verseWide || verse != firstVerse)
+				? 0 : healedStart;
+			highlight.end = (verseWide || verse != lastVerse)
+				? verseLength : healedEnd;
 			if (highlight.end > verseLength)
 				highlight.end = verseLength;
 			if (highlight.end <= highlight.start)
@@ -4139,6 +4237,7 @@ ParallelBibleView::_ColumnSelectionStarted(BibleColumnView* source,
 	fActiveSelectionColumn = source;
 	fSelectionAnchorScreen = screenPoint;
 	fSelectionLastEndVerse = -1;
+	fSelectionCrossedColumns = false;
 }
 
 
@@ -4254,6 +4353,7 @@ ParallelBibleView::_ColumnSelectionMoved(BibleColumnView* source,
 		if (column == NULL)
 			continue;
 
+		fSelectionCrossedColumns = true;
 		bool isParticipating = std::find(participating.begin(),
 			participating.end(), column) != participating.end();
 		if (isParticipating)

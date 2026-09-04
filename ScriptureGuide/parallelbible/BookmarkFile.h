@@ -163,6 +163,10 @@ public:
 									{ return fSpanEndVerse; }
 			const char*		SpanText() const
 									{ return fSpanText.String(); }
+			// True only for a highlight tied to ONE translation's own
+			// character offsets. A highlight with a colour but no span
+			// is verse-wide and shows in every column -- what dragging a
+			// selection across columns produces (#44).
 			bool			HasSpan() const
 									{ return !fSpanModule.IsEmpty()
 										&& fSpanEnd > fSpanStart; }

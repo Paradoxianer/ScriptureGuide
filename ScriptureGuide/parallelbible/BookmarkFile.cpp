@@ -211,13 +211,16 @@ BookmarkFile::SetTo(const char* path)
 		fSpanStart = spanStart;
 		fSpanEnd = spanEnd;
 		file.ReadAttrString(kAttrSpanText, &fSpanText);
-		// Optional even within a span: absent means the span stays
-		// inside the bookmark's own single verse.
-		int32 endVerse = 0;
-		if (file.ReadAttr(kAttrSpanEndVerse, B_INT32_TYPE, 0, &endVerse,
-				sizeof(endVerse)) == (ssize_t)sizeof(endVerse)) {
-			fSpanEndVerse = endVerse;
-		}
+	}
+
+	// Read outside the span block on purpose: a VERSE-WIDE highlight
+	// (#44) has a colour and a verse range but deliberately no span
+	// module, since it belongs to every column rather than one
+	// translation's character offsets.
+	int32 endVerse = 0;
+	if (file.ReadAttr(kAttrSpanEndVerse, B_INT32_TYPE, 0, &endVerse,
+			sizeof(endVerse)) == (ssize_t)sizeof(endVerse)) {
+		fSpanEndVerse = endVerse;
 	}
 
 	fHasColor = false;
@@ -526,10 +529,11 @@ BookmarkFile::Save()
 		file.WriteAttr(kAttrSpanEnd, B_INT32_TYPE, 0, &fSpanEnd,
 			sizeof(fSpanEnd));
 		file.WriteAttrString(kAttrSpanText, &fSpanText);
-		if (fSpanEndVerse > 0) {
-			file.WriteAttr(kAttrSpanEndVerse, B_INT32_TYPE, 0,
-				&fSpanEndVerse, sizeof(fSpanEndVerse));
-		}
+	}
+	// Written outside the span block, same reasoning as reading it.
+	if (fSpanEndVerse > 0) {
+		file.WriteAttr(kAttrSpanEndVerse, B_INT32_TYPE, 0,
+			&fSpanEndVerse, sizeof(fSpanEndVerse));
 	}
 	if (fHasColor) {
 		BString colorValue = FormatHighlightColor(fColor);
@@ -754,8 +758,11 @@ BookmarkFile::ListHighlights()
 		std::vector<BString> paths = ListBookmarkPaths(categoryPath.Path());
 		for (size_t i = 0; i < paths.size(); i++) {
 			BookmarkFile bookmark;
+			// A colour is what makes it a highlight. A span is optional:
+			// without one it is verse-wide and applies to every column
+			// (#44's cross-column gesture).
 			if (bookmark.SetTo(paths[i].String()) == B_OK
-				&& bookmark.HasSpan() && bookmark.HasColor()) {
+				&& bookmark.HasColor()) {
 				highlights.push_back(bookmark);
 			}
 		}

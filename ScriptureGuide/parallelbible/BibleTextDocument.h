@@ -211,6 +211,11 @@ public:
 			// verse. -1 if the verse is not in this document.
 			int32				VerseTextLength(int verse) const;
 
+			// #44: that same normal-form text itself -- what a stored
+			// highlight's offsets index into, and what its SG:span:text
+			// snippet is compared against when they no longer match.
+			BString				VerseText(int verse) const;
+
 			bool				VersePositionAt(int32 documentOffset,
 									int& outVerse,
 									int32& outVerseOffset) const;

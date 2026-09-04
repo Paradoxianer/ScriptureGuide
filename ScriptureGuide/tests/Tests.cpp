@@ -1984,6 +1984,55 @@ TestHighlightFolderSurvivesRenaming()
 }
 
 
+// #44: a verse-wide highlight -- what dragging a selection across
+// columns produces -- has a colour and a verse range but deliberately no
+// span module, because it belongs to the verses rather than to one
+// translation's character offsets.
+static void
+TestVerseWideHighlightNeedsNoSpanModule()
+{
+	BString root = BookmarkFile::HighlightsDirectory();
+	BString collection = BookmarkFile::CreateCollection(root.String(),
+		"UnitTestVerseWide");
+	if (collection.IsEmpty()) {
+		Skip("BookmarkFile: a verse-wide highlight needs no span module",
+			"could not create a test folder");
+		return;
+	}
+
+	BookmarkFile written;
+	Check(written.CreateNew(collection.String(), "1. Mose 1:5-8", "KJV", "de",
+		0) == B_OK, "BookmarkFile: a verse-wide highlight can be created");
+	written.SetSpan("", 0, 0, "", 8);
+	written.SetColor((rgb_color){ 0xc8, 0xe6, 0xc9, 255 });
+	written.Save();
+
+	BookmarkFile readBack;
+	readBack.SetTo(written.Path());
+	Check(!readBack.HasSpan(),
+		"BookmarkFile: a verse-wide highlight reports no span");
+	Check(readBack.HasColor(),
+		"BookmarkFile: a verse-wide highlight keeps its colour");
+	Check(readBack.SpanEndVerse() == 8,
+		"BookmarkFile: the verse range survives without a span module");
+
+	// It must still be listed as a highlight -- a colour is what makes
+	// one, a span is optional.
+	std::vector<BookmarkFile> listed = BookmarkFile::ListHighlights();
+	bool found = false;
+	for (size_t i = 0; i < listed.size(); i++) {
+		if (BString(listed[i].Path()) == BString(written.Path()))
+			found = true;
+	}
+	Check(found,
+		"BookmarkFile::ListHighlights: a verse-wide highlight is listed "
+		"even though it carries no span");
+
+	written.Remove();
+	BEntry(collection.String()).Remove();
+}
+
+
 int
 main()
 {
@@ -2043,6 +2092,7 @@ main()
 	TestBookmarkCodeHandlesDisplayFormReferences();
 	TestHighlightSpanCoversAVerseRange();
 	TestHighlightFolderSurvivesRenaming();
+	TestVerseWideHighlightNeedsNoSpanModule();
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;
