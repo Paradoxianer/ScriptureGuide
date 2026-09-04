@@ -29,6 +29,7 @@
 
 #include "BibleTextDocument.h"
 #include "BookmarkFile.h"
+#include "HighlightStore.h"
 #include "Paragraph.h"
 #include "ParagraphLayout.h"
 #include "ParallelBibleView.h"
@@ -2033,6 +2034,175 @@ TestVerseWideHighlightNeedsNoSpanModule()
 }
 
 
+// #44: the same characters a highlight was drawn over move around as
+// soon as display options change the verse text -- HealOffsets() is
+// what keeps a stored mark on its own words. Character offsets against
+// byte-based searching is exactly where this has gone wrong before, so
+// the umlaut case is not decoration here.
+static BString
+CharSlice(const BString& text, int32 start, int32 end)
+{
+	BString out;
+	int32 startByte = text.CountBytes(0, start);
+	int32 endByte = text.CountBytes(0, end);
+	if (startByte < 0 || endByte < startByte)
+		return out;
+	text.CopyInto(out, startByte, endByte - startByte);
+	return out;
+}
+
+
+static void
+TestHighlightHealingFindsMovedText()
+{
+	const BString kVerse("Und Gott sprach: Es werde Licht, und es ward "
+		"Licht in der Größe seiner Güte");
+	const BString kSnippet("Güte");
+
+	// Where "Güte" actually starts, in characters.
+	int32 trueStart = -1;
+	for (int32 i = 0; i + kSnippet.CountChars() <= kVerse.CountChars(); i++) {
+		if (CharSlice(kVerse, i, i + kSnippet.CountChars()) == kSnippet) {
+			trueStart = i;
+			break;
+		}
+	}
+
+	int32 start = trueStart;
+	int32 end = trueStart + kSnippet.CountChars();
+	Check(!HighlightStore::HealOffsets(kVerse, kSnippet, start, end)
+			&& start == trueStart,
+		"HighlightStore::HealOffsets: offsets that are still right are "
+		"left alone");
+
+	// The text gained a prefix, so every stored offset is now short --
+	// and two umlauts sit before the snippet, so a byte/character mix-up
+	// cannot pass this by luck.
+	start = trueStart - 9;
+	end = start + kSnippet.CountChars();
+	Check(HighlightStore::HealOffsets(kVerse, kSnippet, start, end),
+		"HighlightStore::HealOffsets: reports that it moved the offsets");
+	Check(CharSlice(kVerse, start, end) == kSnippet,
+		"HighlightStore::HealOffsets: the healed offsets cover the "
+		"snippet again, counting characters and not bytes");
+
+	start = 0;
+	end = 4;
+	Check(!HighlightStore::HealOffsets(kVerse, "steht nicht drin", start, end),
+		"HighlightStore::HealOffsets: text that is gone heals nothing");
+
+	// Two occurrences: the one nearer the stored offset wins, otherwise
+	// a mark would jump to the front of the verse on every rebuild.
+	// Offsets that are off by one, with a match at 0 and at 10: the
+	// near one has to win. (Stored offsets that are already exact take
+	// the early-out above and never get here.)
+	const BString kTwice("Licht und Licht");
+	start = 9;
+	end = 14;
+	Check(HighlightStore::HealOffsets(kTwice, "Licht", start, end)
+			&& start == 10,
+		"HighlightStore::HealOffsets: picks the occurrence nearest the "
+		"stored offset, not the first one");
+}
+
+
+// #44: removing a highlight deletes files, so what it does NOT match
+// matters as much as what it does. Everything here is written under a
+// module name no real highlight can carry, which is the first thing
+// Remove() filters on -- the test cannot reach the user's own marks.
+static void
+TestHighlightRemoveOnlyTouchesOverlap()
+{
+	const char* kModule = "SGUnitTestModule";
+	BString locale = CurrentLocaleCode();
+
+	// The book name has to parse under whatever locale this machine
+	// runs, so probe instead of assuming one.
+	const char* kBooks[] = { "Johannes", "John", "Joh" };
+	BString book;
+	for (size_t i = 0; i < sizeof(kBooks) / sizeof(kBooks[0]); i++) {
+		BString probe(kBooks[i]);
+		probe << " 3:16";
+		if (!BookmarkFile::ChapterCodeFor(probe.String(), "",
+				locale.String()).IsEmpty()) {
+			book = kBooks[i];
+			break;
+		}
+	}
+	if (book.IsEmpty()) {
+		Skip("HighlightStore::Remove", "no book name parsed under this locale");
+		return;
+	}
+
+	BString root = BookmarkFile::HighlightsDirectory();
+	BString collection = root.IsEmpty() ? BString()
+		: BookmarkFile::CreateCollection(root.String(), "UnitTestRemove");
+	if (collection.IsEmpty()) {
+		Skip("HighlightStore::Remove", "could not create a test colour folder");
+		return;
+	}
+
+	BString ref16(book); ref16 << " 3:16";
+	BString ref18(book); ref18 << " 3:18";
+
+	BookmarkFile overlapping, disjoint, otherVerse;
+	overlapping.CreateNew(collection.String(), ref16.String(), "KJV",
+		locale.String(), 0);
+	overlapping.SetSpan(kModule, 10, 20, "overlapping");
+	overlapping.SetColor((rgb_color){ 0xc8, 0xe6, 0xc9, 255 });
+	overlapping.Save();
+
+	disjoint.CreateNew(collection.String(), ref16.String(), "KJV",
+		locale.String(), 1);
+	disjoint.SetSpan(kModule, 40, 50, "disjoint");
+	disjoint.SetColor((rgb_color){ 0xc8, 0xe6, 0xc9, 255 });
+	disjoint.Save();
+
+	otherVerse.CreateNew(collection.String(), ref18.String(), "KJV",
+		locale.String(), 2);
+	otherVerse.SetSpan(kModule, 0, 5, "other verse");
+	otherVerse.SetColor((rgb_color){ 0xc8, 0xe6, 0xc9, 255 });
+	otherVerse.Save();
+
+	BString overlappingPath(overlapping.Path());
+	BString disjointPath(disjoint.Path());
+	BString otherVersePath(otherVerse.Path());
+
+	HighlightStore::HighlightRange range;
+	range.verse = 16;
+	range.endVerse = 16;
+	range.start = 5;
+	range.end = 15;
+	range.reference = ref16;
+	HighlightStore::Remove(kModule, range);
+
+	Check(!BEntry(overlappingPath.String()).Exists(),
+		"HighlightStore::Remove: deletes the highlight the range overlaps");
+	Check(BEntry(disjointPath.String()).Exists(),
+		"HighlightStore::Remove: leaves a highlight in the same verse whose "
+		"offsets do not overlap");
+	Check(BEntry(otherVersePath.String()).Exists(),
+		"HighlightStore::Remove: leaves a highlight in another verse");
+
+	// A range spanning whole verses carries no meaningful offsets, so
+	// both survivors are inside it now.
+	range.verse = 16;
+	range.endVerse = 18;
+	range.start = 0;
+	range.end = 0;
+	HighlightStore::Remove(kModule, range);
+	Check(!BEntry(disjointPath.String()).Exists()
+			&& !BEntry(otherVersePath.String()).Exists(),
+		"HighlightStore::Remove: a verse-wide range ignores offsets and "
+		"takes every highlight in the verses it covers");
+
+	BEntry(overlappingPath.String()).Remove();
+	BEntry(disjointPath.String()).Remove();
+	BEntry(otherVersePath.String()).Remove();
+	BEntry(collection.String()).Remove();
+}
+
+
 int
 main()
 {
@@ -2093,6 +2263,8 @@ main()
 	TestHighlightSpanCoversAVerseRange();
 	TestHighlightFolderSurvivesRenaming();
 	TestVerseWideHighlightNeedsNoSpanModule();
+	TestHighlightHealingFindsMovedText();
+	TestHighlightRemoveOnlyTouchesOverlap();
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;

@@ -58,7 +58,11 @@ public:
 	static void					Remove(const BString& moduleName,
 									const HighlightRange& range);
 
-private:
+	// Moves `start`/`end` back onto `snippet` when the verse text has
+	// shifted under them, returning whether it had to. Offsets are
+	// characters, the search is bytes, and the difference is the whole
+	// difficulty -- public because it is a pure function on two strings
+	// with no store state behind it, and worth testing on its own.
 	static bool					HealOffsets(const BString& verseText,
 									const BString& snippet,
 									int32& start, int32& end);
