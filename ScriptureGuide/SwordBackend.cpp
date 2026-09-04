@@ -250,8 +250,14 @@ void SGModule::SetVerse(const char* book, int chapter, int verse)
 // during a search
 void percentUpdate(char percent, void *userData)
 {
-	BStatusBar* bar;
-	bar = (BStatusBar *)userData;
+	// SWORD hands `userData` straight back from search(), so this is
+	// whatever the caller passed as its status bar -- and a caller with
+	// no bar to drive (a test, a command-line tool, anything without a
+	// window) passes NULL. Dereferencing that killed the process
+	// instead of simply not reporting progress.
+	BStatusBar* bar = (BStatusBar*)userData;
+	if (bar == NULL)
+		return;
 	bar->Update((float)percent - bar->CurrentValue());
 }
 
