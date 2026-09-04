@@ -2159,6 +2159,10 @@ ParallelBibleView::InsertColumn(int32 afterPosition, const char* moduleName)
 		fActivePosition = 0;
 
 	_RebuildLayout();
+	// Same reason as in _SetColumnToBible(): a document built a moment
+	// ago holds no highlights yet. This is the path the per-column "+"
+	// button takes, so it is the one a user actually gets here by.
+	_ReloadHighlights();
 	return B_OK;
 }
 
@@ -3105,7 +3109,11 @@ ParallelBibleView::_MoveColumn(int32 from, int32 to)
 				fDocuments[bibleIndex]->SetKey(columns[i].key.String());
 		}
 	}
-	_Realign();
+	// Not just _Realign(): the loop above re-set each document's key
+	// directly, which rebuilds it and drops the highlights the re-adding
+	// put there. This has to come after those keys, not with the
+	// AddColumn() calls further up. _ReloadHighlights() realigns itself.
+	_ReloadHighlights();
 }
 
 
@@ -3220,6 +3228,13 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 		fActivePosition = 0;
 
 	_RebuildLayout();
+	// #44: this column's document was built a moment ago and carries no
+	// highlights yet. They used to be re-read only on a chapter change,
+	// so a mark stayed invisible in a column that had just been added or
+	// just switched module until the user navigated away and back --
+	// most visibly for a verse-wide mark, which is meant to show in
+	// every column at once.
+	_ReloadHighlights();
 	return B_OK;
 }
 
