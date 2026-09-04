@@ -358,12 +358,8 @@ public:
 			return;
 		}
 
-		// #44: any click puts the palette away again -- see
-		// _DismissHighlightPalette() for why it cannot close itself.
-		if (fOwner != NULL)
-			fOwner->_DismissHighlightPalette();
-
 		fMouseDownPoint = where;
+
 		fTrackingForDrag = false;
 		fDragAndDropStarted = false;
 		if (HasSelection()) {
@@ -1054,10 +1050,14 @@ private:
 
 		BPoint screenPoint = where;
 		ConvertToScreen(&screenPoint);
-		fOwner->_ShowHighlightPalette(
+		// The very same call a right-click makes, so there is one menu
+		// with one look for everything that acts on a selection --
+		// finishing a drag and asking for the menu differ in gesture
+		// only, not in what they offer.
+		fOwner->_ShowSelectionMenu(
 			verseWide ? "" : fTranslationName.String(),
-			versification.String(), language.Code(),
-			range.reference.String(), range, screenPoint);
+			range.reference.String(), versification.String(),
+			language.Code(), &range, screenPoint);
 	}
 
 	BString _SelectionVersification() const
@@ -2029,24 +2029,6 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			break;
 		}
 
-		case PARALLEL_HIGHLIGHT_MORE:
-		{
-			// The same menu a right-click on the selection opens, so the
-			// two routes offer one set of actions rather than two lists
-			// that could drift apart.
-			// The same menu a right-click opens, minus the colours --
-			// the bar the user just clicked this cell on is showing
-			// them already.
-			if (!fPendingHighlight.selectionReference.IsEmpty()) {
-				_ShowSelectionMenu(fPendingHighlight.module.String(),
-					fPendingHighlight.selectionReference.String(),
-					fPendingHighlight.versification.String(),
-					fPendingHighlight.locale.String(), NULL,
-					fPendingHighlightPoint);
-			}
-			break;
-		}
-
 		case PARALLEL_HIGHLIGHT_APPLY:
 			_ApplyHighlightMessage(message);
 			break;
@@ -2743,49 +2725,6 @@ PopulateAddToListMenu(BMenu* menu, BHandler* target, const char* path,
 
 
 void
-ParallelBibleView::_ShowHighlightPalette(const char* module,
-	const char* versification, const char* locale,
-	const char* selectionReference, const HighlightRange& range,
-	BPoint screenPoint)
-{
-	fPendingHighlight.module = module;
-	fPendingHighlight.versification = versification;
-	fPendingHighlight.locale = locale;
-	fPendingHighlight.selectionReference = selectionReference;
-	fPendingHighlight.range = range;
-	fPendingHighlightPoint = screenPoint;
-
-	// Offset a little so the bar does not open directly under the
-	// pointer, where the release just happened.
-	_DismissHighlightPalette();
-	HighlightPaletteWindow* palette = new HighlightPaletteWindow(
-		BPoint(screenPoint.x, screenPoint.y + 8.0f), BMessenger(this));
-	fHighlightPalette = BMessenger(palette);
-	palette->Show();
-}
-
-
-// Every stored highlight that belongs to a given module and the chapter
-// a document is currently showing. Matching goes through
-// BookmarkFile::Code() -- testament+book+chapter+verse, zero-padded --
-// so the chapter test is a plain prefix comparison and no reference has
-// to be re-parsed here under a locale that may not be the one it was
-// written in.
-
-
-
-
-
-void
-ParallelBibleView::_DismissHighlightPalette()
-{
-	if (fHighlightPalette.IsValid())
-		fHighlightPalette.SendMessage(B_QUIT_REQUESTED);
-	fHighlightPalette = BMessenger();
-}
-
-
-void
 ParallelBibleView::SetHiddenHighlightColors(const std::vector<BString>& colors)
 {
 	fHiddenHighlightColors = colors;
@@ -2972,8 +2911,8 @@ ParallelBibleView::_ShowSelectionMenu(const char* module,
 	// apart.
 	if (range != NULL) {
 		int32 colorCount = 0;
-		const HighlightPaletteWindow::Entry* palette
-			= HighlightPaletteWindow::Palette(colorCount);
+		const HighlightPalette::Entry* palette
+			= HighlightPalette::Palette(colorCount);
 		for (int32 i = 0; i < colorCount; i++) {
 			BMessage* apply = new BMessage(PARALLEL_HIGHLIGHT_APPLY);
 			apply->AddInt32("color", ((int32)palette[i].color.red << 16)
@@ -3532,10 +3471,8 @@ ParallelBibleView::SetKey(const char* key)
 	// ones for the chapter now being shown. Done once here rather than
 	// inside BibleTextDocument, which has no business knowing where
 	// highlights are kept.
-	if (changedAnyBible) {
-		_DismissHighlightPalette();
+	if (changedAnyBible)
 		_ReloadHighlights();
-	}
 	bigtime_t perfAfterBible = system_time();
 
 	// A notes column now navigates with its own chain exactly like a

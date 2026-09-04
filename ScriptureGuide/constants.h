@@ -108,7 +108,6 @@ const uint32 PARALLEL_HIGHLIGHT_APPLY	= 'PVha';
 // #44: the palette's trailing "..." cell -- opens the ordinary
 // right-click menu for the same selection, so the quick colour bar and
 // the full action menu are one set of actions rather than two.
-const uint32 PARALLEL_HIGHLIGHT_MORE	= 'PVhm';
 // #44: a colour was switched on or off in Options > Highlight Colours.
 // Carries "color" as the "#rrggbb" string, which is what the setting is
 // keyed on -- renaming a category must not change what is hidden.

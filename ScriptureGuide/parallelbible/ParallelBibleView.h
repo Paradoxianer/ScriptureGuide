@@ -439,11 +439,6 @@ public:
 				// dragging across columns already snaps to whole verses,
 				// so the gesture itself says which of the two is meant.
 				bool				fSelectionCrossedColumns;
-				// A messenger rather than a raw pointer: the palette
-				// closes itself when a swatch is clicked, and a
-				// BMessenger to a gone BWindow simply reports invalid
-				// instead of dangling.
-				BMessenger			fHighlightPalette;
 				bool				_HasActiveColumnSelection() const;
 				bool				_IsColumnSelectionOwnedByOther(
 										BibleColumnView* column) const;
@@ -483,18 +478,6 @@ public:
 				// under. Builds the cascading collection tree (same shape
 				// as SGVerseListWindow's own "Go to List") and appends to
 				// whichever one is picked.
-				// #44: called by BibleColumnView when a drag-selection
-				// inside ONE column has just ended. `verse`/`start`/`end`
-				// are already in the verse's own normal-form character
-				// offsets (BibleTextDocument::VersePositionAt()), so
-				// nothing downstream has to know about rendering again.
-				void				_ShowHighlightPalette(
-										const char* module,
-										const char* versification,
-										const char* locale,
-										const char* selectionReference,
-										const HighlightRange& range,
-										BPoint screenPoint);
 				// Re-reads every stored highlight and pushes the ones
 				// belonging to each column's own module and current
 				// chapter into that column's document.
@@ -512,13 +495,6 @@ public:
 				void				_ApplyHighlightMessage(
 										BMessage* message);
 				void				_ReloadHighlights();
-				// #44: closes the palette if one is open. B_AVOID_FOCUS
-				// means the window may never be activated at all, so it
-				// cannot rely on WindowActivated(false) to notice it has
-				// been abandoned -- the next click anywhere in a column,
-				// and any chapter change, dismiss it explicitly instead.
-				void				_DismissHighlightPalette();
-
 				// #44: the ONE menu a right-click on a selection opens
 				// -- the reference, then the highlight colours, then the
 				// cascading collection tree. `range` is NULL when the
