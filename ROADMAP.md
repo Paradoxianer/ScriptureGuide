@@ -4,22 +4,41 @@ Where ScriptureGuide goes after 1.3.0. Ordered by what unlocks what, not
 by wishlist size. Each entry says what it needs and what is already known
 about the ground it stands on.
 
-## The next thing: one list of everything marked
+## The next thing: a marked verse list, shown while reading
 
-Bookmarks, highlights, and verses that have notes, in a single window --
-HaikuArchives#29. Cheap now that highlighting exists, because it is a
-view over the store rather than a new mechanism.
-
-Close behind it, and closely related to each other:
 [#92](https://github.com/Paradoxianer/ScriptureGuide/issues/92) and
-[#105](https://github.com/Paradoxianer/ScriptureGuide/issues/105) both
-ask for an ordinary verse list to show its members in the reading pane
--- #92 as an opt-in switch per list, #105 as a colour beside the list's
-name, shown while that list is selected. They should be settled
-together. The rendering they need already exists: a bookmark with no
-span is verse-wide in every column, one with a span covers its own
-characters in its own translation, so a colour on the collection folder
-is most of the work.
+[#105](https://github.com/Paradoxianer/ScriptureGuide/issues/105) are
+one feature approached from two sides: #92 wants an ordinary verse list
+to show its members in the reading pane, #105 wants a colour beside the
+list's name for it to be shown in. They are cross-linked and should be
+settled together.
+
+Most of the work is already done. `HighlightStore::ForDocument()`
+decides per bookmark: no span means verse-wide in every column, a span
+means those characters in that translation. So a list needs a colour --
+on the collection folder, one attribute -- and a rule for *when* it
+shows. The narrower answer is "while that list is selected", which
+needs no per-list state and keeps Options > Highlight Colours about
+highlight categories; the selected collection is already persisted.
+
+One real gap: "Add to Verse List" drops the selection's span, so a list
+of partial-verse entries (every occurrence of a name, marked on the
+name itself) cannot be created from the UI yet, though it would render
+correctly if it existed.
+
+After that,
+[#104](https://github.com/Paradoxianer/ScriptureGuide/issues/104) --
+every bookmark carrying a given tag, across all collections -- is the
+remaining "show me everything marked X" question, with the
+BQuery-vs-Tracker choice still open.
+
+**On upstream issues:** HaikuArchives#29 ("a window listing what has
+been marked") is treated as obsolete rather than pending. Verse lists
+answered it in a better shape than it asked for -- named collections
+that are real folders, rather than one flat listing window. Planning
+follows this repository's own tracker; the HaikuArchives issues predate
+column groups, verse lists and highlighting, and mostly describe a
+program that no longer exists.
 
 ## Done in 1.4.0
 
