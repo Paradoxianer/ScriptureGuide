@@ -4,59 +4,38 @@ Where ScriptureGuide goes after 1.3.0. Ordered by what unlocks what, not
 by wishlist size. Each entry says what it needs and what is already known
 about the ground it stands on.
 
-## The next thing: marking passages
+## The next thing: one list of everything marked
 
-Bookmarks and highlighting were the priority, as two features that are
-mostly one: **user data attached to a verse range, kept somewhere,
-listed, and jumped to.**
+Bookmarks, highlights, and verses that have notes, in a single window --
+HaikuArchives#29. Cheap now that highlighting exists, because it is a
+view over the store rather than a new mechanism.
 
-Bookmarks shipped in 1.3.0, in a shape richer than [#39](https://github.com/Paradoxianer/ScriptureGuide/issues/39)
-(now closed) originally proposed: named, orderable *collections* of
-references — a standalone Verse List window instead of a single flat
-submenu, one bookmark file per reference rather than one entry in an
-app-wide list — because that is what a real user's own workflow
-described (see #47, #55). It settled the storage question the same way
-#39 would have: a bookmark records a reference and jumps to it via the
-existing `JumpToKey()` path, just organized into folders instead of one
-list.
+Close behind it, and closely related to each other:
+[#92](https://github.com/Paradoxianer/ScriptureGuide/issues/92) and
+[#105](https://github.com/Paradoxianer/ScriptureGuide/issues/105) both
+ask for an ordinary verse list to show its members in the reading pane
+-- #92 as an opt-in switch per list, #105 as a colour beside the list's
+name, shown while that list is selected. They should be settled
+together. The rendering they need already exists: a bookmark with no
+span is verse-wide in every column, one with a span covers its own
+characters in its own translation, so a colour on the collection folder
+is most of the work.
 
-Highlighting is next, and its design is unaffected by that shape change:
+## Done in 1.4.0
 
-### Highlighting verses — needs an issue
+Highlighting, end to end -- see the changelog. Worth recording that it
+did **not** land the way this roadmap predicted: the plan here was
+"start with whole verses, not arbitrary text", and that was the wrong
+call. Free selection within one translation is what marking passages
+actually means when you do it; whole-verse marks are the concession the
+columns need, not the starting point. The cross-column drag became the
+switch between the two, which made the verse-level case a gesture
+rather than a mode.
 
-There is no issue for this yet on this repository; the nearest is
-HaikuArchives#8 ("mark text and/or verses, maybe in different colours")
-and HaikuArchives#29 (a window listing what has been marked).
-
-The text engine is further along than it looks. `CharacterStyle` already
-carries `SetBackgroundColor()`/`BackgroundColor()`; what is missing is
-that `ParagraphLayout::_DrawSpan()` never reads it — there is a literal
-`// TODO: Implement other style properties` at exactly that spot. The
-geometry needed to fill a rectangle behind a span is right there:
-`LineInfo` knows each line's `y`, `height` and ascent, and every glyph
-knows its `x`.
-
-So this is a contained job, not a rewrite:
-
-- Draw the background in `_DrawSpan()`.
-- Give highlighted verses a `CharacterStyle` with a background colour
-  when the document is built — the same mechanism Strong's numbers and
-  cross-references already use to style their own spans.
-- Store (range, colour) in whatever step 1 established.
-
-**Start with whole verses, not arbitrary text.** Cross-column selection
-already snaps to whole verses for a reason: translations disagree about
-where a sentence ends. A verse-level highlight is meaningful in every
-column at once; a character-level one is meaningful in exactly the
-translation it was drawn in. Sub-verse highlighting is a reasonable
-second step, once it is clear people want it.
-
-### Then: one list of everything marked
-
-Bookmarks, highlights, and verses that have notes, in a single window —
-HaikuArchives#29. Only worth building once highlighting exists, and cheap
-once it does, because it is a view over the store rather than a new
-mechanism.
+Also shipped alongside it: a single menu for everything that acts on a
+selection, and three bugs found by building with stricter warnings --
+including a hang on Cmd+C in the search window that no menu item points
+at.
 
 ## Done in 1.3.1
 

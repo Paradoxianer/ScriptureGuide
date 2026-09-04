@@ -1,5 +1,94 @@
 # Changelog
 
+## 1.4.0 (test release)
+
+### Marking passages
+
+The feature the roadmap has been pointing at since 1.3.0, and the reason
+bookmarks took the shape they did. Select text in a column, let go, and
+the menu that appears offers six muted colours; click one and the
+passage keeps it.
+
+Free selection inside one translation is the primary case, not whole
+verses. A mark made this way belongs to that translation's own
+characters -- which is what it means, since translations disagree about
+where a sentence ends. **Dragging a selection across columns is the
+switch** for the other kind: that gesture already snaps to whole verses,
+so it stores a verse-wide mark, which then shows in every column at
+once, including columns added afterwards.
+
+The colours are deliberately washed out rather than marker-pen bright,
+so body text underneath stays readable in both light and dark
+appearance. There is deliberately no grey among them: the text editor
+paints its own selection in grey, and the two would be
+indistinguishable at a glance.
+
+**A highlight is an ordinary bookmark file that happens to carry a
+colour.** That is not an implementation detail you can ignore -- it
+means Tracker browses your highlights like any other collection, one
+folder per colour, and "Copy to..." moves one into a real verse list
+with no new machinery. Renaming a colour folder is safe: a category is
+matched on its stored colour, not on its name, so a renamed folder is
+recognised rather than replaced by a fresh one under the old name. A
+mark spanning several verses is stored as **one** bookmark with an end
+verse rather than one file per verse, so it can still become a single
+"1. Mose 1, 4-10" reference later.
+
+Marks stay on their own words. Turning verse numbers or Strong's
+numbers on and off changes the text a stored offset was measured
+against, so each mark also records the words it covered; when the
+offsets no longer describe those words, the nearest occurrence is found
+and the correction written back to the file, once, rather than drifting
+a little further every time.
+
+**Options > Highlight Colours** switches individual colours off and on.
+This matches on the colour value rather than the category name, so
+switching one off and renaming its folder does not quietly bring it
+back.
+
+### One menu for a selection
+
+A right-click on a selection and the menu that appears when a drag ends
+are now the same menu -- the reference at the top, the highlight
+colours and "Remove Highlight" under it, "Add to Verse List" below.
+They differ in gesture only. Previously the end of a drag opened a
+borderless colour bar and a right-click opened a popup, two different
+things about the same selection.
+
+### Fixed
+
+- **Copy in the search window froze the application.** Cmd+C is a
+  shortcut `BWindow` installs itself, and a list view does not consume
+  it, so it reached the search window even though no menu item points
+  at it. There it read the selected row once, before a loop whose
+  condition depended on nothing else -- permanently true as soon as any
+  result was selected. Copy now walks the selection properly, one
+  clipboard line per verse.
+- **Right-clicking inside a selection collapsed it onto the click**, so
+  the menu that opened was about a selection that no longer existed.
+  The text engine extended the selection on *any* mouse button, and
+  there is always a pixel or two of movement before a popup takes the
+  pointer. Select All followed by a right-click showed the same thing.
+- **Highlights did not appear in a column that had just been added**,
+  had just had its module switched, or had been through a reorder.
+  They were re-read only on a chapter change, so a mark stayed
+  invisible until you navigated away and back.
+- **Font settings could hand the list an uninitialised row** when no
+  installed font matched the configured one.
+- The case-sensitive search flag was assigned inside its own
+  conditional expression, which is undefined behaviour rather than
+  merely redundant.
+
+### Under the hood
+
+Highlight storage, lookup, removal and offset healing moved into one
+`HighlightStore` instead of living spread across the view. `VerseListFile`
+-- 711 lines implementing the pre-1.3.0 whole-list format, kept for a
+conversion that turned out to have nothing to convert -- was deleted;
+nothing called it. The test suite grew from 34 to 91 checks, the last
+of them chosen by measuring coverage rather than guessing: highlight
+removal had none at all, and offset healing had a third.
+
 ## 1.3.6 (test release)
 
 ### Verse lists: tags you can actually assign
