@@ -2,6 +2,8 @@
 #define __SWORDBACKEND_H__
 
 #include <swmgr.h>
+
+#include "parallelbible/PersonalNotesModule.h"
 #include <swtext.h>
 #include <vector>
 #include <Locale.h>
@@ -336,6 +338,10 @@ public:
 
 private:
 	sword::SWMgr* 		fManager;
+	// #54: the notes module, which SWMgr knows nothing about -- see the
+	// constructor. Owned here; its SGModule wrapper lives in
+	// fCommentList like any other commentary's.
+	PersonalNotesModule* fNotesModule;
 	SGModule*			fModule;
 	
 	SGModuleList		*fBibleList,

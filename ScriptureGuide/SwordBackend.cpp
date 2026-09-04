@@ -372,12 +372,38 @@ SwordBackend::SwordBackend(void)
 				currentmodule->getDescription(), currentmodule->getType());
 		}
 	}
+
+	// #54: the notes this application writes do NOT live in SWORD's
+	// mods.d. PersonalNotesModule builds a RawCom of its own under
+	// settings/scriptureguide/notes, so SWMgr never enumerates it and
+	// nothing that reads fManager->Modules -- the search window's
+	// "Search in" list among them -- could ever offer it. Your own
+	// notes were the one text in the program that could not be
+	// searched. Registering the module here as the commentary it is
+	// puts it in every such list without any of them learning about
+	// notes as a special case.
+	//
+	// The SGModule wrapper goes into the owning fCommentList, but the
+	// SWModule behind it belongs to fNotesModule, which is why that is
+	// deleted separately below.
+	fNotesModule = new PersonalNotesModule();
+	if (fNotesModule->Open() == B_OK && fNotesModule->Module() != NULL) {
+		fNotesModule->Module()->addRenderFilter(new GBFPlain());
+		fCommentList->AddItem(new SGModule(fNotesModule->Module()));
+	} else {
+		delete fNotesModule;
+		fNotesModule = NULL;
+	}
 }
 
 
 SwordBackend::~SwordBackend(void)
 {
 	delete fManager;
+
+	// After the lists: they own the SGModule wrapper, this owns the
+	// SWModule the wrapper points at.
+	delete fNotesModule;
 	
 	delete fBibleList;
 	delete fCommentList;
@@ -388,6 +414,19 @@ SwordBackend::~SwordBackend(void)
 
 SGModule* SwordBackend::FindModule(const char* name)
 {
+	// The notes module first: SWMgr has never heard of it (see the
+	// constructor), so the lookup below cannot find it.
+	if (name != NULL && fNotesModule != NULL
+		&& fNotesModule->Module() != NULL
+		&& strcmp(name, fNotesModule->Module()->getName()) == 0) {
+		for (int32 i = 0; i < fCommentList->CountItems(); i++) {
+			SGModule* mod = fCommentList->ItemAt(i);
+			if (mod->GetModule() == fNotesModule->Module())
+				return mod;
+		}
+		return NULL;
+	}
+
 	sword::SWModule* module = fManager->Modules[name];
 	
 	if (!module)
