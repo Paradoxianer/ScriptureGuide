@@ -2128,6 +2128,16 @@ ParallelBibleView::InsertColumn(int32 afterPosition, const char* moduleName)
 	if (module == NULL)
 		return B_NAME_NOT_FOUND;
 
+	// The same routing _SetColumnToBible() does: a writable per-verse
+	// module -- SWORD's "Personal" commentary, anything declaring
+	// ModDrv=RawFiles -- becomes an editable notes column rather than a
+	// read-only reading one. This check existed only there, so the very
+	// same module arrived editable when picked from a column's own
+	// dropdown and read-only when added through the per-column "+"
+	// button: no caret, nothing typable, and no hint why.
+	if (IsEditableVerseModule(module))
+		return InsertNotesColumn(afterPosition, module);
+
 	// Seed with whatever the anchor's own chain is currently showing --
 	// same reasoning as _SetColumnToBible()'s own seeding.
 	BString seedKey = _ChainKey(afterPosition);
@@ -2171,14 +2181,14 @@ ParallelBibleView::InsertColumn(int32 afterPosition, const char* moduleName)
 
 
 status_t
-ParallelBibleView::InsertNotesColumn(int32 afterPosition)
+ParallelBibleView::InsertNotesColumn(int32 afterPosition, SWModule* module)
 {
 	SG_LOG("[SG] InsertNotesColumn(afterPosition=%d)\n",
 		(int)afterPosition);
 	if (afterPosition < 0 || (size_t)afterPosition >= fColumnOrder.size())
 		return B_BAD_INDEX;
 
-	PersonalNotesModule* backend = _NotesBackendFor(NULL);
+	PersonalNotesModule* backend = _NotesBackendFor(module);
 	if (backend == NULL)
 		return B_ERROR;
 

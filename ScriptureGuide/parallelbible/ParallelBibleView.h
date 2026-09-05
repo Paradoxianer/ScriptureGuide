@@ -240,7 +240,13 @@ public:
 				// continuity (or lack of it) is undisturbed.
 				status_t			InsertColumn(int32 afterPosition,
 										const char* moduleName);
-				status_t			InsertNotesColumn(int32 afterPosition);
+				// `module` names a writable per-verse module to edit
+				// through this column (SWORD's "Personal" commentary and
+				// anything else declaring ModDrv=RawFiles); NULL means
+				// the application's own notes, which is the ordinary
+				// case.
+				status_t			InsertNotesColumn(int32 afterPosition,
+										sword::SWModule* module = NULL);
 				status_t			ReplaceColumn(int32 position,
 										const char* moduleName);
 				status_t			RemoveColumn(int32 position);
