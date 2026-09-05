@@ -7,6 +7,7 @@
 
 #include <string.h>
 
+#include <Catalog.h>
 #include <Directory.h>
 #include <Entry.h>
 #include <FindDirectory.h>
@@ -14,6 +15,13 @@
 #include <Locale.h>
 #include <Path.h>
 #include <StringList.h>
+
+// Deliberately ParallelBibleView's context rather than one of this
+// file's own: the label below has to read exactly like the notes column
+// everywhere else in the program, and that context already carries the
+// translation for it.
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "ParallelBibleView"
 
 
 // See the identical helper in BibleTextDocument.cpp/ParallelBibleView.cpp:
@@ -103,8 +111,13 @@ PersonalNotesModule::Open()
 		return status;
 
 	delete fModule;
+	// The description is what the user sees wherever this module is
+	// listed as a module -- the search window's "Search in" since #54.
+	// It says "Notes" because that is what the column dropdown and
+	// every export header call it; "Personal Notes" was a second name
+	// for one thing.
 	fModule = new RawCom(fPath.String(), "ScriptureGuideNotes",
-		"Personal Notes", 0, ENC_UTF8, DIRECTION_LTR, FMT_PLAIN,
+		B_TRANSLATE("Notes"), 0, ENC_UTF8, DIRECTION_LTR, FMT_PLAIN,
 		"en", fVersification.String());
 
 	return B_OK;
