@@ -44,6 +44,16 @@
 #include "VerseAligner.h"
 #include "constants.h"
 
+
+// Notes tests write real entries through a real SWORD module. Pointed at
+// the user's own notes -- the default location -- they left "unit test
+// note, safe to ignore" behind at Genesis 1:1 whenever a run was cut
+// short, and since #54 made notes searchable those leftovers turned up
+// in the user's own search results. Every notes module built here goes
+// somewhere disposable instead.
+static const char* const kTestNotesPath = "/tmp/scriptureguide-tests/notes";
+
+
 using namespace sword;
 
 
@@ -2206,6 +2216,12 @@ TestHighlightRemoveOnlyTouchesOverlap()
 int
 main()
 {
+	// Before anything builds a notes module -- including the ones
+	// ParallelBibleView creates for its own columns, which is why this
+	// has to be a process-wide switch rather than an argument passed at
+	// each call site.
+	PersonalNotesModule::SetLocationOverride(kTestNotesPath);
+
 	BApplication app("application/x-vnd.ScriptureGuide-Tests");
 
 	SWMgr manager(MODULES_PATH, true,

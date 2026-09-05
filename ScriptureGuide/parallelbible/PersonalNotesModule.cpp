@@ -51,28 +51,49 @@ IsEditableVerseModule(SWModule* module)
 }
 
 
-PersonalNotesModule::PersonalNotesModule(const char* versification)
+BString PersonalNotesModule::sLocationOverride;
+
+
+/*static*/ void
+PersonalNotesModule::SetLocationOverride(const char* path)
+{
+	sLocationOverride = path != NULL ? path : "";
+}
+
+
+PersonalNotesModule::PersonalNotesModule(const char* versification,
+	const char* path)
 	:
 	fVersification(versification),
 	fModule(NULL),
-	fOwnsModule(true)
+	fOwnsModule(true),
+	fUsesDefaultLocation(false)
 {
-	BPath path;
-	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path, true) == B_OK) {
+	BString wanted(path != NULL ? path : sLocationOverride.String());
+	if (!wanted.IsEmpty()) {
+		fPath = wanted;
+		create_directory(fPath.String(), 0755);
+		return;
+	}
+
+	fUsesDefaultLocation = true;
+
+	BPath settings;
+	if (find_directory(B_USER_SETTINGS_DIRECTORY, &settings, true) == B_OK) {
 		// Lowercase, matching PREFERENCES_PATH -- settings and the Book
 		// Manager's package cache have always lived in settings/
 		// scriptureguide/. BFS is case sensitive, so the capitalized name
 		// used up to 1.2.2 was a second, separate directory appearing
 		// beside the real one; reported from the outside as exactly that.
-		path.Append("scriptureguide");
-		path.Append("notes");
-		fPath = path.Path();
+		settings.Append("scriptureguide");
+		settings.Append("notes");
+		fPath = settings.Path();
 
-		path.GetParent(&path);
-		path.GetParent(&path);
-		path.Append("ScriptureGuide");
-		path.Append("notes");
-		fLegacyPath = path.Path();
+		settings.GetParent(&settings);
+		settings.GetParent(&settings);
+		settings.Append("ScriptureGuide");
+		settings.Append("notes");
+		fLegacyPath = settings.Path();
 	}
 }
 
@@ -82,7 +103,8 @@ PersonalNotesModule::PersonalNotesModule(const char* versification)
 PersonalNotesModule::PersonalNotesModule(SWModule* module)
 	:
 	fModule(module),
-	fOwnsModule(false)
+	fOwnsModule(false),
+	fUsesDefaultLocation(false)
 {
 }
 
@@ -104,7 +126,11 @@ PersonalNotesModule::Open()
 	if (fPath.IsEmpty())
 		return B_ERROR;
 
-	_MigrateLegacyNotes();
+	// Only the real location has a predecessor to migrate from; a test
+	// module pointed somewhere of its own has none, and must not go
+	// looking in the user's settings for one.
+	if (fUsesDefaultLocation)
+		_MigrateLegacyNotes();
 
 	status_t status = _EnsureModuleExists();
 	if (status != B_OK)

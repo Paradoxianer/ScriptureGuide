@@ -42,19 +42,37 @@ bool							IsEditableVerseModule(SWModule* module);
 //    That one belongs to the SWMgr that opened it and is only borrowed
 //    here.
 //
-// Everything below the constructor is the same for both: the calls this
-// makes -- setKey, hasEntry, getRawEntryBuf, isWritable, setEntry,
-// deleteEntry -- are all plain SWModule, so nothing here depends on which
-// driver is underneath.
+// Everything below the constructor is the same for both -- setKey,
+// getRawEntryBuf, isWritable, setEntry and deleteEntry are plain
+// SWModule. One call turned out NOT to be driver-independent, which
+// this comment used to claim: hasEntry() answers false on a RawFiles
+// module for an entry written a moment earlier that getRawEntryBuf()
+// then returns correctly, so GetNote() must not consult it.
 class PersonalNotesModule {
 public:
+								// `path` overrides where the module is
+								// created; NULL means the location set by
+								// SetLocationOverride(), or
+								// settings/scriptureguide/notes if that is
+								// unset too. Only the real location is
+								// ever migrated from the pre-1.2.3 one.
 								PersonalNotesModule(
-									const char* versification = "KJV");
+									const char* versification = "KJV",
+									const char* path = NULL);
 								// Borrows an already-open module; Open()
 								// creates nothing and the module outlives
 								// this object.
 								PersonalNotesModule(SWModule* module);
 	virtual						~PersonalNotesModule();
+
+			// Redirects every default-located notes module built from
+			// here on, including the ones ParallelBibleView creates for
+			// its own columns. Exists for the test suite, which writes
+			// real notes through a real module and must not do that in
+			// the user's own: leftovers from an interrupted run used to
+			// sit in their notes, and since #54 made notes searchable,
+			// turn up in their search results.
+	static	void				SetLocationOverride(const char* path);
 
 			status_t			Open();
 			bool				IsOpen() const
@@ -77,6 +95,9 @@ private:
 private:
 			BString				fPath;
 			BString				fLegacyPath;
+			bool				fUsesDefaultLocation;
+
+	static	BString				sLocationOverride;
 			BString				fVersification;
 			SWModule*			fModule;
 			bool				fOwnsModule;
