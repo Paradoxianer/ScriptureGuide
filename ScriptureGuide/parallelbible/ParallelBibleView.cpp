@@ -3434,6 +3434,26 @@ ParallelBibleView::_SetColumnToNotes(int32 position, SWModule* module)
 	} else if ((size_t)position >= fColumnOrder.size()) {
 		return B_BAD_INDEX;
 	} else if (fColumnOrder[position] == COLUMN_NOTES) {
+		// Already a notes column -- but not necessarily on the module
+		// that was just picked. Returning early regardless meant
+		// choosing a different notes-capable module (SWORD's "Personal"
+		// commentary, say) on a column already showing Notes did
+		// nothing whatsoever, with nothing to see and no error: the
+		// column kept the backend it had.
+		int32 existingIndex = _NotesIndexForPosition(position);
+		if (existingIndex < 0
+			|| (size_t)existingIndex >= fNotesColumns.size()) {
+			return B_OK;
+		}
+		if (fNotesColumns[existingIndex].notes == backend)
+			return B_OK;
+
+		// The backends themselves belong to fNotes/fBorrowedNotes and
+		// outlive this column -- only the view and document of the one
+		// being replaced are given up here.
+		_TearDownNotesColumnView(fNotesColumns[existingIndex]);
+		fNotesColumns[existingIndex] = notes;
+		_RebuildLayout();
 		return B_OK;
 	} else {
 		int32 bibleIndex = _BibleIndexForPosition(position);
