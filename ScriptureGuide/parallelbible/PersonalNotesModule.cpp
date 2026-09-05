@@ -206,8 +206,17 @@ PersonalNotesModule::GetNote(const char* key) const
 	verseKey.setText(key);
 	fModule->setKey(verseKey);
 
-	if (fModule->hasEntry(&verseKey))
-		note = fModule->getRawEntryBuf().c_str();
+	// Deliberately NOT gated on hasEntry(). Measured against SWORD's own
+	// "Personal" commentary, a RawFiles module: hasEntry() answers false
+	// for an entry written a line earlier, which getRawEntryBuf() then
+	// returns correctly. Notes typed into such a column reached the disk
+	// and were read back as nothing, with no error anywhere -- the write
+	// reported success, so nothing could notice.
+	//
+	// Nothing is lost by dropping the guard: an entry that genuinely
+	// does not exist reads as an empty string, which is exactly what
+	// this returned before.
+	note = fModule->getRawEntryBuf().c_str();
 
 	return note;
 }
