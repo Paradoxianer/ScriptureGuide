@@ -24,7 +24,10 @@
 #include <Locale.h>
 #include <String.h>
 
+#include <Directory.h>
+
 #include <markupfiltmgr.h>
+#include <rawfiles.h>
 #include <swmgr.h>
 
 #include "BibleTextDocument.h"
@@ -2213,6 +2216,58 @@ TestHighlightRemoveOnlyTouchesOverlap()
 }
 
 
+// #54: a notes column can be backed by ANY writable per-verse module,
+// not only the application's own RawCom -- SWORD's "Personal"
+// commentary is a RawFiles one, and the "+" button will hand one over.
+// Reading such a module used to go through hasEntry(), which answers
+// false there for an entry written a moment earlier that
+// getRawEntryBuf() then returns correctly. Notes typed into that column
+// reached the disk and came back as nothing, and because SetNote()
+// reported success there was nothing anywhere to notice.
+//
+// Built here rather than borrowed from the user's installed "Personal":
+// this test writes, and it must not write there.
+static void
+TestBorrowedRawFilesModuleRoundTrips()
+{
+	const char* name = "PersonalNotesModule: a borrowed RawFiles module "
+		"reads back the note just written to it";
+
+	BString path(kTestNotesPath);
+	path << "-rawfiles";
+	create_directory(path.String(), 0755);
+	if (RawFiles::createModule(path.String()) != 0) {
+		Skip(name, "could not create a RawFiles module to test against");
+		return;
+	}
+
+	RawFiles module(path.String(), "TestRawFiles", "Test RawFiles");
+	// Deliberately NOT asserting IsEditableVerseModule() here: that
+	// reads ModDrv out of the module's .conf, which only exists for a
+	// module SWMgr loaded. A module built directly, as this one is, has
+	// no config at all and would fail that check while being perfectly
+	// writable -- which is what actually matters below.
+	Check(module.isWritable(),
+		"RawFiles: a module created for this test is writable");
+
+	PersonalNotesModule borrowed(&module);
+	Check(borrowed.Open() == B_OK && !borrowed.IsOwnModule(),
+		"PersonalNotesModule: a borrowed module opens without creating "
+		"anything");
+
+	const char* text = "note in a borrowed RawFiles module";
+	Check(borrowed.SetNote("Gen 1:1", text) == B_OK,
+		"PersonalNotesModule: writing to a borrowed RawFiles module "
+		"succeeds");
+	Check(borrowed.GetNote("Gen 1:1") == text, name);
+
+	// And an untouched verse still reads as nothing, which is what the
+	// removed hasEntry() guard used to be there for.
+	Check(borrowed.GetNote("Gen 1:9").IsEmpty(),
+		"PersonalNotesModule: a verse with no note reads as empty");
+}
+
+
 int
 main()
 {
@@ -2281,6 +2336,7 @@ main()
 	TestVerseWideHighlightNeedsNoSpanModule();
 	TestHighlightHealingFindsMovedText();
 	TestHighlightRemoveOnlyTouchesOverlap();
+	TestBorrowedRawFilesModuleRoundTrips();
 
 	printf("\n%d checks, %d failed\n", gChecks, gFailures);
 	return gFailures > 0 ? 1 : 0;
