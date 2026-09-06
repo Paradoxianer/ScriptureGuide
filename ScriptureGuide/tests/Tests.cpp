@@ -82,6 +82,21 @@ Skip(const char* description, const char* reason)
 }
 
 
+// Shared by every test below that needs some writable per-verse module to
+// stand in for SWORD's "Personal" commentary -- whichever one is actually
+// installed, since the tests cannot assume a specific name.
+static SWModule*
+FindEditableModule(SWMgr* manager)
+{
+	for (ModMap::iterator it = manager->Modules.begin();
+			it != manager->Modules.end(); ++it) {
+		if (IsEditableVerseModule(it->second))
+			return it->second;
+	}
+	return NULL;
+}
+
+
 // One Paragraph per verse, rebuilt several times the way VerseAligner and
 // chapter navigation both do in normal use. Regression test for: _Rebuild()
 // guarded its Remove(0, Length()) clear on Length() > 0, but Length() sums
@@ -1004,14 +1019,7 @@ TestWritableModuleBecomesEditableColumn(SWMgr* manager)
 	const char* name = "ParallelBibleView::AddColumn: a writable module "
 		"becomes an editable column that remembers which module";
 
-	SWModule* editable = NULL;
-	for (ModMap::iterator it = manager->Modules.begin();
-			it != manager->Modules.end(); ++it) {
-		if (IsEditableVerseModule(it->second)) {
-			editable = it->second;
-			break;
-		}
-	}
+	SWModule* editable = FindEditableModule(manager);
 	if (editable == NULL) {
 		Skip(name, "no writable module installed (try SWORD's Personal)");
 		return;
@@ -1029,6 +1037,90 @@ TestWritableModuleBecomesEditableColumn(SWMgr* manager)
 		printf("      %s: isNotes=%d moduleName=\"%s\"\n",
 			editable->getName(), layout[0].isNotes ? 1 : 0,
 			layout[0].moduleName.String());
+	}
+	Check(ok, name);
+}
+
+
+// Regression test for a column already showing Notes not noticing a
+// different module was picked from its own dropdown: _SetColumnToNotes()
+// returned immediately whenever the target column was already a notes
+// column, without ever comparing which backend was asked for against the
+// one already there. Picking a writable module (SWORD's "Personal", say)
+// on a column already showing the application's own notes did nothing at
+// all -- no change, no error, nothing to see.
+static void
+TestSwitchingNotesColumnToDifferentModule(SWMgr* manager, SWModule* moduleA)
+{
+	const char* name = "ParallelBibleView::ReplaceColumn: switching an "
+		"existing notes column to a different module actually switches";
+
+	SWModule* editable = FindEditableModule(manager);
+	if (moduleA == NULL || editable == NULL) {
+		Skip(name, moduleA == NULL ? "no Bible module installed"
+			: "no writable module installed (try SWORD's Personal)");
+		return;
+	}
+
+	ParallelBibleView view("testNotesSwitch", manager, 900.0f);
+	view.AddColumn(moduleA->getName());
+	view.AddNotesColumn();
+
+	std::vector<ParallelBibleView::ColumnDescription> before
+		= view.ColumnLayout();
+	bool startedAsOwnNotes = before.size() == 2 && before[1].isNotes
+		&& before[1].moduleName.IsEmpty();
+
+	view.ReplaceColumn(1, editable->getName());
+
+	std::vector<ParallelBibleView::ColumnDescription> after
+		= view.ColumnLayout();
+	bool switchedToEditable = after.size() == 2 && after[1].isNotes
+		&& after[1].moduleName == editable->getName();
+
+	if (!startedAsOwnNotes || !switchedToEditable) {
+		printf("      before: isNotes=%d moduleName=\"%s\"\n",
+			before.size() > 1 ? before[1].isNotes : -1,
+			before.size() > 1 ? before[1].moduleName.String() : "?");
+		printf("      after:  isNotes=%d moduleName=\"%s\"\n",
+			after.size() > 1 ? after[1].isNotes : -1,
+			after.size() > 1 ? after[1].moduleName.String() : "?");
+	}
+	Check(startedAsOwnNotes && switchedToEditable, name);
+}
+
+
+// Regression test for the per-column "+" button (InsertColumn()) not
+// applying the writable-module check that AddColumn()/ReplaceColumn()
+// (via _SetColumnToBible()) already did. The same module arrived
+// editable when picked from an existing column's own dropdown and
+// read-only -- no caret, nothing typable -- when added this way instead.
+static void
+TestInsertColumnRoutesWritableModuleToNotes(SWMgr* manager,
+	SWModule* moduleA)
+{
+	const char* name = "ParallelBibleView::InsertColumn: a writable module "
+		"inserted via \"+\" becomes an editable notes column";
+
+	SWModule* editable = FindEditableModule(manager);
+	if (moduleA == NULL || editable == NULL) {
+		Skip(name, moduleA == NULL ? "no Bible module installed"
+			: "no writable module installed (try SWORD's Personal)");
+		return;
+	}
+
+	ParallelBibleView view("testInsertRouting", manager, 900.0f);
+	view.AddColumn(moduleA->getName());
+	view.InsertColumn(0, editable->getName());
+
+	std::vector<ParallelBibleView::ColumnDescription> layout
+		= view.ColumnLayout();
+	bool ok = layout.size() == 2 && layout[1].isNotes
+		&& layout[1].moduleName == editable->getName();
+	if (!ok && layout.size() == 2) {
+		printf("      %s: isNotes=%d moduleName=\"%s\"\n",
+			editable->getName(), layout[1].isNotes ? 1 : 0,
+			layout[1].moduleName.String());
 	}
 	Check(ok, name);
 }
@@ -2303,6 +2395,8 @@ main()
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestOnlyRawFilesModulesAreEditable(&manager);
 	TestWritableModuleBecomesEditableColumn(&manager);
+	TestSwitchingNotesColumnToDifferentModule(&manager, moduleA);
+	TestInsertColumnRoutesWritableModuleToNotes(&manager, moduleA);
 	TestVerseAlignerIsIdempotent(moduleA, moduleB);
 	TestPersonalNotesRoundTrip();
 	TestTallNotesGrowRowWithoutCompounding(&manager, moduleA);
