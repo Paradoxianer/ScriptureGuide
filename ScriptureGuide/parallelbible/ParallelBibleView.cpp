@@ -1240,6 +1240,20 @@ public:
 			_PasteSingleParagraph();
 			return;
 		}
+		// #38: dropping Bible text -- from a reading-pane selection
+		// (BibleColumnView::_StartDrag()) or a search result
+		// (ResultListView), both of which post the same "key" field --
+		// used to do nothing at all here. There was no drop handling
+		// anywhere in this text engine to fall through to, silently
+		// swallowing the drop; the raw-BTextView note field the original
+		// issue described (which at least kept the plain text) had
+		// already been replaced by this view before this was written.
+		if (message->WasDropped()) {
+			BPoint dropPoint = message->DropPoint();
+			ConvertFromScreen(&dropPoint);
+			if (_HandleBibleTextDrop(message, dropPoint))
+				return;
+		}
 		TextDocumentView::MessageReceived(message);
 	}
 
@@ -1501,6 +1515,64 @@ private:
 		Relayout();
 		if (fOwner != NULL)
 			fOwner->NoteTextEdited();
+	}
+
+	// #38: the reference a Bible-text drop names, inserted as a plain
+	// parenthetical citation at the drop point. No separate click-
+	// styling is built here: FindReferencesInText() already re-scans
+	// every note's text on each rebuild (#32) and turns any reference-
+	// shaped substring it finds into a clickable span regardless of how
+	// it got there, so plain text is already the whole feature -- it
+	// becomes a link the moment NoteTextEdited()'s debounced save next
+	// rebuilds this verse's paragraph.
+	bool _HandleBibleTextDrop(BMessage* message, BPoint where)
+	{
+		if (!Editor().IsSet() || !Editor()->IsEditingEnabled())
+			return false;
+
+		// "key" is the one field both Bible-column selections
+		// (_StartDrag()) and search results (ResultListView) always
+		// post -- see _AppendDroppedReferences()'s own comment on why
+		// treating it as the universal case covers both drag sources.
+		// A drop that doesn't name one (a Tracker clipping, plain text
+		// from outside the app) is out of scope here: there is no
+		// reference to cite, and BibleColumnView's own drop handling
+		// covers the "identify a reference from raw text" case already
+		// for the views that navigate on it.
+		BString key;
+		if (message->FindString("key", &key) != B_OK)
+			return false;
+
+		// CombineVerseRange() reads its own inputs' ':' directly (its
+		// own comment: VerseKey::getText() always uses ':' regardless
+		// of locale) -- combine on the raw keys FIRST, then format the
+		// combined result for display once, not the other way around.
+		// Formatting first would replace ':' with the German locale's
+		// ',' before CombineVerseRange() ever saw it, leaving it no
+		// separator to find and silently breaking every German range.
+		BString endKey;
+		BString combined = key;
+		if (message->FindString("endKey", &endKey) == B_OK
+			&& endKey != key) {
+			combined = CombineVerseRange(key, endKey);
+		}
+
+		BString locale = CurrentLocaleCode();
+		BString display = FormatVerseReferenceForDisplay(combined,
+			locale.String());
+
+		BString insertion("(");
+		insertion << display << ") ";
+
+		int32 offset = TextOffsetAt(where);
+		if (Editor()->Insert(offset, insertion) != B_OK)
+			return false;
+
+		Invalidate();
+		Relayout();
+		if (fOwner != NULL)
+			fOwner->NoteTextEdited();
+		return true;
 	}
 
 	void _DrawGutter(BRect updateRect)
