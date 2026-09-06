@@ -2,6 +2,15 @@ Scripture Guide is (c) 2004 by Jan Bungeroth (jan@be-light.org)
 Scripture Guide is published under the GNU General Public License
 ----------------------------------------------------------
 
+Third-party exception: the text-editing engine under textview/ and
+textview_support/ is (c) 2013-2014 Stephan Aßmus <superstippi@gmx.de>,
+adapted from HaikuDepot, and is distributed under the MIT License
+instead -- each file there carries its own MIT header. Incorporating
+MIT-licensed code into a GPLv2 program is the compatible direction (the
+combined work is distributed under GPLv2, as this file states); nothing
+elsewhere in this repository changes licence.
+----------------------------------------------------------
+
                       GNU GENERAL PUBLIC LICENSE
 			  Version 2, June 1991
 

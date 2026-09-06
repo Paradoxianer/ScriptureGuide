@@ -2,7 +2,8 @@
 
 A Bible study program for [Haiku](https://www.haiku-os.org/), built on the
 [SWORD library](http://www.crosswire.org/sword/) and licensed under the
-GPL v2. Formerly Be-Logos.
+GPL v2 (the text-editing engine under `textview/` is a third-party MIT
+exception — see [LICENSE](ScriptureGuide/LICENSE)). Formerly Be-Logos.
 
 Read several translations side by side, verse aligned, with your own notes
 in a column of their own — and a Book Manager for downloading the Bibles,
