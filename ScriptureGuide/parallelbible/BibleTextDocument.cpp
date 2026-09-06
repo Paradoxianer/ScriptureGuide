@@ -108,7 +108,8 @@ BibleTextDocument::BibleTextDocument(SWModule* module, int singleVerse)
 	fSingleVerse(singleVerse),
 	fParagraphsEndWithNewline(false),
 	fResolvableStrongsGreek(true),
-	fResolvableStrongsHebrew(true)
+	fResolvableStrongsHebrew(true),
+	fRestylingParagraph(false)
 {
 	fVerseNumberStyle.SetBold(true);
 	fParagraphStyle.SetJustify(true);
@@ -752,6 +753,346 @@ BibleTextDocument::SetHighlights(
 
 
 void
+BibleTextDocument::_CleanRenderedVerseText(BString& text) const
+{
+	// An editable document's own line breaks come back in as soft
+	// ones, BEFORE the GBF cleanup below -- both so a user-typed
+	// blank line isn't mistaken for a GBF paragraph marker and
+	// swallowed by the RemoveAll("\x0a\x0a") on the next line, and so
+	// the newline never reaches the paragraph builder, where it would
+	// split this one verse's note across several paragraphs. See
+	// SetParagraphsEndWithNewline() and NotesDisplayView::
+	// _InsertSoftLineBreak() for the two halves of this translation.
+	if (fParagraphsEndWithNewline)
+		text.ReplaceAll('\n', '\v');
+
+	// GBFPlain leaves paragraph markers behind; strip them so verses
+	// don't carry stray blank lines or pilcrows into the layout.
+	text.RemoveAll("\x0a\x0a");
+	// The pilcrow was only ever stripped when followed by a space,
+	// so one ending a verse survived and rendered as a stray control
+	// glyph -- reported live. Strip the marker itself, then the
+	// space it may or may not have left behind, then any double
+	// space that leaves mid-sentence.
+	text.RemoveAll("\xc2\xb6");
+	text.RemoveAll("<P>");
+	text.ReplaceAll("  ", " ");
+	text.Trim();
+}
+
+
+void
+BibleTextDocument::_BuildVerseParagraph(int verse, bool linkedToPrevious,
+	BString text, int32 documentOffset, Paragraph& outParagraph,
+	int32& outPrefixChars, std::vector<ReferenceLink>& outReferenceLinks,
+	std::vector<StrongsLink>& outStrongsLinks)
+{
+	std::vector<StrongsWord> strongsWords;
+	if (!linkedToPrevious && fShowStrongsNumbers) {
+		strongsWords = FindStrongsWordsInText(fModule, text);
+
+		// Drop the ones nothing installed could resolve, so they
+		// render as ordinary text instead of as a link that cannot
+		// lead anywhere -- see SetResolvableStrongsPrefixes().
+		std::vector<StrongsWord> resolvable;
+		for (size_t i = 0; i < strongsWords.size(); i++) {
+			char prefix = strongsWords[i].strongsNumber.Length() > 0
+				? strongsWords[i].strongsNumber.ByteAt(0) : '\0';
+			bool keep = (prefix == 'G') ? fResolvableStrongsGreek
+				: (prefix == 'H') ? fResolvableStrongsHebrew
+				: true;
+			if (keep)
+				resolvable.push_back(strongsWords[i]);
+		}
+		strongsWords = resolvable;
+	}
+
+	ParagraphStyle style(fParagraphStyle);
+	std::map<int, float>::const_iterator spacing
+		= fVerseSpacingBottom.find(verse);
+	if (spacing != fVerseSpacingBottom.end())
+		style.SetSpacingBottom(spacing->second);
+
+	Paragraph paragraph(style);
+	int32 verseNumberLength = 0;
+	if (fShowVerseNumbers) {
+		BString number;
+		number << " " << verse << " ";
+		paragraph.Append(TextSpan(number, fVerseNumberStyle));
+		verseNumberLength = number.Length();
+	} else if (text.IsEmpty()) {
+		// A paragraph whose only span is empty makes the whole
+		// document's Length() undercount how many paragraphs actually
+		// exist (Length() sums *text* length, not paragraph count),
+		// which breaks Remove(0, Length())'s ability to clear them on
+		// the next rebuild (see _Rebuild()'s CountParagraphs() check
+		// above -- Remove() itself still no-ops on a zero length). A
+		// single space keeps every paragraph's length nonzero and
+		// still reads as an empty, clickable line to type a note into.
+		text = " ";
+	}
+
+	// Cross-references (#28): a commentary citing "(Mt 16:18)" gets
+	// that substring split into its own, distinctly-styled span
+	// (see fReferenceLinkStyle) rather than the whole verse being one
+	// plain span -- FindReferencesInText() has already validated it
+	// against ParseVerseReference(), the same check a typed
+	// reference goes through, so this is never more than the
+	// occasional false negative (a real reference it missed), not a
+	// false positive turned into a broken link.
+	std::vector<TextReference> references;
+	if (fShowCrossReferences)
+		references = FindReferencesInText(text.String());
+
+	// One merged, position-sorted list of every special span in this
+	// verse's text -- Strong's-tagged words (#27) and cross-
+	// references (#28) alike -- so both can be laid down in a
+	// single left-to-right walk instead of two independent passes
+	// that would have no way to agree on which one wins if they
+	// ever overlapped (they shouldn't in practice: a Strong's tag
+	// wraps a single word, a reference is a whole "(Book Ch:V)"
+	// citation, not the same text).
+	struct SpecialSpan {
+		int32	start;
+		int32	length;
+		bool	isStrongs;
+		BString	strongsNumber;
+		BString	referenceKey;
+	};
+	std::vector<SpecialSpan> spans;
+	for (size_t i = 0; i < strongsWords.size(); i++) {
+		SpecialSpan span;
+		span.start = strongsWords[i].start;
+		span.length = strongsWords[i].length;
+		span.isStrongs = true;
+		span.strongsNumber = strongsWords[i].strongsNumber;
+		spans.push_back(span);
+	}
+	for (size_t i = 0; i < references.size(); i++) {
+		SpecialSpan span;
+		span.start = references[i].start;
+		span.length = references[i].length;
+		span.isStrongs = false;
+		span.referenceKey = references[i].normalizedKey;
+		spans.push_back(span);
+	}
+	std::sort(spans.begin(), spans.end(),
+		[](const SpecialSpan& a, const SpecialSpan& b) {
+			return a.start < b.start;
+		});
+
+	// #44: the styled pieces are collected first, in verse-text byte
+	// coordinates, instead of going straight into the paragraph --
+	// highlights are a background layer laid over whatever foreground
+	// styling this loop produces, and they may legitimately overlap a
+	// Strong's word or a cross-reference (which may not overlap each
+	// other). Splitting has to happen after both are known.
+	std::vector<StyledPiece> pieces;
+
+	if (spans.empty()) {
+		StyledPiece piece;
+		piece.start = 0;
+		piece.length = text.Length();
+		piece.style = fVerseTextStyle;
+		pieces.push_back(piece);
+	} else {
+		int32 cursor = 0;
+		for (size_t i = 0; i < spans.size(); i++) {
+			const SpecialSpan& span = spans[i];
+			if (span.start < cursor)
+				continue; // overlapping match -- keep the earlier one
+
+			if (span.start > cursor) {
+				StyledPiece before;
+				before.start = cursor;
+				before.length = span.start - cursor;
+				before.style = fVerseTextStyle;
+				pieces.push_back(before);
+			}
+
+			StyledPiece piece;
+			piece.start = span.start;
+			piece.length = span.length;
+
+			int32 linkStart = documentOffset + verseNumberLength
+				+ span.start;
+			if (span.isStrongs) {
+				piece.style = fStrongsNumberStyle;
+				pieces.push_back(piece);
+				StrongsLink link;
+				link.start = linkStart;
+				link.end = linkStart + span.length;
+				link.number = span.strongsNumber;
+				outStrongsLinks.push_back(link);
+			} else {
+				piece.style = fReferenceLinkStyle;
+				pieces.push_back(piece);
+				ReferenceLink link;
+				link.start = linkStart;
+				link.end = linkStart + span.length;
+				link.key = span.referenceKey;
+				outReferenceLinks.push_back(link);
+			}
+
+			cursor = span.start + span.length;
+		}
+		if (cursor < text.Length()) {
+			StyledPiece after;
+			after.start = cursor;
+			after.length = text.Length() - cursor;
+			after.style = fVerseTextStyle;
+			pieces.push_back(after);
+		}
+	}
+
+	_ApplyHighlights(pieces, text, verse);
+
+	for (size_t i = 0; i < pieces.size(); i++) {
+		if (pieces[i].length <= 0)
+			continue;
+		BString pieceText;
+		text.CopyInto(pieceText, pieces[i].start, pieces[i].length);
+		paragraph.Append(TextSpan(pieceText, pieces[i].style));
+	}
+
+	// Appended last, after every styled/linked span above, so none of
+	// the offsets those recorded need to account for it -- see the
+	// header comment on SetParagraphsEndWithNewline() for why an
+	// editable document needs the paragraph terminator to physically
+	// exist. paragraph.Length() below picks it up, so a caller summing
+	// documentOffset across verses (as _Rebuild()'s loop does) stays
+	// consistent with the document's own flat offsets.
+	if (fParagraphsEndWithNewline)
+		paragraph.Append(TextSpan("\n", fVerseTextStyle));
+
+	outParagraph = paragraph;
+	outPrefixChars = verseNumberLength;
+}
+
+
+void
+BibleTextDocument::RestyleParagraphAfterEdit(int32 paragraphIndex)
+{
+	// Re-entered via the very Replace() call below: it notifies this
+	// document's listeners synchronously, and NotesSaveListener::
+	// TextChanged() calls straight back into this method. Without this
+	// guard that is direct infinite recursion, not just redundant work.
+	if (fRestylingParagraph)
+		return;
+
+	if (fModule == NULL || paragraphIndex < 0
+		|| (size_t)paragraphIndex >= fParagraphVerse.size()) {
+		return;
+	}
+
+	int verse = fParagraphVerse[paragraphIndex];
+	if (verse <= 0)
+		return;
+
+	// A verse sharing its predecessor's commentary entry has no text of
+	// its own to re-read -- restyling it in place would need to re-walk
+	// every earlier linked verse to reproduce what _Rebuild() does, for
+	// a case that cannot happen for an editable note (see the header
+	// comment). Leaving its existing styling alone is correct here:
+	// nothing about a linked verse's rendered text can have changed
+	// from an edit to a DIFFERENT paragraph.
+	std::map<int, bool>::const_iterator linked = fLinkedToPrevious.find(verse);
+	if (linked != fLinkedToPrevious.end() && linked->second)
+		return;
+
+	int32 oldStart, oldEnd;
+	if (!TextRangeForVerseRange(verse, verse, oldStart, oldEnd))
+		return;
+	int32 oldLength = oldEnd - oldStart;
+
+	// This verse's own stale link entries are about to be rebuilt from
+	// scratch by _BuildVerseParagraph() below -- remove them first so
+	// they are not left behind as duplicates alongside the fresh ones.
+	fReferenceLinks.erase(std::remove_if(fReferenceLinks.begin(),
+		fReferenceLinks.end(),
+		[oldStart, oldEnd](const ReferenceLink& link) {
+			return link.start >= oldStart && link.start < oldEnd;
+		}), fReferenceLinks.end());
+	fStrongsLinks.erase(std::remove_if(fStrongsLinks.begin(),
+		fStrongsLinks.end(),
+		[oldStart, oldEnd](const StrongsLink& link) {
+			return link.start >= oldStart && link.start < oldEnd;
+		}), fStrongsLinks.end());
+
+	// Re-read from the module, not from this document's own live
+	// paragraph text -- NotesSaveListener::TextChanged() (the only
+	// caller) has already written the edit through to fModule by the
+	// time this runs, so the module is authoritative and already free
+	// of the live editor's own soft line breaks/mid-edit state. This
+	// mirrors _Rebuild()'s own loop exactly, one verse at a time.
+	VerseKey iterKey;
+	_PrepareKey(iterKey);
+	iterKey.setText(fKeyText.String());
+	iterKey.setVerse(verse);
+	fModule->setKey(iterKey);
+	BString text;
+	text = fModule->renderText();
+	_CleanRenderedVerseText(text);
+
+	// Built into LOCAL vectors, not fReferenceLinks/fStrongsLinks
+	// directly (see the header comment on why): the shift step just
+	// below has to be able to tell "an existing entry that needs
+	// shifting" from "this verse's own brand new entry", and appending
+	// straight into the member vectors here would erase that
+	// distinction, double-shifting this verse's own entries right along
+	// with everything past it.
+	Paragraph newParagraph;
+	int32 newPrefixChars;
+	std::vector<ReferenceLink> newReferenceLinks;
+	std::vector<StrongsLink> newStrongsLinks;
+	_BuildVerseParagraph(verse, false, text, oldStart, newParagraph,
+		newPrefixChars, newReferenceLinks, newStrongsLinks);
+	int32 newLength = newParagraph.Length();
+
+	// Every OTHER paragraph's own link entries have to slide by however
+	// much this one's length just changed -- before the splice below,
+	// while oldEnd still means what it says, and before this verse's
+	// own freshly built entries (still sitting in the local vectors
+	// above, not yet merged in) could be mistaken for one of them.
+	int32 delta = newLength - oldLength;
+	if (delta != 0) {
+		for (size_t i = 0; i < fReferenceLinks.size(); i++) {
+			if (fReferenceLinks[i].start >= oldEnd) {
+				fReferenceLinks[i].start += delta;
+				fReferenceLinks[i].end += delta;
+			}
+		}
+		for (size_t i = 0; i < fStrongsLinks.size(); i++) {
+			if (fStrongsLinks[i].start >= oldEnd) {
+				fStrongsLinks[i].start += delta;
+				fStrongsLinks[i].end += delta;
+			}
+		}
+	}
+
+	// Now safe to merge in: every entry already in fReferenceLinks/
+	// fStrongsLinks that needed shifting has already been shifted, so
+	// this verse's own entries (already at their correct final absolute
+	// position -- built with documentOffset=oldStart) cannot collide
+	// with that step.
+	fReferenceLinks.insert(fReferenceLinks.end(), newReferenceLinks.begin(),
+		newReferenceLinks.end());
+	fStrongsLinks.insert(fStrongsLinks.end(), newStrongsLinks.begin(),
+		newStrongsLinks.end());
+
+	if ((size_t)paragraphIndex < fParagraphPrefixChars.size())
+		fParagraphPrefixChars[paragraphIndex] = newPrefixChars;
+
+	TextDocumentRef replacement(new TextDocument(), true);
+	replacement->Append(newParagraph);
+
+	fRestylingParagraph = true;
+	Replace(oldStart, oldLength, replacement);
+	fRestylingParagraph = false;
+}
+
+
+void
 BibleTextDocument::_Rebuild()
 {
 	bigtime_t rebuildStart = system_time();
@@ -872,210 +1213,16 @@ BibleTextDocument::_Rebuild()
 		if (text.CountChars() < 1 && fSkipEmptyVerses && !linkedToPrevious)
 			continue;
 
-		// An editable document's own line breaks come back in as soft
-		// ones, BEFORE the GBF cleanup below -- both so a user-typed
-		// blank line isn't mistaken for a GBF paragraph marker and
-		// swallowed by the RemoveAll("\x0a\x0a") on the next line, and so
-		// the newline never reaches the paragraph builder, where it would
-		// split this one verse's note across several paragraphs. See
-		// SetParagraphsEndWithNewline() and NotesDisplayView::
-		// _InsertSoftLineBreak() for the two halves of this translation.
-		if (fParagraphsEndWithNewline)
-			text.ReplaceAll('\n', '\v');
-
-		// GBFPlain leaves paragraph markers behind; strip them so verses
-		// don't carry stray blank lines or pilcrows into the layout.
-		text.RemoveAll("\x0a\x0a");
-		// The pilcrow was only ever stripped when followed by a space,
-		// so one ending a verse survived and rendered as a stray control
-		// glyph -- reported live. Strip the marker itself, then the
-		// space it may or may not have left behind, then any double
-		// space that leaves mid-sentence.
-		text.RemoveAll("\xc2\xb6");
-		text.RemoveAll("<P>");
-		text.ReplaceAll("  ", " ");
-		text.Trim();
+		_CleanRenderedVerseText(text);
 
 		// Strong's numbers (#27): fModule->getEntryAttributes() reflects
 		// whatever the most recent renderText() call above populated --
 		// stale (and, since text is still empty here, harmless either
 		// way) if linkedToPrevious skipped calling it this iteration.
-		std::vector<StrongsWord> strongsWords;
-		if (!linkedToPrevious && fShowStrongsNumbers) {
-			strongsWords = FindStrongsWordsInText(fModule, text);
-
-			// Drop the ones nothing installed could resolve, so they
-			// render as ordinary text instead of as a link that cannot
-			// lead anywhere -- see SetResolvableStrongsPrefixes().
-			std::vector<StrongsWord> resolvable;
-			for (size_t i = 0; i < strongsWords.size(); i++) {
-				char prefix = strongsWords[i].strongsNumber.Length() > 0
-					? strongsWords[i].strongsNumber.ByteAt(0) : '\0';
-				bool keep = (prefix == 'G') ? fResolvableStrongsGreek
-					: (prefix == 'H') ? fResolvableStrongsHebrew
-					: true;
-				if (keep)
-					resolvable.push_back(strongsWords[i]);
-			}
-			strongsWords = resolvable;
-		}
-
-		ParagraphStyle style(fParagraphStyle);
-		std::map<int, float>::const_iterator spacing
-			= fVerseSpacingBottom.find(verse);
-		if (spacing != fVerseSpacingBottom.end())
-			style.SetSpacingBottom(spacing->second);
-
-		Paragraph paragraph(style);
+		Paragraph paragraph;
 		int32 verseNumberLength = 0;
-		if (fShowVerseNumbers) {
-			BString number;
-			number << " " << verse << " ";
-			paragraph.Append(TextSpan(number, fVerseNumberStyle));
-			verseNumberLength = number.Length();
-		} else if (text.IsEmpty()) {
-			// A paragraph whose only span is empty makes the whole
-			// document's Length() undercount how many paragraphs actually
-			// exist (Length() sums *text* length, not paragraph count),
-			// which breaks Remove(0, Length())'s ability to clear them on
-			// the next rebuild (see _Rebuild()'s CountParagraphs() check
-			// above -- Remove() itself still no-ops on a zero length). A
-			// single space keeps every paragraph's length nonzero and
-			// still reads as an empty, clickable line to type a note into.
-			text = " ";
-		}
-
-		// Cross-references (#28): a commentary citing "(Mt 16:18)" gets
-		// that substring split into its own, distinctly-styled span
-		// (see fReferenceLinkStyle) rather than the whole verse being one
-		// plain span -- FindReferencesInText() has already validated it
-		// against ParseVerseReference(), the same check a typed
-		// reference goes through, so this is never more than the
-		// occasional false negative (a real reference it missed), not a
-		// false positive turned into a broken link.
-		std::vector<TextReference> references;
-		if (fShowCrossReferences)
-			references = FindReferencesInText(text.String());
-
-		// One merged, position-sorted list of every special span in this
-		// verse's text -- Strong's-tagged words (#27) and cross-
-		// references (#28) alike -- so both can be laid down in a
-		// single left-to-right walk instead of two independent passes
-		// that would have no way to agree on which one wins if they
-		// ever overlapped (they shouldn't in practice: a Strong's tag
-		// wraps a single word, a reference is a whole "(Book Ch:V)"
-		// citation, not the same text).
-		struct SpecialSpan {
-			int32	start;
-			int32	length;
-			bool	isStrongs;
-			BString	strongsNumber;
-			BString	referenceKey;
-		};
-		std::vector<SpecialSpan> spans;
-		for (size_t i = 0; i < strongsWords.size(); i++) {
-			SpecialSpan span;
-			span.start = strongsWords[i].start;
-			span.length = strongsWords[i].length;
-			span.isStrongs = true;
-			span.strongsNumber = strongsWords[i].strongsNumber;
-			spans.push_back(span);
-		}
-		for (size_t i = 0; i < references.size(); i++) {
-			SpecialSpan span;
-			span.start = references[i].start;
-			span.length = references[i].length;
-			span.isStrongs = false;
-			span.referenceKey = references[i].normalizedKey;
-			spans.push_back(span);
-		}
-		std::sort(spans.begin(), spans.end(),
-			[](const SpecialSpan& a, const SpecialSpan& b) {
-				return a.start < b.start;
-			});
-
-		// #44: the styled pieces are collected first, in verse-text byte
-		// coordinates, instead of going straight into the paragraph --
-		// highlights are a background layer laid over whatever foreground
-		// styling this loop produces, and they may legitimately overlap a
-		// Strong's word or a cross-reference (which may not overlap each
-		// other). Splitting has to happen after both are known.
-		std::vector<StyledPiece> pieces;
-
-		if (spans.empty()) {
-			StyledPiece piece;
-			piece.start = 0;
-			piece.length = text.Length();
-			piece.style = fVerseTextStyle;
-			pieces.push_back(piece);
-		} else {
-			int32 cursor = 0;
-			for (size_t i = 0; i < spans.size(); i++) {
-				const SpecialSpan& span = spans[i];
-				if (span.start < cursor)
-					continue; // overlapping match -- keep the earlier one
-
-				if (span.start > cursor) {
-					StyledPiece before;
-					before.start = cursor;
-					before.length = span.start - cursor;
-					before.style = fVerseTextStyle;
-					pieces.push_back(before);
-				}
-
-				StyledPiece piece;
-				piece.start = span.start;
-				piece.length = span.length;
-
-				int32 linkStart = documentOffset + verseNumberLength
-					+ span.start;
-				if (span.isStrongs) {
-					piece.style = fStrongsNumberStyle;
-					pieces.push_back(piece);
-					StrongsLink link;
-					link.start = linkStart;
-					link.end = linkStart + span.length;
-					link.number = span.strongsNumber;
-					fStrongsLinks.push_back(link);
-				} else {
-					piece.style = fReferenceLinkStyle;
-					pieces.push_back(piece);
-					ReferenceLink link;
-					link.start = linkStart;
-					link.end = linkStart + span.length;
-					link.key = span.referenceKey;
-					fReferenceLinks.push_back(link);
-				}
-
-				cursor = span.start + span.length;
-			}
-			if (cursor < text.Length()) {
-				StyledPiece after;
-				after.start = cursor;
-				after.length = text.Length() - cursor;
-				after.style = fVerseTextStyle;
-				pieces.push_back(after);
-			}
-		}
-
-		_ApplyHighlights(pieces, text, verse);
-
-		for (size_t i = 0; i < pieces.size(); i++) {
-			if (pieces[i].length <= 0)
-				continue;
-			BString pieceText;
-			text.CopyInto(pieceText, pieces[i].start, pieces[i].length);
-			paragraph.Append(TextSpan(pieceText, pieces[i].style));
-		}
-
-		// Appended last, after every styled/linked span above, so none of
-		// the offsets those recorded need to account for it -- see the
-		// header comment on SetParagraphsEndWithNewline() for why an
-		// editable document needs the paragraph terminator to physically
-		// exist. paragraph.Length() below picks it up, so documentOffset
-		// stays consistent with the document's own flat offsets.
-		if (fParagraphsEndWithNewline)
-			paragraph.Append(TextSpan("\n", fVerseTextStyle));
+		_BuildVerseParagraph(verse, linkedToPrevious, text, documentOffset,
+			paragraph, verseNumberLength, fReferenceLinks, fStrongsLinks);
 
 		Append(paragraph);
 		fParagraphVerse.push_back(verse);

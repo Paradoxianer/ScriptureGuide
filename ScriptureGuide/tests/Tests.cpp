@@ -955,6 +955,133 @@ TestNotesColumnMatchesChainVersification(SWMgr* manager,
 	Check(bibleRows == notesRows && notesRows == expected, name);
 }
 
+
+// #38/#32: a reference typed or dropped into an already-open note used
+// to stay permanently plain text -- FindReferencesInText() only ever ran
+// during a full _Rebuild() (a chapter switch), never while the SAME
+// chapter stayed open, so nothing about typing (or SetNote() from
+// outside) ever made it a link. RestyleParagraphAfterEdit() is what
+// fixes that; this proves it works withOUT navigating away, and that
+// editing one verse's paragraph does not corrupt another verse's
+// already-established reference link -- the bookkeeping risk that
+// change carries, since every OTHER verse's fReferenceLinks entry has
+// to slide by however much the edited paragraph's own length just
+// changed.
+static void
+TestLiveEditMakesReferenceClickableWithoutRebuild(SWModule* notesModule)
+{
+	const char* name = "BibleTextDocument::RestyleParagraphAfterEdit: a "
+		"reference added to an open note becomes a link immediately";
+	if (notesModule == NULL) {
+		Skip(name, "no notes module");
+		return;
+	}
+
+	PersonalNotesModule seed;
+	if (seed.Open() != B_OK) {
+		Skip(name, "could not open notes");
+		return;
+	}
+	BString original3 = seed.GetNote("Gen 1:3");
+	BString original4 = seed.GetNote("Gen 1:4");
+	BString original5 = seed.GetNote("Gen 1:5");
+
+	seed.SetNote("Gen 1:3", "before, cites Genesis 2:2 already");
+	seed.SetNote("Gen 1:4", "short");
+	seed.SetNote("Gen 1:5", "after, cites Genesis 2:2 also");
+
+	// SetParagraphsEndWithNewline(true) matches production exactly --
+	// _BuildNotesDocument() always sets this (an editable document
+	// needs the terminator to physically exist, see its own header
+	// comment), and TextDocument's own paragraph splitting depends on
+	// it: without it, Replace() below has no boundary to respect and
+	// silently merges the replacement into the following paragraph
+	// instead of taking its place -- confirmed live by this very test,
+	// the first time it ran without this line.
+	BibleTextDocument doc(notesModule);
+	doc.SetShowVerseNumbers(false);
+	doc.SetShowCrossReferences(true);
+	doc.SetSkipEmptyVerses(false);
+	doc.SetParagraphsEndWithNewline(true);
+	doc.SetKey("Gen 1:1");
+
+	int32 countBefore = doc.CountParagraphs();
+
+	// Offsets found by searching the verse's own text for where the
+	// reference actually starts, rather than a hand-counted guess --
+	// the exact column shifts with the surrounding wording, and a wrong
+	// guess reads as "no link" indistinguishably from a real failure.
+	int32 start3, end3, start5, end5;
+	doc.TextRangeForVerseRange(3, 3, start3, end3);
+	doc.TextRangeForVerseRange(5, 5, start5, end5);
+	BString text3 = doc.Text(start3, end3 - start3);
+	BString text5 = doc.Text(start5, end5 - start5);
+	int32 refOffset3 = text3.FindFirst("Genesis");
+	int32 refOffset5 = text5.FindFirst("Genesis");
+	BString key3Before, key5Before;
+	bool link3Before = refOffset3 >= 0
+		&& doc.ReferenceLinkAt(start3 + refOffset3, key3Before);
+	bool link5Before = refOffset5 >= 0
+		&& doc.ReferenceLinkAt(start5 + refOffset5, key5Before);
+
+	int32 index4 = doc.ParagraphIndexForVerse(4);
+
+	// The edit itself: what NotesSaveListener::TextChanged() does --
+	// write the new text through to the module first (RestyleParagraph
+	// AfterEdit() re-reads from there, not from live in-memory text) --
+	// then restyle. Deliberately a different LENGTH from "short", so a
+	// bookkeeping bug in the shift this triggers has something to shift.
+	seed.SetNote("Gen 1:4", "now much longer and cites Genesis 3:3 too");
+	doc.RestyleParagraphAfterEdit(index4);
+
+	int32 countAfter = doc.CountParagraphs();
+	Check(countBefore == countAfter,
+		"BibleTextDocument::RestyleParagraphAfterEdit: does not add or "
+		"remove paragraphs");
+
+	int32 start4, end4;
+	bool foundRange4 = doc.TextRangeForVerseRange(4, 4, start4, end4);
+	BString text4 = foundRange4 ? doc.Text(start4, end4 - start4) : BString();
+	int32 refOffset4 = text4.FindFirst("Genesis");
+	BString key4;
+	bool link4 = refOffset4 >= 0
+		&& doc.ReferenceLinkAt(start4 + refOffset4, key4);
+	if (!link4)
+		printf("      verse 4's text after the edit: '%s'\n", text4.String());
+	Check(link4, name);
+
+	// Re-fetch verse 3/5's ranges fresh -- verse 5's shifted if verse 4's
+	// length changed, and asking TextRangeForVerseRange() again (rather
+	// than reusing start5/end5 from before the edit) is what a real
+	// caller does too, so this checks the document's own bookkeeping,
+	// not arithmetic performed by the test.
+	int32 start3After, end3After, start5After, end5After;
+	doc.TextRangeForVerseRange(3, 3, start3After, end3After);
+	doc.TextRangeForVerseRange(5, 5, start5After, end5After);
+	BString text3After = doc.Text(start3After, end3After - start3After);
+	BString text5After = doc.Text(start5After, end5After - start5After);
+	int32 refOffset3After = text3After.FindFirst("Genesis");
+	int32 refOffset5After = text5After.FindFirst("Genesis");
+	BString key3After, key5After;
+	bool link3After = refOffset3After >= 0
+		&& doc.ReferenceLinkAt(start3After + refOffset3After, key3After);
+	bool link5After = refOffset5After >= 0
+		&& doc.ReferenceLinkAt(start5After + refOffset5After, key5After);
+
+	Check(link3Before && link3After && key3Before == key3After,
+		"BibleTextDocument::RestyleParagraphAfterEdit: an earlier verse's "
+		"own reference link survives unchanged");
+	Check(link5Before && link5After && key5Before == key5After,
+		"BibleTextDocument::RestyleParagraphAfterEdit: a later verse's "
+		"reference link is corrected to its new (shifted) position, not "
+		"lost or left pointing at stale text");
+
+	seed.SetNote("Gen 1:3", original3.String());
+	seed.SetNote("Gen 1:4", original4.String());
+	seed.SetNote("Gen 1:5", original5.String());
+}
+
+
 // The trap this exists to prevent: SWModule::isWritable() is true for
 // plain Bibles as well, so anything gating an edit mode on it would make
 // every Bible column editable. Asserted against whatever is actually
@@ -2416,6 +2543,7 @@ main()
 	TestSoftLineBreakKeepsOneParagraphPerVerse(notesModule);
 	TestSingleVerseRendersExactlyOneVerse(&notes);
 	TestNotesColumnMatchesChainVersification(&manager, notesModule);
+	TestLiveEditMakesReferenceClickableWithoutRebuild(notesModule);
 
 	TestCaretPositionAfterListenerRebuildsOnKeystroke();
 	TestRestyleRebuildDoesNotAccumulateEmptyParagraphs();

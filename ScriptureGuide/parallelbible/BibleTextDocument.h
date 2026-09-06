@@ -260,6 +260,31 @@ public:
 			void				SetVerseSpacing(
 									const std::map<int, float>& spacing);
 
+			// #38/#32: re-derives exactly one verse's paragraph -- its
+			// cross-reference and Strong's-number link spans -- from
+			// what is now stored for it, and splices the result in
+			// place. For an editable (notes) document: the reference-
+			// recognition that already runs on every _Rebuild() (a
+			// chapter switch) otherwise never runs again while the
+			// SAME chapter stays open, so a reference typed or dropped
+			// into a note stayed permanently plain text until the user
+			// navigated away and back. Called once per edited paragraph
+			// from NotesSaveListener::TextChanged(), right after the
+			// edit is written back to the module -- re-reads from
+			// there (matching how _Rebuild() itself always works from
+			// the module outward), not from the live in-memory text,
+			// so this needs no assumptions about mid-edit state (soft
+			// line breaks, an uncommitted caret position, ...).
+			//
+			// Deliberately NOT a full _Rebuild(): that would re-fetch
+			// and re-scan every OTHER verse's text too, and do it again
+			// on every keystroke anywhere in the column -- see
+			// SetVerseSpacing()'s own comment just above for the
+			// profiled cost of exactly that mistake elsewhere in this
+			// class.
+			void				RestyleParagraphAfterEdit(
+									int32 paragraphIndex);
+
 			// #44: one highlighted stretch of a single verse. `start`
 			// and `end` are CHARACTER offsets into that verse's own
 			// normal-form text -- what SWORD rendered, after the GBF
@@ -302,6 +327,16 @@ private:
 			void				_ApplyHighlights(
 									std::vector<StyledPiece>& pieces,
 									const BString& text, int verse) const;
+
+			// Cleans SWORD's rendered text the same way for every
+			// caller: soft line breaks for an editable document's own
+			// "\n" (before it can be mistaken for a GBF paragraph
+			// marker or split this verse across paragraphs), then GBF's
+			// own paragraph/pilcrow markers stripped. Shared by
+			// _Rebuild()'s loop and RestyleParagraphAfterEdit(), which
+			// both need SWORD's output cleaned up identically.
+			void				_CleanRenderedVerseText(
+									BString& text) const;
 
 			BFont				_EffectiveFont(const BFont& baseFont) const;
 			void				_Rebuild();
@@ -349,6 +384,13 @@ private:
 			bool				fResolvableStrongsGreek;
 			bool				fResolvableStrongsHebrew;
 
+			// Guards RestyleParagraphAfterEdit() against its own splice:
+			// Replace() notifies this document's listeners synchronously,
+			// and NotesSaveListener::TextChanged() calls
+			// RestyleParagraphAfterEdit() right back -- unguarded, that
+			// is direct infinite recursion, not just redundant work.
+			bool				fRestylingParagraph;
+
 			// paragraph index -> verse number, rebuilt in _Rebuild()
 			std::vector<int>	fParagraphVerse;
 
@@ -375,6 +417,42 @@ private:
 				BString	number;
 			};
 			std::vector<StrongsLink>	fStrongsLinks;
+
+			// The one verse's worth of paragraph-building work shared
+			// by _Rebuild()'s loop (building every verse from scratch)
+			// and RestyleParagraphAfterEdit() (rebuilding exactly one).
+			// `text` is already rendered and cleaned; `documentOffset`
+			// is where this verse's paragraph starts (or will start) in
+			// the document as a whole, needed to compute the absolute
+			// offsets ReferenceLinkAt()/StrongsNumberAt() key on.
+			// `linkedToPrevious` only ever matters to _Rebuild()'s own
+			// loop (a commentary verse sharing its predecessor's entry
+			// gets no Strong's-word detection of its own) --
+			// RestyleParagraphAfterEdit() always passes false, since an
+			// editable note is never linked to another verse.
+			//
+			// New link entries are appended to outReferenceLinks/
+			// outStrongsLinks rather than fReferenceLinks/fStrongsLinks
+			// directly: RestyleParagraphAfterEdit() has to know this
+			// verse's own new entries BEFORE deciding how far to shift
+			// every OTHER verse's existing ones (by how much THIS
+			// verse's paragraph length just changed) -- appending
+			// straight into the member vectors would mean the shift
+			// step could not tell "an old entry that needs shifting"
+			// from "the new entry this very call just added", and
+			// shift the new one right along with everything past it.
+			// _Rebuild()'s own loop has no such ordering hazard (each
+			// verse is appended once, in order, nothing shifts) and
+			// just appends the two vectors this returns onto its own.
+			void				_BuildVerseParagraph(int verse,
+									bool linkedToPrevious, BString text,
+									int32 documentOffset,
+									Paragraph& outParagraph,
+									int32& outPrefixChars,
+									std::vector<ReferenceLink>&
+										outReferenceLinks,
+									std::vector<StrongsLink>&
+										outStrongsLinks);
 
 			// verse number -> extra SpacingBottom, set by VerseAligner
 			std::map<int, float> fVerseSpacingBottom;

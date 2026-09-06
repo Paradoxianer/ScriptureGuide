@@ -166,6 +166,15 @@ public:
 
 			key.setVerse(verse);
 			fNotes->SetNote(key.getText(), text.String());
+
+			// #38/#32: makes a reference typed or dropped into a note
+			// clickable immediately, the same "at edit time" the
+			// description field's own restyling already worked at --
+			// see RestyleParagraphAfterEdit()'s own comment for why
+			// this had never actually happened before, only looking
+			// live but staying permanently unstyled until the chapter
+			// was left and reopened.
+			fDocument->RestyleParagraphAfterEdit(i);
 		}
 
 		if (fOwner != NULL)
