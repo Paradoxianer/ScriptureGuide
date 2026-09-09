@@ -4,64 +4,72 @@ Where ScriptureGuide goes after 1.3.0. Ordered by what unlocks what, not
 by wishlist size. Each entry says what it needs and what is already known
 about the ground it stands on.
 
-## The next thing: searching your own notes
+## The next thing: browsable dictionary index, or word-occurrence search
 
-[#54](https://github.com/Paradoxianer/ScriptureGuide/issues/54) is the
-only open bug in the tracker; everything else is a feature. It is also
-debt rather than a new idea: when notes moved into SWORD's Personal
-commentary (#45), they became a *notes column*, and notes columns live
-in `fNotesColumns` while the search window builds its list from
-`fModules`. The search side needs nothing new -- `search()` works on
-any verse-keyed module, a commentary as much as a Bible -- these
-columns are simply never offered.
+Two candidates, both P2, both scoped:
 
-Worth fixing first because of what it covers: your own writing is the
-text you most reliably remember writing and least reliably remember the
-location of.
+- [#84](https://github.com/Paradoxianer/ScriptureGuide/issues/84) A
+  browsable dictionary index -- page through every entry a loaded
+  lexicon has (G1, G2, G3, ...), not just jump to one exact lookup.
+  `SGDictionaryWindow::_LookupKey()` only ever shows a single entry or
+  search hits today; nothing walks the whole module.
+- [#83](https://github.com/Paradoxianer/ScriptureGuide/issues/83) Given
+  a Strong's-tagged word, find every other verse using the same one --
+  the "Bible Word Study" a dictionary click can't do yet. Needs a new
+  search mode keyed by Strong's number rather than plain text; confirmed
+  `SwordBackend` has nothing like that today.
+
+[#106](https://github.com/Paradoxianer/ScriptureGuide/issues/106)/[#107](https://github.com/Paradoxianer/ScriptureGuide/issues/107)
+build on these once they exist: highlighting same-word occurrences in
+the visible chapter, and a books/translations distribution chart per
+word -- both filed from the same csv-bibel.de reference, both explicitly
+scoped as follow-ups, not part of the two above.
+
+A smaller, standalone remainder:
+[#32](https://github.com/Paradoxianer/ScriptureGuide/issues/32)
+reference recognition works in notes, commentary and verse-list
+descriptions already -- the one place left is dictionary entries
+themselves.
 
 ## After that
 
 Roughly in the order I would take them.
 
-- **[#38](https://github.com/Paradoxianer/ScriptureGuide/issues/38)
-  Dropping Bible text into a note inserts a cross-reference link.**
-  Small: the drop path and the reference-link rendering both exist,
-  they just do not meet.
-- **[#18](https://github.com/Paradoxianer/ScriptureGuide/issues/18) HIG
-  audit.** This entry used to say "best done when the UI stops moving".
-  That has now happened: 1.4.0 settled the selection menu into one
-  popup and removed the borderless palette window, so the reading pane
-  is not mid-change for the first time in several releases.
-- **[#92](https://github.com/Paradoxianer/ScriptureGuide/issues/92) /
-  [#105](https://github.com/Paradoxianer/ScriptureGuide/issues/105)
-  A verse list shown in the reading pane, and the colour it is shown
-  in.** One feature from two sides, cross-linked. Most of the work
-  exists: `HighlightStore::ForDocument()` already decides per bookmark
-  whether a mark is verse-wide or covers its own characters in its own
-  translation, so what is missing is a colour on the collection folder
-  and a rule for when it shows -- "while that list is selected" being
-  the answer that needs no per-list state. One real gap: "Add to Verse
-  List" drops the selection's span, so a list of partial-verse entries
-  cannot be created from the UI yet.
-- **[#12](https://github.com/Paradoxianer/ScriptureGuide/issues/12)
-  Per-column scroll lock.** Labelled P1, but it is an architecture
+- [#18](https://github.com/Paradoxianer/ScriptureGuide/issues/18) HIG
+  audit. 1.4.0 settled the selection menu into one popup and removed
+  the borderless palette window -- the reading pane is not mid-change
+  for the first time in several releases, which is what this was
+  waiting for.
+- [#92](https://github.com/Paradoxianer/ScriptureGuide/issues/92) /
+  [#105](https://github.com/Paradoxianer/ScriptureGuide/issues/105) A
+  verse list shown in the reading pane, and the colour it is shown in.
+  One feature from two sides, cross-linked, with the design decisions
+  (colour on the collection folder, shown while selected) already
+  written up in #105's own comments. One real gap: "Add to Verse List"
+  drops the selection's span, so a list of partial-verse entries can't
+  be created from the UI yet.
+- [#12](https://github.com/Paradoxianer/ScriptureGuide/issues/12)
+  Per-column scroll lock. Labelled P1, but it is an architecture
   change -- a column that opts out of `VerseAligner` needs its own
-  scroll view and its own navigation. It wants a design pass before it
-  wants code, and it predates column groups.
-- **[#34](https://github.com/Paradoxianer/ScriptureGuide/issues/34) Greek
-  and Hebrew fonts.** Currently a manual step in the manual. Bundling or
+  scroll view and its own navigation. Wants a design pass before code.
+- [#34](https://github.com/Paradoxianer/ScriptureGuide/issues/34) Greek
+  and Hebrew fonts. Currently a manual step in the manual. Bundling or
   depending on a font would remove it.
-- **[#16](https://github.com/Paradoxianer/ScriptureGuide/issues/16)
-  Evaluate a newer SWORD.** Low priority until something needs it.
-- **[#43](https://github.com/Paradoxianer/ScriptureGuide/issues/43) Audio
-  modules.** Open question rather than planned work.
-- **[#35](https://github.com/Paradoxianer/ScriptureGuide/issues/35) A
-  BFS file type for dropped selections.** Its first half is effectively
-  done -- bookmarks and highlights already register a MIME type with
+- [#16](https://github.com/Paradoxianer/ScriptureGuide/issues/16)
+  Evaluate a newer SWORD. Low priority until something needs it.
+- [#43](https://github.com/Paradoxianer/ScriptureGuide/issues/43) Audio
+  modules. Open question rather than planned work.
+- [#35](https://github.com/Paradoxianer/ScriptureGuide/issues/35) A BFS
+  file type for dropped selections. Its first half is effectively done
+  -- bookmarks and highlights already register a MIME type with
   `SetAttrInfo()` and are queryable in Tracker. What remains is the
   unverified half: writing attributes onto the file Tracker itself
   creates on a drop, which needs the asynchronous `B_COPY_TARGET`
   protocol and a real prototype rather than a guess.
+- [#108](https://github.com/Paradoxianer/ScriptureGuide/issues/108)
+  Research only: is there a free/open dataset tagging Bible people and
+  pronoun referents (bibleanalyzer.com-style)? Nothing to design until
+  that question has an answer.
 
 ## Not planned for now
 
