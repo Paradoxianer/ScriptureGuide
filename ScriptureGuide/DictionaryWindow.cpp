@@ -183,7 +183,8 @@ SGDictionaryWindow::SGDictionaryWindow(BRect frame, SwordBackend* backend,
 		B_ASYNCHRONOUS_CONTROLS),
 	fBackend(backend),
 	fCurrentLexicon(NULL),
-	fOwner(owner)
+	fOwner(owner),
+	fListShowingAllKeys(false)
 {
 	_BuildGUI();
 }
@@ -221,14 +222,15 @@ SGDictionaryWindow::_BuildGUI()
 
 	// Reported: a separate "Browse" button that expanded a normally-
 	// hidden results list was less usable than just always having the
-	// whole module's key list sitting there to click through --
-	// especially since Prev/Next already made "the whole module is one
-	// long list" the working mental model. So there is no more toggle:
-	// fResultList is a permanent sidebar, always populated with every
-	// key of fCurrentLexicon (see _PopulateAllKeysList()) except while a
-	// plain-text search's matches are being shown instead (see
-	// _LookupKey()'s fallback) -- the next entry actually shown restores
-	// it via _ShowEntryForKey().
+	// whole module's key list sitting there to click through. So there
+	// is no more toggle: fResultList is a permanent sidebar, always
+	// populated with every key of fCurrentLexicon (see
+	// _PopulateAllKeysList()) except while a plain-text search's
+	// matches are being shown instead (see _LookupKey()'s fallback) --
+	// the next entry actually shown restores it via _ShowEntryForKey().
+	// Also replaces Prev/Next (#84) entirely, since the list makes them
+	// redundant -- browsing forward/backward through the module is just
+	// clicking the next row.
 	fResultsLabel = new BStringView("dictResultsLabel",
 		B_TRANSLATE("Entries:"));
 	fResultList = new BListView("dictResults", B_SINGLE_SELECTION_LIST);
@@ -238,14 +240,6 @@ SGDictionaryWindow::_BuildGUI()
 	fResultScroll->SetExplicitMinSize(BSize(150.0f, B_SIZE_UNSET));
 
 	fEntryLabel = new BStringView("dictEntryLabel", B_TRANSLATE("Entry:"));
-
-	// #84: steps through fAllKeys regardless of what fResultList is
-	// currently showing -- lazily built on first use (see
-	// _EnsureAllKeys()), so this works right after a plain lookup too.
-	fPrevButton = new BButton("dictPrevButton", B_TRANSLATE("◀ Previous"),
-		new BMessage(DICT_PREV_ENTRY));
-	fNextButton = new BButton("dictNextButton", B_TRANSLATE("Next ▶"),
-		new BMessage(DICT_NEXT_ENTRY));
 
 	fEntryView = new DictionaryEntryView("dictEntry", fOwner);
 	fEntryView->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
@@ -268,12 +262,7 @@ SGDictionaryWindow::_BuildGUI()
 				.Add(fResultScroll)
 			.End()
 			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
-				.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
-					.Add(fEntryLabel)
-					.AddGlue()
-					.Add(fPrevButton)
-					.Add(fNextButton)
-				.End()
+				.Add(fEntryLabel)
 				.Add(entryScroll)
 			.End()
 		.End()
@@ -325,8 +314,7 @@ SGDictionaryWindow::_LookupKey(const char* key)
 	if (!entry.IsEmpty()) {
 		// _ShowEntryForKey() re-reads the module's own canonical key
 		// text rather than trusting `key` as typed -- see its own
-		// comment on why that match matters for the sidebar and
-		// Prev/Next alike.
+		// comment on why that match matters for the sidebar.
 		_ShowEntryForKey(key);
 		return;
 	}
@@ -342,6 +330,7 @@ SGDictionaryWindow::_LookupKey(const char* key)
 	_UpdateEntryLabel();
 	while (fResultList->CountItems() > 0)
 		delete fResultList->RemoveItem((int32)0);
+	fListShowingAllKeys = false;
 
 	std::vector<BString> matches = fCurrentLexicon->SearchEntries(key);
 	for (size_t i = 0; i < matches.size(); i++)
@@ -389,31 +378,22 @@ SGDictionaryWindow::_ShowEntryForKey(const BString& key)
 	BString entry = fCurrentLexicon->GetEntry(key.String());
 	// The module's own canonical key text, not necessarily `key` as
 	// passed in -- see _LookupKey()'s own comment on why this matters
-	// for _StepEntry()'s later exact-match scan. `key` here already
+	// for the sidebar-selection lookup just below. `key` here already
 	// comes from fAllKeys/a search result, so it should already BE
 	// canonical, but reading it back after GetEntry() actually resolved
 	// it is one less thing to keep in sync by hand.
 	fCurrentKey = fCurrentLexicon->GetModule()->getKeyText();
 	_UpdateEntryLabel();
 
-	// Whatever fResultList currently shows (all keys already, or a
-	// search's matches) is superseded by "everything, with this entry
-	// highlighted" the moment any entry is actually shown -- the single
-	// place the sidebar settles back to its steady state.
-	//
-	// fResultList->Select() below sends DICT_SELECT_RESULT the same way
-	// a real click does, but NOT synchronously -- confirmed live with a
-	// traced build: it goes through this BLooper's own message queue,
-	// so a plain "are we already inside this function" bool guard set
-	// around the call is long since reset to false again by the time
-	// that queued message is actually handled, and does nothing to stop
-	// it -- watched this recurse for real (SYNC ENTER logged before
-	// every one of an unbroken run of DICT_SELECT_RESULT hits, guard
-	// read back false every single time) before catching it. What
-	// actually breaks the cycle: DICT_SELECT_RESULT re-checks whether
-	// the freshly (re-)selected item's text is what's already showing,
-	// which by the time the queued message runs, it always is.
-	_PopulateAllKeysList();
+	// Only actually rebuild the sidebar if it isn't already showing
+	// every key -- reported live: doing this unconditionally on every
+	// single selection (tearing down and re-adding ~2000+ items just to
+	// reselect one that was already there) visibly jittered for an
+	// entry far down the list, since the rebuild's own re-scroll
+	// fights the list's normal, immediate scroll-to-click behavior. A
+	// search's matches (see _LookupKey()'s fallback) DO need replacing.
+	if (!fListShowingAllKeys)
+		_PopulateAllKeysList();
 	_SelectKeyInList(fCurrentKey);
 
 	_ShowEntry(entry);
@@ -439,6 +419,7 @@ SGDictionaryWindow::_PopulateAllKeysList()
 		delete fResultList->RemoveItem((int32)0);
 	for (size_t i = 0; i < fAllKeys.size(); i++)
 		fResultList->AddItem(new BStringItem(fAllKeys[i].String()));
+	fListShowingAllKeys = true;
 }
 
 
@@ -454,47 +435,6 @@ SGDictionaryWindow::_SelectKeyInList(const BString& key)
 		}
 	}
 	fResultList->DeselectAll();
-}
-
-
-void
-SGDictionaryWindow::_StepEntry(int32 direction)
-{
-	if (fCurrentLexicon == NULL)
-		return;
-
-	_EnsureAllKeys();
-	if (fAllKeys.empty())
-		return;
-
-	// Locate the current key rather than tracking a bare index: the
-	// current entry could have been reached via a plain lookup, a search
-	// result, or a Strong's-number click, none of which update an index
-	// into fAllKeys directly -- only the key itself is known for certain.
-	// A linear scan over up to ~8700 entries (StrongsHebrew, measured) is
-	// cheap next to the whole-module walk that already happened once to
-	// build the list.
-	int32 index = -1;
-	for (size_t i = 0; i < fAllKeys.size(); i++) {
-		if (fAllKeys[i] == fCurrentKey) {
-			index = (int32)i;
-			break;
-		}
-	}
-
-	// Not found (nothing looked up yet, or the current entry came from a
-	// module AllKeys() doesn't agree came from fCurrentLexicon -- e.g. a
-	// Strong's-number click, which never sets fCurrentLexicon to whichever
-	// dictionary actually answered it) -- start from an end rather than
-	// doing nothing.
-	if (index < 0)
-		index = direction > 0 ? -1 : (int32)fAllKeys.size();
-
-	index += direction;
-	if (index < 0 || (size_t)index >= fAllKeys.size())
-		return;
-
-	_ShowEntryForKey(fAllKeys[index]);
 }
 
 
@@ -553,18 +493,6 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 				if (item->Text() != fCurrentKey)
 					_ShowEntryForKey(item->Text());
 			}
-			break;
-		}
-
-		case DICT_PREV_ENTRY:
-		{
-			_StepEntry(-1);
-			break;
-		}
-
-		case DICT_NEXT_ENTRY:
-		{
-			_StepEntry(1);
 			break;
 		}
 

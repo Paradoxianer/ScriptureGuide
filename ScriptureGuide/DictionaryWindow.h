@@ -31,8 +31,6 @@ class DictionaryEntryView;
 #define DICT_LOOKUP			'DClk'
 #define DICT_SELECT_RESULT	'DCsr'
 #define DICT_SHOW_STRONGS	'DCst'
-#define DICT_PREV_ENTRY		'DCpv'
-#define DICT_NEXT_ENTRY		'DCnx'
 #define DICT_QUIT			'DCqu'
 
 // A small, single-purpose lookup window for installed Lexicon/Dictionary
@@ -91,22 +89,28 @@ private:
 			// Looks up `key` directly (no exact-match-then-search
 			// fallback -- the caller already knows this key exists,
 			// e.g. from fAllKeys or a result the user just clicked) and
-			// records it as fCurrentKey, which Prev/Next step from.
+			// records it as fCurrentKey.
 			void			_ShowEntryForKey(const BString& key);
 			void			_ShowEntry(const BString& rawEntry);
 			// Fills fAllKeys from fCurrentLexicon if not already
 			// populated for it -- see SGModule::AllKeys()'s own comment
 			// on why this is cached rather than re-walked every time.
 			void			_EnsureAllKeys();
-			void			_StepEntry(int32 direction);
 			// Replaces fResultList's contents with every key of
-			// fCurrentLexicon (see _EnsureAllKeys()) -- the sidebar's
-			// steady state. A plain-text search (see _LookupKey()'s
-			// fallback) replaces it with matches instead, temporarily;
-			// the next entry actually shown (a click, Prev/Next, or a
-			// fresh exact lookup) calls this again via
+			// fCurrentLexicon (see _EnsureAllKeys()) and sets
+			// fListShowingAllKeys -- the sidebar's steady state. A
+			// plain-text search (see _LookupKey()'s fallback) replaces
+			// it with matches instead, temporarily, and clears that
+			// flag; the next entry actually shown calls this again via
 			// _ShowEntryForKey(), so the sidebar always settles back to
-			// "everything, with where you are highlighted".
+			// "everything, with where you are highlighted". Guarded by
+			// that flag in _ShowEntryForKey() rather than called
+			// unconditionally -- reported live: rebuilding all ~2000+
+			// items and re-scrolling on every single click, even when
+			// the list already held exactly this content, visibly
+			// jittered for an entry far down the list (barely noticeable
+			// near the top, which is why it looked fine for "A" and
+			// broken for "N").
 			void			_PopulateAllKeysList();
 			// Selects and scrolls to `key` inside fResultList if
 			// present, else clears the selection.
@@ -129,8 +133,6 @@ private:
 			BListView*		fResultList;
 			BScrollView*	fResultScroll;
 			BStringView*	fEntryLabel;
-			BButton*		fPrevButton;
-			BButton*		fNextButton;
 			DictionaryEntryView*	fEntryView;
 
 			// Cached for fCurrentLexicon specifically -- cleared on
@@ -138,6 +140,8 @@ private:
 			// list from a different module is never paged through.
 			std::vector<BString>	fAllKeys;
 			BString			fCurrentKey;
+			// See _PopulateAllKeysList()'s own comment.
+			bool			fListShowingAllKeys;
 };
 
 #endif // DICTIONARY_WINDOW_H
