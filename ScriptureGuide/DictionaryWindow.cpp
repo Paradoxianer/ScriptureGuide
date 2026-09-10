@@ -18,6 +18,9 @@
 #include <StringView.h>
 #include <TextControl.h>
 #include <TextView.h>
+#include <Window.h>
+
+#include "constants.h"
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "DictionaryWindow"
@@ -52,6 +55,125 @@ StripTags(const BString& text)
 	}
 	return result;
 }
+
+
+// #32: reference recognition already covers notes, commentary and the
+// verse-list description field -- the one surface it never reached is a
+// dictionary/lexicon entry, because fEntryView was a plain BTextView
+// with no notion of a clickable span at all. This is deliberately NOT
+// the app's own TextDocumentView engine those other surfaces share:
+// this window's entry display had no rich-text machinery to extend in
+// the first place, so a self-contained BTextView subclass -- SetText()
+// plus a text_run_array for colour/underline, MouseDown() overridden to
+// check a click against the same ranges -- is the smaller addition, not
+// a rewrite of the window around a different view type.
+class DictionaryEntryView : public BTextView {
+public:
+	DictionaryEntryView(const char* name, BMessenger* owner)
+		:
+		BTextView(name),
+		fOwner(owner)
+	{
+		// Off by default -- confirmed empirically (a standalone probe
+		// read back plain black/regular at an offset a text_run_array
+		// had explicitly coloured/underlined) that SetText(text, runs)
+		// silently ignores every run and renders everything in the
+		// view's single uniform font/colour without this. Not
+		// documented as a precondition on SetText() itself, only
+		// discoverable by noticing IsStylable()/SetStylable() exist at
+		// all and testing the theory.
+		SetStylable(true);
+	}
+
+	// Replaces plain SetText(): detects references in `text` (the same
+	// FindReferencesInText() every other surface uses, so what counts
+	// as a reference here is never a second, drifting definition of it)
+	// and colours/underlines each one via a text_run_array, remembering
+	// their ranges so MouseDown() can tell a click on one from an
+	// ordinary click landing elsewhere in the entry.
+	void SetEntryText(const BString& text)
+	{
+		// FindReferencesInText() can return overlapping candidates --
+		// the same "skip if this match starts before the previous one
+		// ended" filter SGVerseListWindow's own description-field
+		// restyling already needs for exactly this reason.
+		std::vector<TextReference> allMatches
+			= FindReferencesInText(text.String());
+		fReferences.clear();
+		int32 matchCursor = 0;
+		for (size_t i = 0; i < allMatches.size(); i++) {
+			if (allMatches[i].start < matchCursor)
+				continue;
+			fReferences.push_back(allMatches[i]);
+			matchCursor = allMatches[i].start + allMatches[i].length;
+		}
+
+		if (fReferences.empty()) {
+			SetText(text.String());
+			return;
+		}
+
+		// Read back rather than assume black: whatever this view's own
+		// default text colour actually is (theme-dependent), not a
+		// hard-coded guess at it.
+		BFont plainFont;
+		rgb_color plainColor;
+		GetFontAndColor(0, &plainFont, &plainColor);
+		BFont linkFont(plainFont);
+		linkFont.SetFace(B_UNDERSCORE_FACE);
+		// Same colour as fReferenceLinkStyle elsewhere in this app
+		// (BibleTextDocument.cpp) -- one reference-link colour, not a
+		// second one invented for this window alone.
+		rgb_color linkColor = { 0, 0, 200, 255 };
+
+		int32 count = 1 + 2 * (int32)fReferences.size();
+		size_t size = sizeof(text_run_array)
+			+ (count - 1) * sizeof(text_run);
+		text_run_array* runs = (text_run_array*)malloc(size);
+		runs->count = count;
+		int32 run = 0;
+		runs->runs[run].offset = 0;
+		runs->runs[run].font = plainFont;
+		runs->runs[run].color = plainColor;
+		run++;
+		for (size_t i = 0; i < fReferences.size(); i++) {
+			runs->runs[run].offset = fReferences[i].start;
+			runs->runs[run].font = linkFont;
+			runs->runs[run].color = linkColor;
+			run++;
+			runs->runs[run].offset = fReferences[i].start
+				+ fReferences[i].length;
+			runs->runs[run].font = plainFont;
+			runs->runs[run].color = plainColor;
+			run++;
+		}
+
+		SetText(text.String(), runs);
+		free(runs);
+	}
+
+	virtual void MouseDown(BPoint where)
+	{
+		int32 offset = OffsetAt(where);
+		for (size_t i = 0; i < fReferences.size(); i++) {
+			if (offset < fReferences[i].start
+				|| offset >= fReferences[i].start + fReferences[i].length) {
+				continue;
+			}
+			if (fOwner != NULL) {
+				BMessage jump(SG_BIBLE);
+				jump.AddString("key", fReferences[i].normalizedKey);
+				fOwner->SendMessage(&jump);
+			}
+			return;
+		}
+		BTextView::MouseDown(where);
+	}
+
+private:
+	BMessenger*					fOwner;
+	std::vector<TextReference>	fReferences;
+};
 
 
 SGDictionaryWindow::SGDictionaryWindow(BRect frame, SwordBackend* backend,
@@ -133,7 +255,7 @@ SGDictionaryWindow::_BuildGUI()
 	fNextButton = new BButton("dictNextButton", B_TRANSLATE("Next ▶"),
 		new BMessage(DICT_NEXT_ENTRY));
 
-	fEntryView = new BTextView("dictEntry");
+	fEntryView = new DictionaryEntryView("dictEntry", fOwner);
 	fEntryView->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 	fEntryView->MakeEditable(false);
 	fEntryView->SetWordWrap(true);
@@ -255,7 +377,7 @@ SGDictionaryWindow::_ShowEntry(const BString& rawEntry)
 {
 	BString clean = StripTags(rawEntry);
 	clean.Trim();
-	fEntryView->SetText(clean.String());
+	fEntryView->SetEntryText(clean);
 }
 
 

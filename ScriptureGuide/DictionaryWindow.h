@@ -19,7 +19,13 @@ class BMenuField;
 class BScrollView;
 class BStringView;
 class BTextControl;
-class BTextView;
+// #32: a plain BTextView subclass, not the app's own TextDocumentView
+// engine every OTHER reference-clickable surface (Bible columns, notes,
+// the description field) is built on -- defined in DictionaryWindow.cpp
+// only, next to the one place it's used. A smaller, self-contained
+// addition was the point: this window's entry display had no rich-text
+// machinery at all before this, so there was nothing bigger to extend.
+class DictionaryEntryView;
 
 #define DICT_SELECT_MODULE	'DCsm'
 #define DICT_LOOKUP			'DClk'
@@ -112,7 +118,7 @@ private:
 			BStringView*	fEntryLabel;
 			BButton*		fPrevButton;
 			BButton*		fNextButton;
-			BTextView*		fEntryView;
+			DictionaryEntryView*	fEntryView;
 
 			// Cached for fCurrentLexicon specifically -- cleared on
 			// every module switch (see DICT_SELECT_MODULE) so a stale
