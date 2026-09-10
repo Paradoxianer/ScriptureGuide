@@ -31,7 +31,6 @@ class DictionaryEntryView;
 #define DICT_LOOKUP			'DClk'
 #define DICT_SELECT_RESULT	'DCsr'
 #define DICT_SHOW_STRONGS	'DCst'
-#define DICT_BROWSE_ALL		'DCba'
 #define DICT_PREV_ENTRY		'DCpv'
 #define DICT_NEXT_ENTRY		'DCnx'
 #define DICT_QUIT			'DCqu'
@@ -95,16 +94,23 @@ private:
 			// records it as fCurrentKey, which Prev/Next step from.
 			void			_ShowEntryForKey(const BString& key);
 			void			_ShowEntry(const BString& rawEntry);
-			// Shows or hides fResultsLabel/fResultScroll together --
-			// kept hidden except right after a lookup that fell back to
-			// a multi-match search (see _LookupKey()), or while
-			// browsing the whole module (see DICT_BROWSE_ALL).
-			void			_ShowResultsList(bool show);
 			// Fills fAllKeys from fCurrentLexicon if not already
 			// populated for it -- see SGModule::AllKeys()'s own comment
 			// on why this is cached rather than re-walked every time.
 			void			_EnsureAllKeys();
 			void			_StepEntry(int32 direction);
+			// Replaces fResultList's contents with every key of
+			// fCurrentLexicon (see _EnsureAllKeys()) -- the sidebar's
+			// steady state. A plain-text search (see _LookupKey()'s
+			// fallback) replaces it with matches instead, temporarily;
+			// the next entry actually shown (a click, Prev/Next, or a
+			// fresh exact lookup) calls this again via
+			// _ShowEntryForKey(), so the sidebar always settles back to
+			// "everything, with where you are highlighted".
+			void			_PopulateAllKeysList();
+			// Selects and scrolls to `key` inside fResultList if
+			// present, else clears the selection.
+			void			_SelectKeyInList(const BString& key);
 			// Reflects fCurrentKey onto fEntryLabel ("Entry:" alone when
 			// empty, "Entry: <key>" otherwise) -- call after every
 			// fCurrentKey assignment. Without this a Strong's-number

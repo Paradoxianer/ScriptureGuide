@@ -219,37 +219,29 @@ SGDictionaryWindow::_BuildGUI()
 	BButton* lookupButton = new BButton("dictLookupButton",
 		B_TRANSLATE("Look up"), new BMessage(DICT_LOOKUP));
 
-	// #84: a numbered index to page through, not just a jump-to-one-key
-	// lookup -- fills the results list below with every key the current
-	// module has (see SGModule::AllKeys()) instead of search matches.
-	BButton* browseButton = new BButton("dictBrowseButton",
-		B_TRANSLATE("Browse"), new BMessage(DICT_BROWSE_ALL));
-
-	// Labeled explicitly (reported: with no label, it wasn't obvious
-	// what the *first* of the two scroll areas below was even for --
-	// it's normally empty, only ever holding something after a lookup
-	// that *didn't* match a key directly falls back to a search). Also
-	// hidden by default and only shown once it actually has candidates
-	// to pick from (see _LookupKey()/_ShowResults()) -- effectively the
-	// "expand only when relevant" behavior asked for, without a real
-	// collapse/expand control to build and wire up.
+	// Reported: a separate "Browse" button that expanded a normally-
+	// hidden results list was less usable than just always having the
+	// whole module's key list sitting there to click through --
+	// especially since Prev/Next already made "the whole module is one
+	// long list" the working mental model. So there is no more toggle:
+	// fResultList is a permanent sidebar, always populated with every
+	// key of fCurrentLexicon (see _PopulateAllKeysList()) except while a
+	// plain-text search's matches are being shown instead (see
+	// _LookupKey()'s fallback) -- the next entry actually shown restores
+	// it via _ShowEntryForKey().
 	fResultsLabel = new BStringView("dictResultsLabel",
-		B_TRANSLATE("Search results (only shown if a lookup finds more "
-			"than one match):"));
+		B_TRANSLATE("Entries:"));
 	fResultList = new BListView("dictResults", B_SINGLE_SELECTION_LIST);
 	fResultList->SetSelectionMessage(new BMessage(DICT_SELECT_RESULT));
 	fResultScroll = new BScrollView("dictResultsScroll", fResultList,
 		0, false, true);
-	fResultScroll->SetExplicitMinSize(BSize(B_SIZE_UNSET, 80.0f));
-	fResultsLabel->Hide();
-	fResultScroll->Hide();
+	fResultScroll->SetExplicitMinSize(BSize(150.0f, B_SIZE_UNSET));
 
 	fEntryLabel = new BStringView("dictEntryLabel", B_TRANSLATE("Entry:"));
 
-	// #84: steps through fAllKeys regardless of whether the results list
-	// is currently showing it -- lazily built on first use (see
-	// _EnsureAllKeys()), so this works right after a plain lookup too,
-	// not only after clicking Browse.
+	// #84: steps through fAllKeys regardless of what fResultList is
+	// currently showing -- lazily built on first use (see
+	// _EnsureAllKeys()), so this works right after a plain lookup too.
 	fPrevButton = new BButton("dictPrevButton", B_TRANSLATE("◀ Previous"),
 		new BMessage(DICT_PREV_ENTRY));
 	fNextButton = new BButton("dictNextButton", B_TRANSLATE("Next ▶"),
@@ -269,37 +261,28 @@ SGDictionaryWindow::_BuildGUI()
 		.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
 			.Add(fLookupField)
 			.Add(lookupButton)
-			.Add(browseButton)
 		.End()
-		.Add(fResultsLabel)
-		.Add(fResultScroll)
 		.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
-			.Add(fEntryLabel)
-			.AddGlue()
-			.Add(fPrevButton)
-			.Add(fNextButton)
+			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
+				.Add(fResultsLabel)
+				.Add(fResultScroll)
+			.End()
+			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
+				.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
+					.Add(fEntryLabel)
+					.AddGlue()
+					.Add(fPrevButton)
+					.Add(fNextButton)
+				.End()
+				.Add(entryScroll)
+			.End()
 		.End()
-		.Add(entryScroll)
 	.End();
 
 	_RebuildModuleMenu();
+	_PopulateAllKeysList();
 
 	SetSizeLimits(300.0f, 4000.0f, 300.0f, 4000.0f);
-}
-
-
-void
-SGDictionaryWindow::_ShowResultsList(bool show)
-{
-	if (fResultsLabel->IsHidden() == !show)
-		return;
-	if (show) {
-		fResultsLabel->Show();
-		fResultScroll->Show();
-	} else {
-		fResultsLabel->Hide();
-		fResultScroll->Hide();
-	}
 }
 
 
@@ -340,29 +323,21 @@ SGDictionaryWindow::_LookupKey(const char* key)
 
 	BString entry(fCurrentLexicon->GetEntry(key));
 	if (!entry.IsEmpty()) {
-		_ShowResultsList(false);
-		// The module's own canonical key text, not the typed `key` --
-		// AmTract's real keys are upper-case ("ABRAHAM"), so a typed
-		// "Abraham" landed the right entry here (GetEntry()'s lookup is
-		// case-insensitive) but wouldn't ever be found again by
-		// _StepEntry()'s exact-match scan over fAllKeys, which reads
-		// keys from the same module in this same canonical form.
-		// Confirmed live: Next after typing "Abraham" landed on
-		// fAllKeys[0], the module's blank front-matter entry, because
-		// "Abraham" != "ABRAHAM" left _StepEntry() unable to find where
-		// it actually was.
-		fCurrentKey = fCurrentLexicon->GetModule()->getKeyText();
-		_UpdateEntryLabel();
-		_ShowEntry(entry);
+		// _ShowEntryForKey() re-reads the module's own canonical key
+		// text rather than trusting `key` as typed -- see its own
+		// comment on why that match matters for the sidebar and
+		// Prev/Next alike.
+		_ShowEntryForKey(key);
 		return;
 	}
 
 	// No exact key match -- fall back to a plain-text search across the
 	// whole module (see SGModule::SearchEntries(), #31's "search
-	// entries" requirement) and list the matching keys instead of
-	// showing an entry directly; double-clicking one looks it up for
-	// real via DICT_SELECT_RESULT. Not any one key any more -- the label
-	// goes back to plain "Entry:" until a result is actually picked.
+	// entries" requirement) and show the matches in the sidebar instead
+	// of every key, temporarily; clicking one looks it up for real via
+	// DICT_SELECT_RESULT, which restores the full list afterwards (see
+	// _ShowEntryForKey()). Not any one key any more -- the label goes
+	// back to plain "Entry:" until a result is actually picked.
 	fCurrentKey = "";
 	_UpdateEntryLabel();
 	while (fResultList->CountItems() > 0)
@@ -373,13 +348,11 @@ SGDictionaryWindow::_LookupKey(const char* key)
 		fResultList->AddItem(new BStringItem(matches[i].String()));
 
 	if (matches.empty()) {
-		_ShowResultsList(false);
 		fEntryView->SetText(B_TRANSLATE("No matching entry found."));
 	} else {
-		_ShowResultsList(true);
 		BString status;
 		status.SetToFormat(
-			B_TRANSLATE("%d matching entries -- pick one below."),
+			B_TRANSLATE("%d matching entries -- pick one from the list."),
 			(int)matches.size());
 		fEntryView->SetText(status.String());
 	}
@@ -422,6 +395,27 @@ SGDictionaryWindow::_ShowEntryForKey(const BString& key)
 	// it is one less thing to keep in sync by hand.
 	fCurrentKey = fCurrentLexicon->GetModule()->getKeyText();
 	_UpdateEntryLabel();
+
+	// Whatever fResultList currently shows (all keys already, or a
+	// search's matches) is superseded by "everything, with this entry
+	// highlighted" the moment any entry is actually shown -- the single
+	// place the sidebar settles back to its steady state.
+	//
+	// fResultList->Select() below sends DICT_SELECT_RESULT the same way
+	// a real click does, but NOT synchronously -- confirmed live with a
+	// traced build: it goes through this BLooper's own message queue,
+	// so a plain "are we already inside this function" bool guard set
+	// around the call is long since reset to false again by the time
+	// that queued message is actually handled, and does nothing to stop
+	// it -- watched this recurse for real (SYNC ENTER logged before
+	// every one of an unbroken run of DICT_SELECT_RESULT hits, guard
+	// read back false every single time) before catching it. What
+	// actually breaks the cycle: DICT_SELECT_RESULT re-checks whether
+	// the freshly (re-)selected item's text is what's already showing,
+	// which by the time the queued message runs, it always is.
+	_PopulateAllKeysList();
+	_SelectKeyInList(fCurrentKey);
+
 	_ShowEntry(entry);
 }
 
@@ -432,6 +426,34 @@ SGDictionaryWindow::_EnsureAllKeys()
 	if (!fAllKeys.empty() || fCurrentLexicon == NULL)
 		return;
 	fAllKeys = fCurrentLexicon->AllKeys();
+}
+
+
+void
+SGDictionaryWindow::_PopulateAllKeysList()
+{
+	if (fCurrentLexicon == NULL)
+		return;
+	_EnsureAllKeys();
+	while (fResultList->CountItems() > 0)
+		delete fResultList->RemoveItem((int32)0);
+	for (size_t i = 0; i < fAllKeys.size(); i++)
+		fResultList->AddItem(new BStringItem(fAllKeys[i].String()));
+}
+
+
+void
+SGDictionaryWindow::_SelectKeyInList(const BString& key)
+{
+	for (int32 i = 0; i < fResultList->CountItems(); i++) {
+		BStringItem* item = (BStringItem*)fResultList->ItemAt(i);
+		if (key == item->Text()) {
+			fResultList->Select(i);
+			fResultList->ScrollToSelection();
+			return;
+		}
+	}
+	fResultList->DeselectAll();
 }
 
 
@@ -472,7 +494,6 @@ SGDictionaryWindow::_StepEntry(int32 direction)
 	if (index < 0 || (size_t)index >= fAllKeys.size())
 		return;
 
-	_ShowResultsList(false);
 	_ShowEntryForKey(fAllKeys[index]);
 }
 
@@ -498,15 +519,13 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 				if (lexicon != NULL)
 					fCurrentLexicon = lexicon;
 			}
-			while (fResultList->CountItems() > 0)
-				delete fResultList->RemoveItem((int32)0);
-			_ShowResultsList(false);
-			// A different module: the cached index and the entry it
+			// A different module: the cached key list and the entry it
 			// pointed at both belong to whatever module was current
 			// before.
 			fAllKeys.clear();
 			fCurrentKey = "";
 			_UpdateEntryLabel();
+			_PopulateAllKeysList();
 			break;
 		}
 
@@ -522,23 +541,18 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 			if (selected >= 0 && fCurrentLexicon != NULL) {
 				BStringItem* item
 					= (BStringItem*)fResultList->ItemAt(selected);
-				_ShowEntryForKey(item->Text());
+				// _ShowEntryForKey() re-selects this same list to sync
+				// the sidebar after showing any entry, which sends this
+				// same message right back -- asynchronously, through
+				// this BLooper's own queue, so by the time it is
+				// actually handled fCurrentKey already IS this item's
+				// text and there is nothing left to do. Breaks that
+				// cycle; see _ShowEntryForKey()'s own comment for why a
+				// plain re-entrancy bool does not (confirmed live: it
+				// does not, this recursed with one in place).
+				if (item->Text() != fCurrentKey)
+					_ShowEntryForKey(item->Text());
 			}
-			break;
-		}
-
-		case DICT_BROWSE_ALL:
-		{
-			if (fCurrentLexicon == NULL)
-				break;
-			_EnsureAllKeys();
-			while (fResultList->CountItems() > 0)
-				delete fResultList->RemoveItem((int32)0);
-			for (size_t i = 0; i < fAllKeys.size(); i++)
-				fResultList->AddItem(new BStringItem(fAllKeys[i].String()));
-			_ShowResultsList(true);
-			if (!fAllKeys.empty() && fCurrentKey.IsEmpty())
-				_ShowEntryForKey(fAllKeys[0]);
 			break;
 		}
 
@@ -558,7 +572,6 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 		{
 			BString number;
 			if (message->FindString("number", &number) == B_OK) {
-				_ShowResultsList(false);
 				// A Strong's-number click never touches fLookupField --
 				// this is the only place the number itself would ever
 				// be visible anywhere in the window, found or not.
