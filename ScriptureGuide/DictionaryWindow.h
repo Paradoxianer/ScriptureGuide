@@ -17,7 +17,6 @@ class BButton;
 class BListView;
 class BMenuField;
 class BScrollView;
-class BStringView;
 class BTextControl;
 // #32: a plain BTextView subclass, not the app's own TextDocumentView
 // engine every OTHER reference-clickable surface (Bible columns, notes,
@@ -115,13 +114,6 @@ private:
 			// Selects and scrolls to `key` inside fResultList if
 			// present, else clears the selection.
 			void			_SelectKeyInList(const BString& key);
-			// Reflects fCurrentKey onto fEntryLabel ("Entry:" alone when
-			// empty, "Entry: <key>" otherwise) -- call after every
-			// fCurrentKey assignment. Without this a Strong's-number
-			// click (which never touches fLookupField) left no visible
-			// indication anywhere in the window of which number was
-			// actually being shown.
-			void			_UpdateEntryLabel();
 
 			SwordBackend*	fBackend;
 			SGModule*		fCurrentLexicon;
@@ -129,10 +121,8 @@ private:
 
 			BMenuField*		fModuleField;
 			BTextControl*	fLookupField;
-			BStringView*	fResultsLabel;
 			BListView*		fResultList;
 			BScrollView*	fResultScroll;
-			BStringView*	fEntryLabel;
 			DictionaryEntryView*	fEntryView;
 
 			// Cached for fCurrentLexicon specifically -- cleared on

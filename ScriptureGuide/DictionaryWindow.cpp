@@ -15,7 +15,6 @@
 #include <Messenger.h>
 #include <PopUpMenu.h>
 #include <ScrollView.h>
-#include <StringView.h>
 #include <TextControl.h>
 #include <TextView.h>
 #include <Window.h>
@@ -231,15 +230,16 @@ SGDictionaryWindow::_BuildGUI()
 	// Also replaces Prev/Next (#84) entirely, since the list makes them
 	// redundant -- browsing forward/backward through the module is just
 	// clicking the next row.
-	fResultsLabel = new BStringView("dictResultsLabel",
-		B_TRANSLATE("Entries:"));
+	//
+	// No "Entries:"/"Entry: <key>" labels above either side any more,
+	// either -- reported: once the sidebar always shows every key with
+	// the current one highlighted, a label repeating that same key in
+	// words next to it was pure redundancy.
 	fResultList = new BListView("dictResults", B_SINGLE_SELECTION_LIST);
 	fResultList->SetSelectionMessage(new BMessage(DICT_SELECT_RESULT));
 	fResultScroll = new BScrollView("dictResultsScroll", fResultList,
 		0, false, true);
 	fResultScroll->SetExplicitMinSize(BSize(150.0f, B_SIZE_UNSET));
-
-	fEntryLabel = new BStringView("dictEntryLabel", B_TRANSLATE("Entry:"));
 
 	fEntryView = new DictionaryEntryView("dictEntry", fOwner);
 	fEntryView->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
@@ -261,18 +261,12 @@ SGDictionaryWindow::_BuildGUI()
 			.Add(fLookupField)
 			.Add(lookupButton)
 		.End()
+		// Weighted 1:2 for its initial size only -- the divider drags
+		// freely from there, fResultScroll's own min-width (above) is
+		// the only hard floor.
 		.AddSplit(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
-			// Weighted 1:2 for its initial size only -- the divider drags
-			// freely from there, fResultScroll's own min-width (below) is
-			// the only hard floor.
-			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING, 1.0f)
-				.Add(fResultsLabel)
-				.Add(fResultScroll)
-			.End()
-			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING, 2.0f)
-				.Add(fEntryLabel)
-				.Add(entryScroll)
-			.End()
+			.Add(fResultScroll, 1.0f)
+			.Add(entryScroll, 2.0f)
 		.End()
 	.End();
 
@@ -332,10 +326,9 @@ SGDictionaryWindow::_LookupKey(const char* key)
 	// entries" requirement) and show the matches in the sidebar instead
 	// of every key, temporarily; clicking one looks it up for real via
 	// DICT_SELECT_RESULT, which restores the full list afterwards (see
-	// _ShowEntryForKey()). Not any one key any more -- the label goes
-	// back to plain "Entry:" until a result is actually picked.
+	// _ShowEntryForKey()). Not any one key any more until a result is
+	// actually picked.
 	fCurrentKey = "";
-	_UpdateEntryLabel();
 	while (fResultList->CountItems() > 0)
 		delete fResultList->RemoveItem((int32)0);
 	fListShowingAllKeys = false;
@@ -366,19 +359,6 @@ SGDictionaryWindow::_ShowEntry(const BString& rawEntry)
 
 
 void
-SGDictionaryWindow::_UpdateEntryLabel()
-{
-	if (fCurrentKey.IsEmpty()) {
-		fEntryLabel->SetText(B_TRANSLATE("Entry:"));
-		return;
-	}
-	BString label(B_TRANSLATE("Entry: %key%"));
-	label.ReplaceFirst("%key%", fCurrentKey);
-	fEntryLabel->SetText(label.String());
-}
-
-
-void
 SGDictionaryWindow::_ShowEntryForKey(const BString& key)
 {
 	if (fCurrentLexicon == NULL)
@@ -391,7 +371,6 @@ SGDictionaryWindow::_ShowEntryForKey(const BString& key)
 	// canonical, but reading it back after GetEntry() actually resolved
 	// it is one less thing to keep in sync by hand.
 	fCurrentKey = fCurrentLexicon->GetModule()->getKeyText();
-	_UpdateEntryLabel();
 
 	// Only actually rebuild the sidebar if it isn't already showing
 	// every key -- reported live: doing this unconditionally on every
@@ -472,7 +451,6 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 			// before.
 			fAllKeys.clear();
 			fCurrentKey = "";
-			_UpdateEntryLabel();
 			_PopulateAllKeysList();
 			break;
 		}
@@ -508,11 +486,15 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 		{
 			BString number;
 			if (message->FindString("number", &number) == B_OK) {
-				// A Strong's-number click never touches fLookupField --
-				// this is the only place the number itself would ever
-				// be visible anywhere in the window, found or not.
+				// A Strong's-number click never touches fLookupField or
+				// fCurrentLexicon (LookupStrongsNumber() below searches
+				// across every installed lexicon rather than switching
+				// to one), so unlike a sidebar-driven lookup this key
+				// is never reflected in fResultList either -- nothing
+				// in the window shows this number now that the old
+				// "Entry: <key>" label is gone (see _BuildGUI()'s own
+				// comment on why it was removed for the normal case).
 				fCurrentKey = number;
-				_UpdateEntryLabel();
 				BString entry = fBackend->LookupStrongsNumber(
 					number.String());
 				if (entry.IsEmpty()) {
