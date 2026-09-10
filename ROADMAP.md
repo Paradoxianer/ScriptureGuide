@@ -53,11 +53,6 @@ fix this file.
 
 ## 1.7.0 -- architecture pass and polish
 
-- [#12](https://github.com/Paradoxianer/ScriptureGuide/issues/12)
-  Per-column scroll lock. Labelled P1, but it is an architecture
-  change -- a column that opts out of `VerseAligner` needs its own
-  scroll view and its own navigation. Wants a design pass before code;
-  this is where that pass happens.
 - [#51](https://github.com/Paradoxianer/ScriptureGuide/issues/51) Band
   refinements -- cascading Book/Chapter/Verse picker, compact
   Tracker-style menus, a bookmark button for the list menu.
@@ -256,6 +251,8 @@ rather than a bespoke `RawCom` ([#45](https://github.com/Paradoxianer/ScriptureG
 [#46](https://github.com/Paradoxianer/ScriptureGuide/issues/46)), making
 them interchangeable with BibleTime and Xiphos.
 
-[#12](https://github.com/Paradoxianer/ScriptureGuide/issues/12) is left
-open on purpose — it predates column groups and needs a deliberate look,
-not an assumption that column groups already cover it.
+[#12](https://github.com/Paradoxianer/ScriptureGuide/issues/12) got that
+deliberate look and is closed: column groups cover it, at a more general
+grain than the issue originally asked for (a group's independent
+scrolling/alignment/navigation rather than a single column's) —
+confirmed against `_Realign()`/`SetColumnLinked()` directly, not assumed.
