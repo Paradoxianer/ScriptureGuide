@@ -39,7 +39,6 @@ SRCS = \
 	 LogosVerseListWindow.cpp  \
 	 Preferences.cpp  \
 	 ResultListView.cpp  \
-	 Spinner.cpp  \
 	 SwordBackend.cpp  \
 	 \
 	 parallelbible/BibleTextDocument.cpp  \

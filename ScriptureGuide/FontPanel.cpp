@@ -5,7 +5,6 @@
 */
 
 #include "FontPanel.h"
-#include "Spinner.h"
 
 #include <Application.h>
 #include <Catalog.h>
@@ -13,6 +12,7 @@
 #include <ColumnTypes.h>
 #include <Invoker.h>
 #include <LayoutBuilder.h>
+#include <Spinner.h>
 #include <String.h>
 #include <ScrollView.h>
 
@@ -188,7 +188,7 @@ private:
 	BColumnListView* fFontList;
 	BButton* fOK;
 	BButton* fCancel;
-	Spinner* fSpinner;
+	BSpinner* fSpinner;
 };
 
 FontWindow::FontWindow(const BRect& frame, float fontsize, BHandler* target,
@@ -226,9 +226,9 @@ FontWindow::FontWindow(const BRect& frame, float fontsize, BHandler* target,
 	fFontList->AddColumn(fcol, 1);
 	fFontList->SetColumnFlags(B_ALLOW_COLUMN_RESIZE);
 	
-	fSpinner=new Spinner("spinner", B_TRANSLATE("Font Size: "), new BMessage(M_SIZE_CHANGE));
-	BTextControl* tcontrol = fSpinner->TextControl();
-	tcontrol->SetDivider(fFontList->StringWidth(B_TRANSLATE("Font Size: "))+5);
+	fSpinner = new BSpinner("spinner", B_TRANSLATE("Font Size: "),
+		new BMessage(M_SIZE_CHANGE));
+	fSpinner->SetDivider(fFontList->StringWidth(B_TRANSLATE("Font Size: "))+5);
 	fSpinner->SetRange(6, 999);
 	fSpinner->SetValue(fontsize);
 	
