@@ -5,6 +5,8 @@
 #ifndef DICTIONARY_WINDOW_H
 #define DICTIONARY_WINDOW_H
 
+#include <vector>
+
 #include <Messenger.h>
 #include <String.h>
 #include <Window.h>
@@ -23,6 +25,9 @@ class BTextView;
 #define DICT_LOOKUP			'DClk'
 #define DICT_SELECT_RESULT	'DCsr'
 #define DICT_SHOW_STRONGS	'DCst'
+#define DICT_BROWSE_ALL		'DCba'
+#define DICT_PREV_ENTRY		'DCpv'
+#define DICT_NEXT_ENTRY		'DCnx'
 #define DICT_QUIT			'DCqu'
 
 // A small, single-purpose lookup window for installed Lexicon/Dictionary
@@ -78,11 +83,22 @@ private:
 			void			_BuildGUI();
 			void			_RebuildModuleMenu();
 			void			_LookupKey(const char* key);
+			// Looks up `key` directly (no exact-match-then-search
+			// fallback -- the caller already knows this key exists,
+			// e.g. from fAllKeys or a result the user just clicked) and
+			// records it as fCurrentKey, which Prev/Next step from.
+			void			_ShowEntryForKey(const BString& key);
 			void			_ShowEntry(const BString& rawEntry);
 			// Shows or hides fResultsLabel/fResultScroll together --
 			// kept hidden except right after a lookup that fell back to
-			// a multi-match search (see _LookupKey()).
+			// a multi-match search (see _LookupKey()), or while
+			// browsing the whole module (see DICT_BROWSE_ALL).
 			void			_ShowResultsList(bool show);
+			// Fills fAllKeys from fCurrentLexicon if not already
+			// populated for it -- see SGModule::AllKeys()'s own comment
+			// on why this is cached rather than re-walked every time.
+			void			_EnsureAllKeys();
+			void			_StepEntry(int32 direction);
 
 			SwordBackend*	fBackend;
 			SGModule*		fCurrentLexicon;
@@ -94,7 +110,15 @@ private:
 			BListView*		fResultList;
 			BScrollView*	fResultScroll;
 			BStringView*	fEntryLabel;
+			BButton*		fPrevButton;
+			BButton*		fNextButton;
 			BTextView*		fEntryView;
+
+			// Cached for fCurrentLexicon specifically -- cleared on
+			// every module switch (see DICT_SELECT_MODULE) so a stale
+			// list from a different module is never paged through.
+			std::vector<BString>	fAllKeys;
+			BString			fCurrentKey;
 };
 
 #endif // DICTIONARY_WINDOW_H

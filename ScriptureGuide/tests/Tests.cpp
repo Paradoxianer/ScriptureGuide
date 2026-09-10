@@ -15,6 +15,8 @@
 #include <math.h>
 #include <stdio.h>
 
+#include <set>
+
 #include <Application.h>
 #include <Entry.h>
 #include <Path.h>
@@ -1079,6 +1081,62 @@ TestLiveEditMakesReferenceClickableWithoutRebuild(SWModule* notesModule)
 	seed.SetNote("Gen 1:3", original3.String());
 	seed.SetNote("Gen 1:4", original4.String());
 	seed.SetNote("Gen 1:5", original5.String());
+}
+
+
+// #84: AllKeys() walks the whole module via SWMODULE_OPERATORS' TOP/
+// increment (SGModule::SearchEntries() already uses the ListKey
+// equivalent for a search's results; this is the same pattern applied
+// to "every entry" instead). Checks against the very same module's own
+// GetEntry() rather than a hard-coded key list, so this passes against
+// whichever lexicon actually happens to be installed.
+static void
+TestAllKeysCoversWholeLexicon(SWMgr* manager)
+{
+	const char* name = "SGModule::AllKeys: a key from the walk's steady "
+		"state and its very end both resolve to a non-empty entry";
+
+	sword::SWModule* found = NULL;
+	for (ModMap::iterator it = manager->Modules.begin();
+			it != manager->Modules.end() && found == NULL; ++it) {
+		if (strcmp(it->second->getType(), "Lexicons / Dictionaries") == 0)
+			found = it->second;
+	}
+	if (found == NULL) {
+		Skip(name, "no lexicon/dictionary module installed");
+		return;
+	}
+
+	SGModule lexicon(found);
+	std::vector<BString> keys = lexicon.AllKeys();
+	Check(!keys.empty(), "SGModule::AllKeys: a real lexicon is not empty");
+
+	// Every key present exactly once -- a duplicate would mean the walk
+	// looped back on itself instead of reaching popError().
+	std::set<BString> unique(keys.begin(), keys.end());
+	Check(unique.size() == keys.size(),
+		"SGModule::AllKeys: no key repeats");
+
+	// Spot-check a middle key and the last one -- covers the walk's
+	// steady state and its stopping point, without re-rendering all
+	// several thousand entries just to check them. NOT the first key:
+	// measured against AmTract, position 0 there is a genuine front-
+	// matter entry ("     AMERICAN TRACT SOCIETY BIBLE DICTIONARY")
+	// whose raw content really is empty -- a property of that module's
+	// own data, confirmed directly against GetEntry()'s raw (pre-
+	// StripTags) output, not a gap in AllKeys() or GetEntry().
+	size_t sampleIndices[2] = { keys.size() / 2, keys.size() - 1 };
+	bool allResolved = true;
+	for (int i = 0; i < 2; i++) {
+		BString entry(lexicon.GetEntry(keys[sampleIndices[i]].String()));
+		if (entry.IsEmpty()) {
+			allResolved = false;
+			printf("      key '%s' (position %zu of %zu) has no entry\n",
+				keys[sampleIndices[i]].String(), sampleIndices[i],
+				keys.size());
+		}
+	}
+	Check(allResolved, name);
 }
 
 
@@ -2520,6 +2578,7 @@ main()
 	TestFindReferencesInTextRecognizesGermanNumberedAndAccentedBooks();
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
+	TestAllKeysCoversWholeLexicon(&manager);
 	TestOnlyRawFilesModulesAreEditable(&manager);
 	TestWritableModuleBecomesEditableColumn(&manager);
 	TestSwitchingNotesColumnToDifferentModule(&manager, moduleA);

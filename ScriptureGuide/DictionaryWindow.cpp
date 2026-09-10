@@ -97,6 +97,12 @@ SGDictionaryWindow::_BuildGUI()
 	BButton* lookupButton = new BButton("dictLookupButton",
 		B_TRANSLATE("Look up"), new BMessage(DICT_LOOKUP));
 
+	// #84: a numbered index to page through, not just a jump-to-one-key
+	// lookup -- fills the results list below with every key the current
+	// module has (see SGModule::AllKeys()) instead of search matches.
+	BButton* browseButton = new BButton("dictBrowseButton",
+		B_TRANSLATE("Browse"), new BMessage(DICT_BROWSE_ALL));
+
 	// Labeled explicitly (reported: with no label, it wasn't obvious
 	// what the *first* of the two scroll areas below was even for --
 	// it's normally empty, only ever holding something after a lookup
@@ -118,6 +124,15 @@ SGDictionaryWindow::_BuildGUI()
 
 	fEntryLabel = new BStringView("dictEntryLabel", B_TRANSLATE("Entry:"));
 
+	// #84: steps through fAllKeys regardless of whether the results list
+	// is currently showing it -- lazily built on first use (see
+	// _EnsureAllKeys()), so this works right after a plain lookup too,
+	// not only after clicking Browse.
+	fPrevButton = new BButton("dictPrevButton", B_TRANSLATE("◀ Previous"),
+		new BMessage(DICT_PREV_ENTRY));
+	fNextButton = new BButton("dictNextButton", B_TRANSLATE("Next ▶"),
+		new BMessage(DICT_NEXT_ENTRY));
+
 	fEntryView = new BTextView("dictEntry");
 	fEntryView->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 	fEntryView->MakeEditable(false);
@@ -132,10 +147,16 @@ SGDictionaryWindow::_BuildGUI()
 		.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
 			.Add(fLookupField)
 			.Add(lookupButton)
+			.Add(browseButton)
 		.End()
 		.Add(fResultsLabel)
 		.Add(fResultScroll)
-		.Add(fEntryLabel)
+		.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
+			.Add(fEntryLabel)
+			.AddGlue()
+			.Add(fPrevButton)
+			.Add(fNextButton)
+		.End()
 		.Add(entryScroll)
 	.End();
 
@@ -198,6 +219,7 @@ SGDictionaryWindow::_LookupKey(const char* key)
 	BString entry(fCurrentLexicon->GetEntry(key));
 	if (!entry.IsEmpty()) {
 		_ShowResultsList(false);
+		fCurrentKey = key;
 		_ShowEntry(entry);
 		return;
 	}
@@ -238,6 +260,67 @@ SGDictionaryWindow::_ShowEntry(const BString& rawEntry)
 
 
 void
+SGDictionaryWindow::_ShowEntryForKey(const BString& key)
+{
+	if (fCurrentLexicon == NULL)
+		return;
+	fCurrentKey = key;
+	_ShowEntry(fCurrentLexicon->GetEntry(key.String()));
+}
+
+
+void
+SGDictionaryWindow::_EnsureAllKeys()
+{
+	if (!fAllKeys.empty() || fCurrentLexicon == NULL)
+		return;
+	fAllKeys = fCurrentLexicon->AllKeys();
+}
+
+
+void
+SGDictionaryWindow::_StepEntry(int32 direction)
+{
+	if (fCurrentLexicon == NULL)
+		return;
+
+	_EnsureAllKeys();
+	if (fAllKeys.empty())
+		return;
+
+	// Locate the current key rather than tracking a bare index: the
+	// current entry could have been reached via a plain lookup, a search
+	// result, or a Strong's-number click, none of which update an index
+	// into fAllKeys directly -- only the key itself is known for certain.
+	// A linear scan over up to ~8700 entries (StrongsHebrew, measured) is
+	// cheap next to the whole-module walk that already happened once to
+	// build the list.
+	int32 index = -1;
+	for (size_t i = 0; i < fAllKeys.size(); i++) {
+		if (fAllKeys[i] == fCurrentKey) {
+			index = (int32)i;
+			break;
+		}
+	}
+
+	// Not found (nothing looked up yet, or the current entry came from a
+	// module AllKeys() doesn't agree came from fCurrentLexicon -- e.g. a
+	// Strong's-number click, which never sets fCurrentLexicon to whichever
+	// dictionary actually answered it) -- start from an end rather than
+	// doing nothing.
+	if (index < 0)
+		index = direction > 0 ? -1 : (int32)fAllKeys.size();
+
+	index += direction;
+	if (index < 0 || (size_t)index >= fAllKeys.size())
+		return;
+
+	_ShowResultsList(false);
+	_ShowEntryForKey(fAllKeys[index]);
+}
+
+
+void
 SGDictionaryWindow::ShowStrongsNumber(const char* strongsNumber)
 {
 	BMessage msg(DICT_SHOW_STRONGS);
@@ -261,6 +344,11 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 			while (fResultList->CountItems() > 0)
 				delete fResultList->RemoveItem((int32)0);
 			_ShowResultsList(false);
+			// A different module: the cached index and the entry it
+			// pointed at both belong to whatever module was current
+			// before.
+			fAllKeys.clear();
+			fCurrentKey = "";
 			break;
 		}
 
@@ -276,8 +364,35 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 			if (selected >= 0 && fCurrentLexicon != NULL) {
 				BStringItem* item
 					= (BStringItem*)fResultList->ItemAt(selected);
-				_ShowEntry(fCurrentLexicon->GetEntry(item->Text()));
+				_ShowEntryForKey(item->Text());
 			}
+			break;
+		}
+
+		case DICT_BROWSE_ALL:
+		{
+			if (fCurrentLexicon == NULL)
+				break;
+			_EnsureAllKeys();
+			while (fResultList->CountItems() > 0)
+				delete fResultList->RemoveItem((int32)0);
+			for (size_t i = 0; i < fAllKeys.size(); i++)
+				fResultList->AddItem(new BStringItem(fAllKeys[i].String()));
+			_ShowResultsList(true);
+			if (!fAllKeys.empty() && fCurrentKey.IsEmpty())
+				_ShowEntryForKey(fAllKeys[0]);
+			break;
+		}
+
+		case DICT_PREV_ENTRY:
+		{
+			_StepEntry(-1);
+			break;
+		}
+
+		case DICT_NEXT_ENTRY:
+		{
+			_StepEntry(1);
 			break;
 		}
 

@@ -253,6 +253,16 @@ public:
 	// above -- this had the identical buffer-reuse bug.
 	std::vector<BString>	SearchEntries(const char* searchText);
 
+	// #84: every key this module has, in SWORD's own on-disk order --
+	// numeric for a Strong's-number-keyed module, alphabetical for an
+	// ordinary lexicon, so a caller paging through the result needs no
+	// sort of its own. A whole-module walk, not cheap (measured on the
+	// VM: ~330ms for StrongsHebrew's 8675 entries) -- worth calling once
+	// per module choice and caching the result, not on every keystroke.
+	// Same buffer-reuse hazard as SearchEntries()/SearchModule() above,
+	// same fix: copy into a BString immediately, inside the loop.
+	std::vector<BString>	AllKeys();
+
 	bool				IsGreek(void);
 	bool				IsHebrew(void);
 	

@@ -323,6 +323,21 @@ vector<BString> SGModule::SearchEntries(const char* searchText)
 }
 
 
+vector<BString> SGModule::AllKeys()
+{
+	vector<BString> results;
+
+	// SWMODULE_OPERATORS (swmodule.h): `*module = TOP` is setPosition(TOP),
+	// `(*module)++` is increment(1) -- the module's own iteration, not a
+	// ListKey's, since this walks every entry rather than a search result.
+	*fModule = TOP;
+	for (; !fModule->popError(); (*fModule)++)
+		results.push_back(BString(fModule->getKeyText()));
+
+	return results;
+}
+
+
 SwordBackend::SwordBackend(void)
 {
 	fManager = new SWMgr(CONFIGPATH, true, new MarkupFilterMgr(FMT_GBF, ENC_UTF8));
