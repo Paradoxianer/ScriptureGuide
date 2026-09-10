@@ -84,6 +84,10 @@ can't answer by itself.
   patristic citation index (BKV's own licensing is unresolved),
   [#108](https://github.com/Paradoxianer/ScriptureGuide/issues/108)
   person/pronoun tagging (no known free dataset yet),
+  [#109](https://github.com/Paradoxianer/ScriptureGuide/issues/109)
+  paid/locked modules (SWORD's own cipher-key mechanism is real and
+  confirmed, but no active vendor is confirmed, and `ScriptureGuideManager`
+  only speaks to one hardcoded free repository today),
   [#43](https://github.com/Paradoxianer/ScriptureGuide/issues/43) audio
   modules (open question rather than planned work).
 - **Low priority until something needs it:**
