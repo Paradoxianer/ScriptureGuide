@@ -1203,6 +1203,78 @@ TestStrongsEntryAttributeSearchFindsRealOccurrences(SWMgr* manager)
 }
 
 
+// #106: BibleTextDocument::MatchesForStrongsNumber() is the backend half
+// of "highlight every other occurrence of this word in the visible
+// chapter" -- a filter over fStrongsLinks (already built by _Rebuild()),
+// converted back to verse-relative offsets via VersePositionAt(). Finds
+// a real tagged module and number the same way the search test above
+// does, rather than hard-coding either.
+static void
+TestMatchesForStrongsNumberFindsRealSpans(SWMgr* manager)
+{
+	const char* name = "BibleTextDocument::MatchesForStrongsNumber: a "
+		"real Strong's number resolves to a real, bounded span in its "
+		"own verse's text";
+
+	sword::SWModule* found = NULL;
+	BString foundNumber;
+	for (ModMap::iterator it = manager->Modules.begin();
+			it != manager->Modules.end() && found == NULL; ++it) {
+		sword::SWModule* candidate = it->second;
+		if (strcmp(candidate->getType(), "Biblical Texts") != 0)
+			continue;
+		candidate->setKey("John 1:1");
+		BString text(candidate->renderText());
+		std::vector<StrongsWord> words
+			= FindStrongsWordsInText(candidate, text);
+		if (!words.empty()) {
+			found = candidate;
+			foundNumber = words[0].strongsNumber;
+		}
+	}
+	if (found == NULL) {
+		Skip(name, "no installed Bible has Strong's-number tagging");
+		return;
+	}
+
+	BibleTextDocument doc(found);
+	doc.SetShowStrongsNumbers(true);
+	doc.SetKey("John 1:1");
+
+	const rgb_color kColor = (rgb_color){ 0xd6, 0xef, 0xf2, 255 };
+	std::vector<BibleTextDocument::VerseHighlight> matches
+		= doc.MatchesForStrongsNumber(foundNumber.String(), kColor);
+	Check(!matches.empty(),
+		"BibleTextDocument::MatchesForStrongsNumber: a number known to "
+		"be tagged in this chapter returns at least one match");
+
+	bool allValid = true;
+	for (size_t i = 0; i < matches.size(); i++) {
+		const BibleTextDocument::VerseHighlight& m = matches[i];
+		bool colorMatches = m.color.red == kColor.red
+			&& m.color.green == kColor.green && m.color.blue == kColor.blue;
+		BString verseText = doc.VerseText(m.verse);
+		bool bounded = m.start >= 0 && m.end > m.start
+			&& m.end <= verseText.CountChars();
+		if (!colorMatches || !bounded) {
+			allValid = false;
+			printf("      verse %d: start=%d end=%d colorMatches=%d "
+				"verseLength=%d\n", m.verse, (int)m.start, (int)m.end,
+				colorMatches, (int)verseText.CountChars());
+		}
+	}
+	Check(allValid, name);
+
+	// A number this chapter's own Strong's tagging cannot possibly
+	// contain -- no real Strong's number is this many digits.
+	std::vector<BibleTextDocument::VerseHighlight> none
+		= doc.MatchesForStrongsNumber("G9999999", kColor);
+	Check(none.empty(),
+		"BibleTextDocument::MatchesForStrongsNumber: a number not "
+		"tagged anywhere in this chapter returns nothing");
+}
+
+
 // The trap this exists to prevent: SWModule::isWritable() is true for
 // plain Bibles as well, so anything gating an edit mode on it would make
 // every Bible column editable. Asserted against whatever is actually
@@ -2643,6 +2715,7 @@ main()
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestAllKeysCoversWholeLexicon(&manager);
 	TestStrongsEntryAttributeSearchFindsRealOccurrences(&manager);
+	TestMatchesForStrongsNumberFindsRealSpans(&manager);
 	TestOnlyRawFilesModulesAreEditable(&manager);
 	TestWritableModuleBecomesEditableColumn(&manager);
 	TestSwitchingNotesColumnToDifferentModule(&manager, moduleA);

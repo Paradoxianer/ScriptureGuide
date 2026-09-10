@@ -310,6 +310,19 @@ public:
 			const std::vector<VerseHighlight>& Highlights() const
 									{ return fHighlights; }
 
+			// #106: every span already tagged with `strongsNumber` (see
+			// StrongsNumberAt(), #27), turned into the SAME VerseHighlight
+			// shape SetHighlights() already knows how to paint -- a scan
+			// of fStrongsLinks, already built by _Rebuild(), not a new
+			// search. `color` is deliberately a parameter, not a fixed
+			// one of this class's own: the caller (a transient "same
+			// word" study aid, not a saved highlight) picks a colour
+			// distinct from every real highlight colour on offer, so the
+			// two are never visually confused.
+			std::vector<VerseHighlight>	MatchesForStrongsNumber(
+										const char* strongsNumber,
+										rgb_color color) const;
+
 private:
 			// One stretch of a verse's own text with the foreground
 			// styling _Rebuild() decided for it. Offsets are BYTES into

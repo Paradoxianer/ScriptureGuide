@@ -604,6 +604,43 @@ BibleTextDocument::StrongsNumberAt(int32 documentOffset,
 }
 
 
+std::vector<BibleTextDocument::VerseHighlight>
+BibleTextDocument::MatchesForStrongsNumber(const char* strongsNumber,
+	rgb_color color) const
+{
+	std::vector<VerseHighlight> result;
+	if (strongsNumber == NULL || strongsNumber[0] == '\0')
+		return result;
+
+	for (size_t i = 0; i < fStrongsLinks.size(); i++) {
+		if (fStrongsLinks[i].number != strongsNumber)
+			continue;
+
+		int verse;
+		int32 verseStart;
+		if (!VersePositionAt(fStrongsLinks[i].start, verse, verseStart))
+			continue;
+
+		// The tag's own length, not a second VersePositionAt() call on
+		// its end -- a Strong's-tagged word is always within a single
+		// verse's own text, so the length survives the prefix-stripping
+		// VersePositionAt() does unchanged, and this sidesteps the one
+		// case where the end offset could land exactly on the next
+		// paragraph's own verse-number prefix instead of this verse's
+		// last character.
+		VerseHighlight highlight;
+		highlight.verse = verse;
+		highlight.start = verseStart;
+		highlight.end = verseStart
+			+ (fStrongsLinks[i].end - fStrongsLinks[i].start);
+		highlight.color = color;
+		result.push_back(highlight);
+	}
+
+	return result;
+}
+
+
 void
 BibleTextDocument::SetVerseSpacing(const std::map<int, float>& spacing)
 {

@@ -496,6 +496,22 @@ public:
 				void				SetHiddenHighlightColors(
 										const std::vector<BString>& colors);
 				std::vector<BString>	fHiddenHighlightColors;
+
+				// #106: clicking a Strong's-tagged word also highlights
+				// every OTHER span tagged with the same number, in every
+				// open column, purely as a live rendering overlay --
+				// never written to a bookmark, gone the moment the
+				// chapter changes or a different word is clicked. NULL
+				// string means none active. A second call with a
+				// different number replaces it outright, matching how a
+				// second click is expected to behave (no separate
+				// "clear" gesture needed for that case); SetKey() clears
+				// it explicitly since a match set is only ever valid for
+				// the chapter it was computed against.
+				void				HighlightWordMatches(
+										const char* strongsNumber);
+				BString				fWordMatchStrongsNumber;
+
 				void				_ChangeColumnFromMessage(
 										BMessage* message);
 				void				_ApplyHighlightMessage(

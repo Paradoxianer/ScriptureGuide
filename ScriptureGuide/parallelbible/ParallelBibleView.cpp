@@ -916,6 +916,12 @@ private:
 		if (!fBibleDocument->StrongsNumberAt(offset, number))
 			return false;
 
+		// #106: the same click also lights up every other occurrence of
+		// this number, in every open column -- both halves of "look up
+		// this word" fire together, no separate gesture to remember.
+		if (fOwner != NULL)
+			fOwner->HighlightWordMatches(number.String());
+
 		BWindow* window = Window();
 		if (window == NULL)
 			return false;
@@ -2964,16 +2970,39 @@ ParallelBibleView::_ReloadHighlights()
 	// column would repeat exactly the same one.
 	std::vector<BookmarkFile> all = HighlightStore::All();
 
+	// #106: distinct from every real highlight colour (Green/Yellow/
+	// Red/Blue/Purple/Orange, see HighlightPalette.h) on purpose -- this
+	// is a transient "same word" study aid, never written to a
+	// bookmark, and must never look like a saved highlight the user
+	// might wonder when they made.
+	const rgb_color kWordMatchColor = { 0xd6, 0xef, 0xf2, 255 };
+
 	for (size_t i = 0; i < fDocuments.size(); i++) {
 		BibleTextDocument* document = fDocuments[i].Get();
 		if (document == NULL || i >= fModules.size() || fModules[i] == NULL)
 			continue;
-		document->SetHighlights(HighlightStore::ForDocument(all,
-			BString(fModules[i]->getName()), document,
-			fHiddenHighlightColors));
+		std::vector<BibleTextDocument::VerseHighlight> highlights
+			= HighlightStore::ForDocument(all, BString(fModules[i]->getName()),
+				document, fHiddenHighlightColors);
+		if (!fWordMatchStrongsNumber.IsEmpty()) {
+			std::vector<BibleTextDocument::VerseHighlight> matches
+				= document->MatchesForStrongsNumber(
+					fWordMatchStrongsNumber.String(), kWordMatchColor);
+			highlights.insert(highlights.end(), matches.begin(),
+				matches.end());
+		}
+		document->SetHighlights(highlights);
 	}
 
 	_Realign();
+}
+
+
+void
+ParallelBibleView::HighlightWordMatches(const char* strongsNumber)
+{
+	fWordMatchStrongsNumber = strongsNumber != NULL ? strongsNumber : "";
+	_ReloadHighlights();
 }
 
 
@@ -3600,8 +3629,16 @@ ParallelBibleView::SetKey(const char* key)
 	// ones for the chapter now being shown. Done once here rather than
 	// inside BibleTextDocument, which has no business knowing where
 	// highlights are kept.
-	if (changedAnyBible)
+	if (changedAnyBible) {
+		// #106: a "same word" match set is only ever meaningful for the
+		// chapter it was computed against -- leaving it set would either
+		// show nothing (the number doesn't recur here) or quietly follow
+		// the reader into an unrelated chapter, neither of which is what
+		// clicking a word in a chapter that has since been left behind
+		// should keep doing.
+		fWordMatchStrongsNumber = "";
 		_ReloadHighlights();
+	}
 	bigtime_t perfAfterBible = system_time();
 
 	// A notes column now navigates with its own chain exactly like a
