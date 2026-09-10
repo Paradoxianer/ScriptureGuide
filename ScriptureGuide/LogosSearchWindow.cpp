@@ -1,3 +1,5 @@
+#include <ctype.h>
+
 #include <Application.h>
 #include <Alert.h>
 #include <Box.h>
@@ -252,7 +254,15 @@ void SGSearchWindow::BuildGUI(void)
 
 	BRadioButton* regexRadio = new BRadioButton("regex",
 						B_TRANSLATE("Regular Expression"), new BMessage(FIND_RADIO3));
-	
+
+	// #83: given a Strong's number (shown, unclickable as text, in the
+	// dictionary window already), find every other verse in the current
+	// module tagged with it -- SWORD's SEARCHTYPE_ENTRYATTR, not a plain-
+	// text mode. FIND_BUTTON_OK wraps whatever is typed here into the
+	// "Word//Lemma./<number>/" path that search type actually expects.
+	BRadioButton* strongsRadio = new BRadioButton("strongs",
+						B_TRANSLATE("Strong's Number"), new BMessage(FIND_RADIO4));
+
 	wordsRadio->SetValue(B_CONTROL_ON);
 
  	// The case sensitivity checkbox
@@ -291,6 +301,7 @@ void SGSearchWindow::BuildGUI(void)
 				.Add(wordsRadio)
 				.Add(phraseRadio)
 				.Add(regexRadio)
+				.Add(strongsRadio)
 				//.AddGlue()
 			.End()
 			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
@@ -424,9 +435,30 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 			{
 				findButton->SetEnabled(false);
 				searchString->SetEnabled(false);
-				
+
+				// #83: SEARCHTYPE_ENTRYATTR wants "Word//Lemma./G1722/",
+				// not the bare number the field shows and the dictionary
+				// window already displays -- wrapped here, right before
+				// the call that actually needs it, so fSearchString
+				// itself (used below for BibleItem's own highlighting,
+				// and if the user switches mode without retyping) stays
+				// the plain number.
+				BString searchText(fSearchString);
+				if (fSearchMode == SEARCH_STRONGS) {
+					// Accept "g1722"/"h1234" too -- the canonical form
+					// (and what the dictionary window shows) capitalizes
+					// the prefix, but there is no reason to reject a
+					// lowercase one typed by hand.
+					if (searchText.Length() > 0
+						&& (searchText[0] == 'g' || searchText[0] == 'h')) {
+						searchText.SetByteAt(0, toupper(searchText[0]));
+					}
+					searchText.Prepend("Word//Lemma./");
+					searchText.Append("/");
+				}
+
 				verseList = fCurrentModule->SearchModule(fSearchMode, fSearchFlags,
-														fSearchString.String(),
+														searchText.String(),
 														books[fSearchStart],
 														books[fSearchEnd],
 														searchStatus);
@@ -495,6 +527,11 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 		case FIND_RADIO3:
 		{
 			fSearchMode = SEARCH_REGEX;
+			break;
+		}
+		case FIND_RADIO4:
+		{
+			fSearchMode = SEARCH_STRONGS;
 			break;
 		}
 		case B_COPY:

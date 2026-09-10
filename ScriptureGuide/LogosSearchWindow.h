@@ -29,6 +29,14 @@ using namespace std;
 
 enum
 {
+	// #83: SWORD's own SEARCHTYPE_ENTRYATTR (swmodule.h's search()
+	// doc comment) -- passed straight through to SGModule::SearchModule()
+	// as `searchType`, the same as the other three. Confirmed live
+	// against ASV: "Word//Lemma./G1722/" found all 2047 real occurrences.
+	// The field only ever holds the bare number ("G1722"); FIND_BUTTON_OK
+	// wraps it into that entry-attribute path, so what the user types and
+	// sees matches the number the dictionary window already shows.
+	SEARCH_STRONGS = -3,
 	SEARCH_WORDS = -2,
 	SEARCH_PHRASE = -1,
 	SEARCH_REGEX = 0

@@ -142,6 +142,7 @@ const uint32 FIND_SEARCH_STR			= 'FSst';
 const uint32 FIND_RADIO1				= 'FSr1';
 const uint32 FIND_RADIO2				= 'FSr2';
 const uint32 FIND_RADIO3				= 'FSr3';
+const uint32 FIND_RADIO4				= 'FSr4';
 const uint32 FIND_LIST_CLICK			= 'FLcl';
 const uint32 FIND_LIST_DCLICK			= 'FLdc';
 const uint32 FIND_TMP					= 'FTmp';

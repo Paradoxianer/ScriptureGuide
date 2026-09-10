@@ -1140,6 +1140,69 @@ TestAllKeysCoversWholeLexicon(SWMgr* manager)
 }
 
 
+// #83: SEARCHTYPE_ENTRYATTR (swmodule.h's search() doc comment: -3,
+// "Word//Lemma./G1234/") is what SGSearchWindow's new Strong's-number
+// mode threads through SGModule::SearchModule() -- this is the backend
+// half, headless and independent of the search window's own UI. Finds
+// a Strong's-tagged module by actually checking its attributes (the
+// same walk FindStrongsWordsInText() already does), not by name, so
+// this passes against whatever happens to be installed.
+static void
+TestStrongsEntryAttributeSearchFindsRealOccurrences(SWMgr* manager)
+{
+	const char* name = "SGModule::SearchModule(-3, ...): an entry-"
+		"attribute search finds every occurrence of a real Strong's "
+		"number";
+
+	sword::SWModule* found = NULL;
+	BString foundNumber;
+	for (ModMap::iterator it = manager->Modules.begin();
+			it != manager->Modules.end() && found == NULL; ++it) {
+		sword::SWModule* candidate = it->second;
+		if (strcmp(candidate->getType(), "Biblical Texts") != 0)
+			continue;
+		candidate->setKey("John 1:1");
+		BString text(candidate->renderText());
+		std::vector<StrongsWord> words
+			= FindStrongsWordsInText(candidate, text);
+		if (!words.empty()) {
+			found = candidate;
+			foundNumber = words[0].strongsNumber;
+		}
+	}
+	if (found == NULL) {
+		Skip(name, "no installed Bible has Strong's-number tagging");
+		return;
+	}
+
+	SGModule module(found);
+	BString pattern("Word//Lemma./");
+	pattern << foundNumber << "/";
+
+	std::vector<BString> hits = module.SearchModule(-3, 0, pattern.String(),
+		"Genesis 1:1", "Revelation 22:21", NULL);
+	if (hits.empty()) {
+		printf("      pattern '%s' (from %s John 1:1): 0 hits\n",
+			pattern.String(), found->getName());
+	}
+	Check(!hits.empty(), name);
+
+	// The verse it was read from is necessarily one of the hits -- this
+	// number is tagged on a word actually in John 1:1.
+	bool includesSource = false;
+	for (size_t i = 0; i < hits.size(); i++) {
+		if (hits[i].FindFirst("John 1:1") == 0
+			|| hits[i] == "John 1:1") {
+			includesSource = true;
+			break;
+		}
+	}
+	Check(includesSource,
+		"SGModule::SearchModule(-3, ...): the verse a number was read "
+		"from is itself among that number's own search hits");
+}
+
+
 // The trap this exists to prevent: SWModule::isWritable() is true for
 // plain Bibles as well, so anything gating an edit mode on it would make
 // every Bible column editable. Asserted against whatever is actually
@@ -2579,6 +2642,7 @@ main()
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestAllKeysCoversWholeLexicon(&manager);
+	TestStrongsEntryAttributeSearchFindsRealOccurrences(&manager);
 	TestOnlyRawFilesModulesAreEditable(&manager);
 	TestWritableModuleBecomesEditableColumn(&manager);
 	TestSwitchingNotesColumnToDifferentModule(&manager, moduleA);
