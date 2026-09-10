@@ -249,6 +249,11 @@ SGDictionaryWindow::_BuildGUI()
 	BScrollView* entryScroll = new BScrollView("dictEntryScroll", fEntryView,
 		0, false, true);
 
+	// A plain horizontal Group gave the sidebar a fixed width -- asked
+	// for a draggable divider instead, so the sidebar can be widened for
+	// a lexicon with long keys (or narrowed out of the way) without
+	// resizing the whole window. BSplitView (via BLayoutBuilder::Split)
+	// is exactly this, and is otherwise unused elsewhere in this app.
 	BLayoutBuilder::Group<>(this, B_VERTICAL)
 		.SetInsets(B_USE_SMALL_INSETS)
 		.Add(fModuleField)
@@ -256,12 +261,15 @@ SGDictionaryWindow::_BuildGUI()
 			.Add(fLookupField)
 			.Add(lookupButton)
 		.End()
-		.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
-			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
+		.AddSplit(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
+			// Weighted 1:2 for its initial size only -- the divider drags
+			// freely from there, fResultScroll's own min-width (below) is
+			// the only hard floor.
+			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING, 1.0f)
 				.Add(fResultsLabel)
 				.Add(fResultScroll)
 			.End()
-			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
+			.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING, 2.0f)
 				.Add(fEntryLabel)
 				.Add(entryScroll)
 			.End()
