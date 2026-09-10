@@ -1674,6 +1674,83 @@ TestFindReferencesInTextRecognizesGermanNumberedAndAccentedBooks()
 }
 
 
+// #110: a lexicon entry routinely names OTHER Strong's numbers in its
+// own prose -- confirmed against real installed modules, not guessed:
+// GerStrongsGreek's entry 26 (agape) opens "von 25" (a derivation
+// reference, no language of its own), StrongsGreek's own entry 26 ends
+// "see GREEK for 25", StrongsHebrew's entry 26 has two: "see HEBREW for
+// 01"/"see HEBREW for 01524". getRawEntry() and getEntryAttributes()
+// both confirmed empty of anything structured for this -- it really is
+// plain prose, matched here by the same shared trigger-phrase table
+// FindStrongsCrossReferencesInText() itself uses (not per-lexicon code).
+static void
+TestFindStrongsCrossReferencesInTextFindsRealCrossReferences(SWMgr* manager)
+{
+	const char* name = "FindStrongsCrossReferencesInText: real "
+		"cross-references are found with the correct language";
+
+	SWModule* ger = manager->getModule("GerStrongsGreek");
+	SWModule* eng = manager->getModule("StrongsGreek");
+	SWModule* heb = manager->getModule("StrongsHebrew");
+	if (ger == NULL || eng == NULL || heb == NULL) {
+		Skip(name, "GerStrongsGreek/StrongsGreek/StrongsHebrew not all "
+			"installed");
+		return;
+	}
+
+	SGModule gerLexicon(ger);
+	SGModule engLexicon(eng);
+	SGModule hebLexicon(heb);
+
+	char gerPrefix = SwordBackend::StrongsPrefixForLexicon(&gerLexicon);
+	char engPrefix = SwordBackend::StrongsPrefixForLexicon(&engLexicon);
+	char hebPrefix = SwordBackend::StrongsPrefixForLexicon(&hebLexicon);
+	Check(gerPrefix == 'G' && engPrefix == 'G' && hebPrefix == 'H',
+		"StrongsPrefixForLexicon: identifies each module's own numbering "
+		"language correctly");
+
+	BString gerEntry(gerLexicon.GetEntry("26"));
+	std::vector<StrongsCrossReference> gerRefs
+		= FindStrongsCrossReferencesInText(gerEntry.String(), gerPrefix);
+	Check(gerRefs.size() >= 1 && gerRefs[0].language == 'G'
+			&& gerRefs[0].number == "25",
+		"FindStrongsCrossReferencesInText: GerStrongsGreek's own \"von "
+		"25\" (no language of its own) resolves via the lexicon's own "
+		"numbering");
+
+	BString engEntry(engLexicon.GetEntry("26"));
+	std::vector<StrongsCrossReference> engRefs
+		= FindStrongsCrossReferencesInText(engEntry.String(), engPrefix);
+	Check(engRefs.size() == 1 && engRefs[0].language == 'G'
+			&& engRefs[0].number == "25",
+		"FindStrongsCrossReferencesInText: StrongsGreek's own \"see "
+		"GREEK for 25\" is recognized");
+
+	BString hebEntry(hebLexicon.GetEntry("26"));
+	std::vector<StrongsCrossReference> hebRefs
+		= FindStrongsCrossReferencesInText(hebEntry.String(), hebPrefix);
+	Check(hebRefs.size() == 2 && hebRefs[0].language == 'H'
+			&& hebRefs[0].number == "01" && hebRefs[1].language == 'H'
+			&& hebRefs[1].number == "01524",
+		"FindStrongsCrossReferencesInText: StrongsHebrew's own two "
+		"\"see HEBREW for N\" references are both recognized");
+
+	// A word-keyed lexicon has no number-shaped cross-references to find
+	// in the first place -- confirmed it is correctly recognized as not
+	// a Strong's-numbered module at all, rather than merely happening to
+	// find zero matches in one particular entry's text.
+	SWModule* amtract = manager->getModule("AmTract");
+	if (amtract != NULL) {
+		SGModule amtractLexicon(amtract);
+		char amtractPrefix
+			= SwordBackend::StrongsPrefixForLexicon(&amtractLexicon);
+		Check(amtractPrefix == 0,
+			"StrongsPrefixForLexicon: a word-keyed lexicon (AmTract) is "
+			"not mistaken for a Strong's-numbered one");
+	}
+}
+
+
 // Regression test for a real bug reported live: typing a space (or any
 // character) into the verse list's Description field, while a
 // TextListener rebuilds the whole document from scratch on every
@@ -2774,6 +2851,7 @@ main()
 	TestConvertTypedVerseReferenceKeepsBothEndsOfARange();
 	TestFormatVerseReferenceForDisplay();
 	TestFindReferencesInTextRecognizesGermanNumberedAndAccentedBooks();
+	TestFindStrongsCrossReferencesInTextFindsRealCrossReferences(&manager);
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestAllKeysCoversWholeLexicon(&manager);

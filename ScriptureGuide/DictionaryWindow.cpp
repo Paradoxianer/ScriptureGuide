@@ -5,6 +5,8 @@
 
 #include "DictionaryWindow.h"
 
+#include <algorithm>
+
 #include <Button.h>
 #include <Catalog.h>
 #include <LayoutBuilder.h>
@@ -87,27 +89,66 @@ public:
 	// Replaces plain SetText(): detects references in `text` (the same
 	// FindReferencesInText() every other surface uses, so what counts
 	// as a reference here is never a second, drifting definition of it)
-	// and colours/underlines each one via a text_run_array, remembering
-	// their ranges so MouseDown() can tell a click on one from an
+	// PLUS, for a Strong's-numbered lexicon, in-entry cross-references
+	// to other Strong's numbers (#110, e.g. GerStrongsGreek's own "von
+	// 25" or StrongsGreek's "see GREEK for 25") via
+	// FindStrongsCrossReferencesInText(). Colours/underlines both kinds
+	// alike via a text_run_array, remembering their ranges (and which
+	// kind each is) so MouseDown() can tell a click on one from an
 	// ordinary click landing elsewhere in the entry.
-	void SetEntryText(const BString& text)
+	//
+	// `strongsPrefix` is 0 for a non-Strong's lexicon (AmTract,
+	// Hitchcock, ...) -- skips the second detector entirely rather than
+	// scanning word-keyed prose for a pattern that can only ever exist
+	// in a number-keyed one.
+	void SetEntryText(const BString& text, char strongsPrefix)
 	{
-		// FindReferencesInText() can return overlapping candidates --
-		// the same "skip if this match starts before the previous one
-		// ended" filter SGVerseListWindow's own description-field
-		// restyling already needs for exactly this reason.
-		std::vector<TextReference> allMatches
+		// Both detectors can return overlapping candidates, and now
+		// each other's matches too (unlikely given how structurally
+		// different a Bible reference and a bare-number cross-reference
+		// are, but merged and de-overlapped the same way regardless,
+		// rather than trusting that by construction) -- the same "skip
+		// if this match starts before the previous one ended" filter
+		// SGVerseListWindow's own description-field restyling already
+		// needs for exactly this reason.
+		std::vector<TextReference> bibleMatches
 			= FindReferencesInText(text.String());
-		fReferences.clear();
+		std::vector<StrongsCrossReference> strongsMatches;
+		if (strongsPrefix != 0) {
+			strongsMatches = FindStrongsCrossReferencesInText(
+				text.String(), strongsPrefix);
+		}
+
+		std::vector<EntryLink> allMatches;
+		for (size_t i = 0; i < bibleMatches.size(); i++) {
+			EntryLink link;
+			link.start = bibleMatches[i].start;
+			link.length = bibleMatches[i].length;
+			link.isStrongsNumber = false;
+			link.target = bibleMatches[i].normalizedKey;
+			allMatches.push_back(link);
+		}
+		for (size_t i = 0; i < strongsMatches.size(); i++) {
+			EntryLink link;
+			link.start = strongsMatches[i].start;
+			link.length = strongsMatches[i].length;
+			link.isStrongsNumber = true;
+			link.target.SetToFormat("%c%s", strongsMatches[i].language,
+				strongsMatches[i].number.String());
+			allMatches.push_back(link);
+		}
+		std::sort(allMatches.begin(), allMatches.end(), &EntryLink::Before);
+
+		fLinks.clear();
 		int32 matchCursor = 0;
 		for (size_t i = 0; i < allMatches.size(); i++) {
 			if (allMatches[i].start < matchCursor)
 				continue;
-			fReferences.push_back(allMatches[i]);
+			fLinks.push_back(allMatches[i]);
 			matchCursor = allMatches[i].start + allMatches[i].length;
 		}
 
-		if (fReferences.empty()) {
+		if (fLinks.empty()) {
 			SetText(text.String());
 			return;
 		}
@@ -121,11 +162,11 @@ public:
 		BFont linkFont(plainFont);
 		linkFont.SetFace(B_UNDERSCORE_FACE);
 		// Same colour as fReferenceLinkStyle elsewhere in this app
-		// (BibleTextDocument.cpp) -- one reference-link colour, not a
-		// second one invented for this window alone.
+		// (BibleTextDocument.cpp) -- one reference-link colour for both
+		// kinds, not a second one invented for this window alone.
 		rgb_color linkColor = { 0, 0, 200, 255 };
 
-		int32 count = 1 + 2 * (int32)fReferences.size();
+		int32 count = 1 + 2 * (int32)fLinks.size();
 		size_t size = sizeof(text_run_array)
 			+ (count - 1) * sizeof(text_run);
 		text_run_array* runs = (text_run_array*)malloc(size);
@@ -135,13 +176,12 @@ public:
 		runs->runs[run].font = plainFont;
 		runs->runs[run].color = plainColor;
 		run++;
-		for (size_t i = 0; i < fReferences.size(); i++) {
-			runs->runs[run].offset = fReferences[i].start;
+		for (size_t i = 0; i < fLinks.size(); i++) {
+			runs->runs[run].offset = fLinks[i].start;
 			runs->runs[run].font = linkFont;
 			runs->runs[run].color = linkColor;
 			run++;
-			runs->runs[run].offset = fReferences[i].start
-				+ fReferences[i].length;
+			runs->runs[run].offset = fLinks[i].start + fLinks[i].length;
 			runs->runs[run].font = plainFont;
 			runs->runs[run].color = plainColor;
 			run++;
@@ -154,14 +194,24 @@ public:
 	virtual void MouseDown(BPoint where)
 	{
 		int32 offset = OffsetAt(where);
-		for (size_t i = 0; i < fReferences.size(); i++) {
-			if (offset < fReferences[i].start
-				|| offset >= fReferences[i].start + fReferences[i].length) {
+		for (size_t i = 0; i < fLinks.size(); i++) {
+			if (offset < fLinks[i].start
+				|| offset >= fLinks[i].start + fLinks[i].length) {
 				continue;
 			}
-			if (fOwner != NULL) {
+			if (fLinks[i].isStrongsNumber) {
+				// Same message DICT_SHOW_STRONGS already handles for a
+				// Strong's-number click from Bible text -- posted to
+				// this window itself (Window(), not fOwner, which
+				// targets SGMainWindow) so it gets the exact same
+				// module-switch + sidebar-selection behaviour for free.
+				BMessage lookup(DICT_SHOW_STRONGS);
+				lookup.AddString("number", fLinks[i].target);
+				if (Window() != NULL)
+					Window()->PostMessage(&lookup);
+			} else if (fOwner != NULL) {
 				BMessage jump(SG_BIBLE);
-				jump.AddString("key", fReferences[i].normalizedKey);
+				jump.AddString("key", fLinks[i].target);
 				fOwner->SendMessage(&jump);
 			}
 			return;
@@ -170,8 +220,23 @@ public:
 	}
 
 private:
-	BMessenger*					fOwner;
-	std::vector<TextReference>	fReferences;
+	// One clickable span inside the entry, either kind -- see
+	// SetEntryText()'s own comment on why both live in one merged,
+	// de-overlapped list rather than two separate ones.
+	struct EntryLink {
+		int32	start;
+		int32	length;
+		bool	isStrongsNumber;
+		BString	target;	// normalizedKey, or "G1234"/"H1234"
+
+		static bool Before(const EntryLink& a, const EntryLink& b)
+		{
+			return a.start < b.start;
+		}
+	};
+
+	BMessenger*				fOwner;
+	std::vector<EntryLink>	fLinks;
 };
 
 
@@ -370,7 +435,13 @@ SGDictionaryWindow::_ShowEntry(const BString& rawEntry)
 {
 	BString clean = StripTags(rawEntry);
 	clean.Trim();
-	fEntryView->SetEntryText(clean);
+	// 0 for a non-Strong's lexicon (AmTract, Hitchcock, ...) -- see
+	// SetEntryText()'s own comment on why that skips in-entry
+	// cross-reference detection (#110) entirely rather than scanning
+	// word-keyed prose for a pattern that only exists in a
+	// number-keyed one.
+	char strongsPrefix = SwordBackend::StrongsPrefixForLexicon(fCurrentLexicon);
+	fEntryView->SetEntryText(clean, strongsPrefix);
 }
 
 

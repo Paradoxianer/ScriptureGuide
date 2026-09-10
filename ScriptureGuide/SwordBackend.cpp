@@ -639,7 +639,18 @@ bool HasStrongsDictionary(SWMgr* manager, char prefix)
 		// Probe a number every Strong's dictionary has and see whether the
 		// module lands on it; if it snaps somewhere else, it cannot
 		// answer a Strong's lookup and must not make one look possible.
+		//
+		// setKey() alone is not enough either -- confirmed empirically
+		// (this returned false for StrongsGreek/StrongsHebrew even
+		// though both are installed): a RawLD-backed module's
+		// getKeyText() reads back empty until renderText() actually
+		// resolves the key, exactly the bug #110's own
+		// StrongsPrefixForLexicon() hit and fixed by going through
+		// GetEntry() instead. This is the same class of module, called
+		// on the raw SWModule* directly (no SGModule wrapper here), so
+		// the fix is the same: render before reading the key back.
 		module->setKey("1");
+		module->renderText();
 		if (landed_on_number(module->getKeyText(), "1"))
 			return true;
 	}
@@ -660,6 +671,29 @@ const char* SwordBackend::StrongsDictionaryNameFor(char prefix)
 	if (prefix == 'H')
 		return "StrongsHebrew";
 	return NULL;
+}
+
+
+char SwordBackend::StrongsPrefixForLexicon(SGModule* lexicon)
+{
+	if (lexicon == NULL || lexicon->GetModule() == NULL)
+		return 0;
+
+	const char* candidates = "GH";
+	for (const char* p = candidates; *p != '\0'; p++) {
+		if (!declares_feature(lexicon, strongs_feature_for(*p)))
+			continue;
+		// Same proof LookupStrongsNumber()/HasStrongsDictionary() use --
+		// declaring the feature is necessary but not sufficient. Must go
+		// through GetEntry() (setKey() + renderText()), not setKey()
+		// alone -- confirmed empirically that a RawLD-backed module's
+		// getKeyText() reads back empty until a render actually resolves
+		// the key; setKey() alone just records the request.
+		lexicon->GetEntry("1");
+		if (landed_on_number(lexicon->GetModule()->getKeyText(), "1"))
+			return *p;
+	}
+	return 0;
 }
 
 
@@ -1190,6 +1224,110 @@ FindReferencesInText(const char* text)
 		reference.start = (int32)match.position(0);
 		reference.length = (int32)match.length(0);
 		reference.normalizedKey = normalizedKey;
+		result.push_back(reference);
+	}
+
+	return result;
+}
+
+
+std::vector<StrongsCrossReference>
+FindStrongsCrossReferencesInText(const char* text, char sameLexiconPrefix)
+{
+	std::vector<StrongsCrossReference> result;
+	if (text == NULL || *text == '\0')
+		return result;
+
+	// A shared table, not per-lexicon code -- a new language's own
+	// convention is a new row here, not a new branch anywhere else.
+	// Confirmed against real installed modules: StrongsGreek/
+	// StrongsHebrew (the official CrossWire English modules) use "see
+	// GREEK for N"/"see HEBREW for N" (getRawEntry() shows this is
+	// plain prose, not a tag or entry attribute -- SWORD has nothing
+	// structured for this at all); GerStrongsGreek uses "von N"/
+	// "vgl. N" instead, with no language of its own -- resolved via
+	// `sameLexiconPrefix` since GerStrongsGreek's own numbering only
+	// ever names other Greek numbers this way.
+	struct Trigger {
+		const char*	phrase;
+		char		language;
+	};
+	static const Trigger kTriggers[] = {
+		{ "see GREEK for", 'G' },
+		{ "see HEBREW for", 'H' },
+		{ "vgl\\.", 0 },
+		{ "von", 0 },
+	};
+	static const size_t kTriggerCount = sizeof(kTriggers) / sizeof(Trigger);
+
+	// A bare number after "von" is not always a cross-reference --
+	// confirmed live against a real false positive: GerStrongsGreek's
+	// own entry 40 reads "...ein fensterloser kubischer Raum von 5 m
+	// Seitenlänge..." (a room five METRES wide, nothing to do with
+	// Strong's number 5). Skip a match immediately followed by a unit
+	// word rather than guess it's a reference.
+	static const char* kUnitWords[] = { "m", "cm", "km", "kg", "qm" };
+	static const size_t kUnitWordCount
+		= sizeof(kUnitWords) / sizeof(const char*);
+
+	static const std::regex pattern = [](void) -> std::regex {
+		BString patternText;
+		patternText << "\\b(?:";
+		for (size_t i = 0; i < kTriggerCount; i++) {
+			if (i > 0)
+				patternText << "|";
+			patternText << "(" << kTriggers[i].phrase << ")";
+		}
+		patternText << ")[ \t]+([0-9]{1,5})\\b";
+		return std::regex(patternText.String());
+	}();
+
+	BString source(text);
+	const char* str = source.String();
+	int32 length = source.Length();
+
+	std::cregex_iterator it(str, str + length, pattern);
+	std::cregex_iterator end;
+	for (; it != end; ++it) {
+		const std::cmatch& match = *it;
+
+		char language = 0;
+		for (size_t i = 0; i < kTriggerCount; i++) {
+			// Group 0 is the whole match, group 1 the first trigger's
+			// parens, and so on -- kTriggers[i] is group i + 1.
+			if (match[i + 1].matched) {
+				language = kTriggers[i].language != 0
+					? kTriggers[i].language : sameLexiconPrefix;
+				break;
+			}
+		}
+		if (language == 0)
+			continue;
+
+		int32 numberStart = (int32)match.position(kTriggerCount + 1);
+		int32 numberLength = (int32)match.length(kTriggerCount + 1);
+		int32 afterNumber = numberStart + numberLength;
+
+		bool isUnit = false;
+		while (afterNumber < length
+				&& (str[afterNumber] == ' ' || str[afterNumber] == '\t')) {
+			afterNumber++;
+		}
+		for (size_t i = 0; i < kUnitWordCount && !isUnit; i++) {
+			size_t wordLen = strlen(kUnitWords[i]);
+			if ((int32)(afterNumber + wordLen) <= length
+				&& strncmp(str + afterNumber, kUnitWords[i], wordLen) == 0) {
+				isUnit = true;
+			}
+		}
+		if (isUnit)
+			continue;
+
+		StrongsCrossReference reference;
+		reference.start = (int32)match.position(0);
+		reference.length = (int32)match.length(0);
+		reference.number.SetTo(str + numberStart, numberLength);
+		reference.language = language;
 		result.push_back(reference);
 	}
 

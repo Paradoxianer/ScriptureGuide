@@ -199,6 +199,35 @@ bool NormalizeReferenceText(const char* input, BString& normalized);
 std::vector<StrongsWord> FindStrongsWordsInText(sword::SWModule* module,
 					const BString& renderedText);
 
+// One occurrence of a Strong's-number cross-reference embedded in a
+// lexicon entry's OWN text (#110) -- e.g. GerStrongsGreek's own entry
+// for 26 (agape) opens with "von 25", and StrongsGreek's own entry for
+// the same number ends "see GREEK for 25". Both are plain prose, not
+// a SWORD tag or attribute (confirmed empirically: getRawEntry() and
+// getEntryAttributes() show nothing structured for this at all) --
+// this recognizes a small, shared table of trigger phrases across the
+// languages actually observed ("see GREEK for"/"see HEBREW for" in
+// English CrossWire modules, "von"/"vgl."/"für" in German ones)
+// followed by a bare number, deliberately NOT branching per lexicon
+// name in code -- a new language's convention is a new table entry,
+// not a new code path.
+//
+// `language` is 'G'/'H' when the trigger itself names one ("see GREEK
+// for"), or `sameLexiconPrefix` (a caller-supplied guess for what an
+// unqualified bare number means in THIS entry's own lexicon -- see
+// SwordBackend::StrongsPrefixForLexicon()) for a trigger with no
+// language of its own ("von", "vgl.", "für"). 0 (from either source)
+// means "don't know" and the candidate is dropped rather than guessed.
+struct StrongsCrossReference {
+	int32	start;
+	int32	length;
+	BString	number;		// bare digits, no "G"/"H" prefix
+	char	language;	// 'G' or 'H' -- never 0 in a returned match
+};
+
+std::vector<StrongsCrossReference> FindStrongsCrossReferencesInText(
+	const char* text, char sameLexiconPrefix);
+
 
 std::vector<const char*>	GetBookNames(void);
 
@@ -348,6 +377,18 @@ public:
 	// to make HasStrongsDictionary(prefix) true -- for naming the actual
 	// missing piece in a message instead of "no matching dictionary".
 	static const char*	StrongsDictionaryNameFor(char prefix);
+
+	// 'G' or 'H' if `lexicon` is itself a genuine Strong's-numbered
+	// dictionary (declares Feature=GreekDef/HebrewDef AND actually
+	// resolves by number, the same landed_on_number() check
+	// LookupStrongsNumber() uses -- Dodson declares GreekDef and is
+	// keyed by Greek lemma instead, so declaring the feature alone is
+	// not proof), 0 otherwise (e.g. AmTract, Hitchcock). Lets a caller
+	// resolve an in-entry cross-reference that names a bare number with
+	// no explicit language ("von 40", "vgl. 5342" -- #110) against
+	// whichever language `lexicon`'s own numbering already is, rather
+	// than guessing.
+	static char			StrongsPrefixForLexicon(SGModule* lexicon);
 
 	sword::SWMgr*		Manager(void) const
 							{ return fManager; }
