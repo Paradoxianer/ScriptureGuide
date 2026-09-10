@@ -1140,6 +1140,69 @@ TestAllKeysCoversWholeLexicon(SWMgr* manager)
 }
 
 
+// DictionaryWindow's Prev/Next (#84) tracks "the current key" by exact
+// string match against SGModule::AllKeys() -- but SGModule::GetEntry()
+// itself is case-insensitive (confirmed live against AmTract: typing
+// "Abraham" resolved the real "ABRAHAM" entry just fine), so storing
+// whatever the caller originally typed/clicked as "the current key"
+// silently breaks that later exact-match scan the moment the two cases
+// differ. Confirmed live: after looking up "Abraham", clicking Next
+// landed on AmTract's own blank front-matter entry (position 0) instead
+// of "ABRAHAM'S BOSOM", because "Abraham" != "ABRAHAM" left the scan
+// unable to find where it actually was and it fell back to an end.
+// GetModule()->getKeyText() (NOT SGModule::GetKey(), which casts to
+// VerseKey -- wrong for a lexicon, see LookupStrongsNumber()'s own
+// comment) reads back the module's own canonical form right after
+// GetEntry() resolves it; this is the fix DictionaryWindow now applies,
+// verified here at the SGModule level the bug actually lives at.
+static void
+TestGetEntryReadsBackCanonicalKeyRegardlessOfTypedCase(SWMgr* manager)
+{
+	const char* name = "SGModule::GetEntry: a case-mismatched lookup's "
+		"canonical key is still recoverable via GetModule()->getKeyText()";
+
+	sword::SWModule* found = NULL;
+	for (ModMap::iterator it = manager->Modules.begin();
+			it != manager->Modules.end() && found == NULL; ++it) {
+		if (strcmp(it->second->getType(), "Lexicons / Dictionaries") == 0)
+			found = it->second;
+	}
+	if (found == NULL) {
+		Skip(name, "no lexicon/dictionary module installed");
+		return;
+	}
+
+	SGModule lexicon(found);
+	std::vector<BString> keys = lexicon.AllKeys();
+	if (keys.empty()) {
+		Skip(name, "lexicon has no keys");
+		return;
+	}
+
+	BString canonicalKey = keys[keys.size() / 2];
+	BString mangledKey(canonicalKey);
+	mangledKey.ToLower();
+	if (mangledKey == canonicalKey) {
+		// The real key has no letters to mangle the case of at all --
+		// nothing to prove either way with this particular key.
+		Skip(name, "sampled key has no case to mangle");
+		return;
+	}
+
+	BString entry(lexicon.GetEntry(mangledKey.String()));
+	if (entry.IsEmpty()) {
+		// This particular module's lookup turned out to be case-
+		// sensitive after all -- a real, if different, property of
+		// its own data, not something this test can force.
+		Skip(name, "this module's lookup is case-sensitive");
+		return;
+	}
+
+	BString canonicalReadBack(lexicon.GetModule()->getKeyText());
+	Check(canonicalReadBack == canonicalKey, name);
+}
+
+
 // #83: SEARCHTYPE_ENTRYATTR (swmodule.h's search() doc comment: -3,
 // "Word//Lemma./G1234/") is what SGSearchWindow's new Strong's-number
 // mode threads through SGModule::SearchModule() -- this is the backend
@@ -2714,6 +2777,7 @@ main()
 	TestBibleTextDocumentRebuildIsIdempotent(moduleA);
 	TestChapterShowsEveryVerseOfItsVersification(&manager);
 	TestAllKeysCoversWholeLexicon(&manager);
+	TestGetEntryReadsBackCanonicalKeyRegardlessOfTypedCase(&manager);
 	TestStrongsEntryAttributeSearchFindsRealOccurrences(&manager);
 	TestMatchesForStrongsNumberFindsRealSpans(&manager);
 	TestOnlyRawFilesModulesAreEditable(&manager);

@@ -341,7 +341,17 @@ SGDictionaryWindow::_LookupKey(const char* key)
 	BString entry(fCurrentLexicon->GetEntry(key));
 	if (!entry.IsEmpty()) {
 		_ShowResultsList(false);
-		fCurrentKey = key;
+		// The module's own canonical key text, not the typed `key` --
+		// AmTract's real keys are upper-case ("ABRAHAM"), so a typed
+		// "Abraham" landed the right entry here (GetEntry()'s lookup is
+		// case-insensitive) but wouldn't ever be found again by
+		// _StepEntry()'s exact-match scan over fAllKeys, which reads
+		// keys from the same module in this same canonical form.
+		// Confirmed live: Next after typing "Abraham" landed on
+		// fAllKeys[0], the module's blank front-matter entry, because
+		// "Abraham" != "ABRAHAM" left _StepEntry() unable to find where
+		// it actually was.
+		fCurrentKey = fCurrentLexicon->GetModule()->getKeyText();
 		_UpdateEntryLabel();
 		_ShowEntry(entry);
 		return;
@@ -403,9 +413,16 @@ SGDictionaryWindow::_ShowEntryForKey(const BString& key)
 {
 	if (fCurrentLexicon == NULL)
 		return;
-	fCurrentKey = key;
+	BString entry = fCurrentLexicon->GetEntry(key.String());
+	// The module's own canonical key text, not necessarily `key` as
+	// passed in -- see _LookupKey()'s own comment on why this matters
+	// for _StepEntry()'s later exact-match scan. `key` here already
+	// comes from fAllKeys/a search result, so it should already BE
+	// canonical, but reading it back after GetEntry() actually resolved
+	// it is one less thing to keep in sync by hand.
+	fCurrentKey = fCurrentLexicon->GetModule()->getKeyText();
 	_UpdateEntryLabel();
-	_ShowEntry(fCurrentLexicon->GetEntry(key.String()));
+	_ShowEntry(entry);
 }
 
 
