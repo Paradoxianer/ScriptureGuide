@@ -663,8 +663,12 @@ const char* SwordBackend::StrongsDictionaryNameFor(char prefix)
 }
 
 
-BString SwordBackend::LookupStrongsNumber(const char* strongsNumber) const
+BString SwordBackend::LookupStrongsNumber(const char* strongsNumber,
+	SGModule** outLexicon) const
 {
+	if (outLexicon != NULL)
+		*outLexicon = NULL;
+
 	if (strongsNumber == NULL || *strongsNumber == '\0')
 		return BString();
 
@@ -697,8 +701,11 @@ BString SwordBackend::LookupStrongsNumber(const char* strongsNumber) const
 		// module reports 02316 for 2316; Dodson reports G0001.
 		// getKeyText() on the module itself, NOT SGModule::GetKey(): that
 		// one casts the key to VerseKey, which a lexicon's key is not.
-		if (landed_on_number(lexicon->GetModule()->getKeyText(), number))
+		if (landed_on_number(lexicon->GetModule()->getKeyText(), number)) {
+			if (outLexicon != NULL)
+				*outLexicon = lexicon;
 			return entry;
+		}
 	}
 
 	return BString();

@@ -307,6 +307,22 @@ SGDictionaryWindow::_RebuildModuleMenu()
 
 
 void
+SGDictionaryWindow::_SelectModuleInMenu(SGModule* lexicon)
+{
+	if (lexicon == NULL)
+		return;
+	BMenu* menu = fModuleField->Menu();
+	if (fModuleField->MenuItem() != NULL)
+		fModuleField->MenuItem()->SetMarked(false);
+	BMenuItem* item = menu->FindItem(lexicon->Name());
+	if (item != NULL)
+		item->SetMarked(true);
+	if (fModuleField->MenuItem() != NULL)
+		fModuleField->MenuItem()->SetLabel(lexicon->Name());
+}
+
+
+void
 SGDictionaryWindow::_LookupKey(const char* key)
 {
 	if (fCurrentLexicon == NULL || key == NULL || key[0] == '\0')
@@ -486,17 +502,9 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 		{
 			BString number;
 			if (message->FindString("number", &number) == B_OK) {
-				// A Strong's-number click never touches fLookupField or
-				// fCurrentLexicon (LookupStrongsNumber() below searches
-				// across every installed lexicon rather than switching
-				// to one), so unlike a sidebar-driven lookup this key
-				// is never reflected in fResultList either -- nothing
-				// in the window shows this number now that the old
-				// "Entry: <key>" label is gone (see _BuildGUI()'s own
-				// comment on why it was removed for the normal case).
-				fCurrentKey = number;
+				SGModule* lexicon = NULL;
 				BString entry = fBackend->LookupStrongsNumber(
-					number.String());
+					number.String(), &lexicon);
 				if (entry.IsEmpty()) {
 					// Two genuinely different situations, and telling
 					// them apart is the difference between a message the
@@ -504,6 +512,7 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 					// either the whole dictionary for this language is
 					// missing (install it), or it is present and simply
 					// has no entry for this number (nothing to do).
+					fCurrentKey = number;
 					char prefix = number.Length() > 0
 						? number.ByteAt(0) : '\0';
 					const char* moduleName
@@ -525,7 +534,30 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 						fEntryView->SetText(missing.String());
 					}
 				} else {
-					_ShowEntry(entry);
+					// Reported: nothing in the window showed which
+					// number this was once the old "Entry: <key>" label
+					// (its only home) was removed. Rather than re-adding
+					// a label, route through the exact same
+					// module-switch + sidebar-selection plumbing a
+					// manual pick-a-module-then-look-up-a-key already
+					// gets -- LookupStrongsNumber() now reports which
+					// lexicon actually answered, so this can adopt it as
+					// fCurrentLexicon instead of leaving the module
+					// picker and sidebar showing something unrelated.
+					if (lexicon != fCurrentLexicon) {
+						fCurrentLexicon = lexicon;
+						fAllKeys.clear();
+						fListShowingAllKeys = false;
+						_SelectModuleInMenu(lexicon);
+					}
+					// LookupStrongsNumber() strips the "G"/"H" prefix
+					// before calling GetEntry() on `lexicon` -- passing
+					// the prefixed form to _ShowEntryForKey() here would
+					// just fail to resolve against this same lexicon's
+					// real (unprefixed) keys.
+					BString bareNumber(number);
+					bareNumber.Remove(0, 1);
+					_ShowEntryForKey(bareNumber);
 				}
 			}
 			Activate(true);

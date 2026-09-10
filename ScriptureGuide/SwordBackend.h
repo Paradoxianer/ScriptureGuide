@@ -328,7 +328,13 @@ public:
 	// it. The "G"/"H" prefix itself is stripped before the lookup --
 	// confirmed empirically that keeping it silently mismatches to a
 	// nearby, unrelated entry instead of failing outright.
-	BString				LookupStrongsNumber(const char* strongsNumber) const;
+	//
+	// `outLexicon`, if given, receives the module that actually answered
+	// (NULL on an empty result) -- lets a caller (DictionaryWindow) show
+	// its own sidebar/module selection in sync with a Strong's-number
+	// lookup instead of leaving it untouched.
+	BString				LookupStrongsNumber(const char* strongsNumber,
+							SGModule** outLexicon = NULL) const;
 
 	// Whether a dictionary that could resolve numbers of this kind is
 	// installed at all -- 'G' for Greek (New Testament), 'H' for Hebrew

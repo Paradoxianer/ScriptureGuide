@@ -114,6 +114,12 @@ private:
 			// Selects and scrolls to `key` inside fResultList if
 			// present, else clears the selection.
 			void			_SelectKeyInList(const BString& key);
+			// Marks `lexicon`'s own item in fModuleField's menu --
+			// used when a Strong's-number lookup (see DICT_SHOW_STRONGS)
+			// switches fCurrentLexicon to whichever module actually
+			// answered it, so the module picker doesn't silently drift
+			// out of sync with what the sidebar/entry now show.
+			void			_SelectModuleInMenu(SGModule* lexicon);
 
 			SwordBackend*	fBackend;
 			SGModule*		fCurrentLexicon;
