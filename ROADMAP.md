@@ -1,45 +1,40 @@
 # Roadmap
 
-Where ScriptureGuide goes after 1.3.0. Ordered by what unlocks what, not
+Where ScriptureGuide goes after 1.4.0. Ordered by what unlocks what, not
 by wishlist size. Each entry says what it needs and what is already known
 about the ground it stands on.
 
-## The next thing: browsable dictionary index, or word-occurrence search
+Version targets now live as
+[GitHub Milestones](https://github.com/Paradoxianer/ScriptureGuide/milestones)
+-- every open issue carries one. This file keeps the reasoning behind
+the grouping; the milestone itself is the source of truth for which
+issue is in which one, so if the two ever disagree, trust GitHub and
+fix this file.
 
-Two candidates, both P2, both scoped:
+## 1.5.0 -- word study, and the UI settling down
 
-- [#84](https://github.com/Paradoxianer/ScriptureGuide/issues/84) A
-  browsable dictionary index -- page through every entry a loaded
-  lexicon has (G1, G2, G3, ...), not just jump to one exact lookup.
-  `SGDictionaryWindow::_LookupKey()` only ever shows a single entry or
-  search hits today; nothing walks the whole module.
 - [#83](https://github.com/Paradoxianer/ScriptureGuide/issues/83) Given
   a Strong's-tagged word, find every other verse using the same one --
   the "Bible Word Study" a dictionary click can't do yet. Needs a new
   search mode keyed by Strong's number rather than plain text; confirmed
   `SwordBackend` has nothing like that today.
-
-[#106](https://github.com/Paradoxianer/ScriptureGuide/issues/106)/[#107](https://github.com/Paradoxianer/ScriptureGuide/issues/107)
-build on these once they exist: highlighting same-word occurrences in
-the visible chapter, and a books/translations distribution chart per
-word -- both filed from the same csv-bibel.de reference, both explicitly
-scoped as follow-ups, not part of the two above.
-
-A smaller, standalone remainder:
-[#32](https://github.com/Paradoxianer/ScriptureGuide/issues/32)
-reference recognition works in notes, commentary and verse-list
-descriptions already -- the one place left is dictionary entries
-themselves.
-
-## After that
-
-Roughly in the order I would take them.
-
+- [#106](https://github.com/Paradoxianer/ScriptureGuide/issues/106)
+  Highlight same-word occurrences within the visible chapter --
+  independent of #83 (it needs `StrongsNumberAt()`, which already
+  exists, not the new search), filed from the same csv-bibel.de
+  reference.
+- [#32](https://github.com/Paradoxianer/ScriptureGuide/issues/32)
+  Reference recognition works in notes, commentary and verse-list
+  descriptions already -- the one place left is dictionary entries
+  themselves. Small, standalone remainder.
 - [#18](https://github.com/Paradoxianer/ScriptureGuide/issues/18) HIG
   audit. 1.4.0 settled the selection menu into one popup and removed
   the borderless palette window -- the reading pane is not mid-change
   for the first time in several releases, which is what this was
   waiting for.
+
+## 1.6.0 -- a verse list you can read by, not just manage
+
 - [#92](https://github.com/Paradoxianer/ScriptureGuide/issues/92) /
   [#105](https://github.com/Paradoxianer/ScriptureGuide/issues/105) A
   verse list shown in the reading pane, and the colour it is shown in.
@@ -48,17 +43,24 @@ Roughly in the order I would take them.
   written up in #105's own comments. One real gap: "Add to Verse List"
   drops the selection's span, so a list of partial-verse entries can't
   be created from the UI yet.
+- [#107](https://github.com/Paradoxianer/ScriptureGuide/issues/107)
+  Word-distribution statistics (which books, which translations) --
+  depends on #83's search existing first.
+- [#87](https://github.com/Paradoxianer/ScriptureGuide/issues/87) Print
+  a verse list, or export as PDF.
+- [#103](https://github.com/Paradoxianer/ScriptureGuide/issues/103)
+  Markup parser for Notes and description fields.
+
+## 1.7.0 -- architecture pass and polish
+
 - [#12](https://github.com/Paradoxianer/ScriptureGuide/issues/12)
   Per-column scroll lock. Labelled P1, but it is an architecture
   change -- a column that opts out of `VerseAligner` needs its own
-  scroll view and its own navigation. Wants a design pass before code.
-- [#34](https://github.com/Paradoxianer/ScriptureGuide/issues/34) Greek
-  and Hebrew fonts. Currently a manual step in the manual. Bundling or
-  depending on a font would remove it.
-- [#16](https://github.com/Paradoxianer/ScriptureGuide/issues/16)
-  Evaluate a newer SWORD. Low priority until something needs it.
-- [#43](https://github.com/Paradoxianer/ScriptureGuide/issues/43) Audio
-  modules. Open question rather than planned work.
+  scroll view and its own navigation. Wants a design pass before code;
+  this is where that pass happens.
+- [#51](https://github.com/Paradoxianer/ScriptureGuide/issues/51) Band
+  refinements -- cascading Book/Chapter/Verse picker, compact
+  Tracker-style menus, a bookmark button for the list menu.
 - [#35](https://github.com/Paradoxianer/ScriptureGuide/issues/35) A BFS
   file type for dropped selections. Its first half is effectively done
   -- bookmarks and highlights already register a MIME type with
@@ -66,19 +68,58 @@ Roughly in the order I would take them.
   unverified half: writing attributes onto the file Tracker itself
   creates on a drop, which needs the asynchronous `B_COPY_TARGET`
   protocol and a real prototype rather than a guess.
-- [#108](https://github.com/Paradoxianer/ScriptureGuide/issues/108)
-  Research only: is there a free/open dataset tagging Bible people and
-  pronoun referents (bibleanalyzer.com-style)? Nothing to design until
-  that question has an answer.
+- [#77](https://github.com/Paradoxianer/ScriptureGuide/issues/77)
+  Search window: allow a narrower minimum width.
+- [#34](https://github.com/Paradoxianer/ScriptureGuide/issues/34) Greek
+  and Hebrew fonts. Currently a manual step in the manual. Bundling or
+  depending on a font would remove it.
+- [#96](https://github.com/Paradoxianer/ScriptureGuide/issues/96)
+  `Description.txt` as its own file type with ScriptureGuide as the
+  preferred app.
 
-## Not planned for now
+## Backlog -- real ideas, not yet scheduled
 
-- **[#104](https://github.com/Paradoxianer/ScriptureGuide/issues/104)
-  Cross-library tag view.** Tags are a real BFS attribute on ordinary
-  files, so Tracker's own Find already answers "every bookmark tagged
-  X" across every collection. Building a worse version of a query the
-  system already has is not worth doing. Revisit only if something
-  needs to act on the results as a group.
+Genuinely worth doing eventually, or worth having on record, but none
+of them earn a version number yet -- either unscoped, low priority
+until something needs them, or blocked on a question this project
+can't answer by itself.
+
+- **Blocked on an open question:**
+  [#91](https://github.com/Paradoxianer/ScriptureGuide/issues/91)
+  patristic citation index (BKV's own licensing is unresolved),
+  [#108](https://github.com/Paradoxianer/ScriptureGuide/issues/108)
+  person/pronoun tagging (no known free dataset yet),
+  [#43](https://github.com/Paradoxianer/ScriptureGuide/issues/43) audio
+  modules (open question rather than planned work).
+- **Low priority until something needs it:**
+  [#16](https://github.com/Paradoxianer/ScriptureGuide/issues/16)
+  evaluate a newer SWORD,
+  [#104](https://github.com/Paradoxianer/ScriptureGuide/issues/104)
+  cross-library tag view -- Tracker's own Find already answers "every
+  bookmark tagged X" across every collection; building a worse version
+  of a query the system already has is not worth it on its own.
+- **Bigger, speculative features**, roughly grouped:
+  [#69](https://github.com/Paradoxianer/ScriptureGuide/issues/69)
+  verse-of-the-day replicant,
+  [#88](https://github.com/Paradoxianer/ScriptureGuide/issues/88) /
+  [#89](https://github.com/Paradoxianer/ScriptureGuide/issues/89)
+  auto-scroll and automatic chapter transition,
+  [#70](https://github.com/Paradoxianer/ScriptureGuide/issues/70)
+  attach images to a reference or note,
+  [#90](https://github.com/Paradoxianer/ScriptureGuide/issues/90) audio
+  notes (record your own reading),
+  [#71](https://github.com/Paradoxianer/ScriptureGuide/issues/71) map
+  support,
+  [#74](https://github.com/Paradoxianer/ScriptureGuide/issues/74) /
+  [#75](https://github.com/Paradoxianer/ScriptureGuide/issues/75) /
+  [#86](https://github.com/Paradoxianer/ScriptureGuide/issues/86) book
+  outlines, a history timeline, and toggle-able book introductions,
+  [#76](https://github.com/Paradoxianer/ScriptureGuide/issues/76) a
+  library of public-domain Christian literature,
+  [#82](https://github.com/Paradoxianer/ScriptureGuide/issues/82)
+  parallel/harmonized display of overlapping accounts,
+  [#85](https://github.com/Paradoxianer/ScriptureGuide/issues/85)
+  BibleSync co-navigation with other SWORD apps.
 
 ## Done in 1.4.0
 
