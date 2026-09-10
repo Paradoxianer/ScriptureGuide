@@ -51,7 +51,13 @@ public:
 VersePreview::VersePreview(const char* name, int32 flags)
  :	BTextView(name, flags)
 {
-	SetViewColor(ui_color(B_PANEL_BACKGROUND_COLOR));
+	// #18: SetViewUIColor(), not SetViewColor(ui_color(...)) -- the
+	// latter only reads the current colour once at construction time;
+	// the former keeps this view in sync if the user changes their
+	// Appearance colours while the window is already open, matching
+	// every other themed view in this app (e.g. DictionaryEntryView,
+	// BibleColumnView).
+	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	SetStylable(true);
 	SetDoesUndo(false);
 	MakeEditable(false);
