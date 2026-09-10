@@ -342,6 +342,7 @@ SGDictionaryWindow::_LookupKey(const char* key)
 	if (!entry.IsEmpty()) {
 		_ShowResultsList(false);
 		fCurrentKey = key;
+		_UpdateEntryLabel();
 		_ShowEntry(entry);
 		return;
 	}
@@ -350,7 +351,10 @@ SGDictionaryWindow::_LookupKey(const char* key)
 	// whole module (see SGModule::SearchEntries(), #31's "search
 	// entries" requirement) and list the matching keys instead of
 	// showing an entry directly; double-clicking one looks it up for
-	// real via DICT_SELECT_RESULT.
+	// real via DICT_SELECT_RESULT. Not any one key any more -- the label
+	// goes back to plain "Entry:" until a result is actually picked.
+	fCurrentKey = "";
+	_UpdateEntryLabel();
 	while (fResultList->CountItems() > 0)
 		delete fResultList->RemoveItem((int32)0);
 
@@ -382,11 +386,25 @@ SGDictionaryWindow::_ShowEntry(const BString& rawEntry)
 
 
 void
+SGDictionaryWindow::_UpdateEntryLabel()
+{
+	if (fCurrentKey.IsEmpty()) {
+		fEntryLabel->SetText(B_TRANSLATE("Entry:"));
+		return;
+	}
+	BString label(B_TRANSLATE("Entry: %key%"));
+	label.ReplaceFirst("%key%", fCurrentKey);
+	fEntryLabel->SetText(label.String());
+}
+
+
+void
 SGDictionaryWindow::_ShowEntryForKey(const BString& key)
 {
 	if (fCurrentLexicon == NULL)
 		return;
 	fCurrentKey = key;
+	_UpdateEntryLabel();
 	_ShowEntry(fCurrentLexicon->GetEntry(key.String()));
 }
 
@@ -471,6 +489,7 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 			// before.
 			fAllKeys.clear();
 			fCurrentKey = "";
+			_UpdateEntryLabel();
 			break;
 		}
 
@@ -523,6 +542,11 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 			BString number;
 			if (message->FindString("number", &number) == B_OK) {
 				_ShowResultsList(false);
+				// A Strong's-number click never touches fLookupField --
+				// this is the only place the number itself would ever
+				// be visible anywhere in the window, found or not.
+				fCurrentKey = number;
+				_UpdateEntryLabel();
 				BString entry = fBackend->LookupStrongsNumber(
 					number.String());
 				if (entry.IsEmpty()) {

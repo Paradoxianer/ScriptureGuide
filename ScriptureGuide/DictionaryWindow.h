@@ -105,6 +105,13 @@ private:
 			// on why this is cached rather than re-walked every time.
 			void			_EnsureAllKeys();
 			void			_StepEntry(int32 direction);
+			// Reflects fCurrentKey onto fEntryLabel ("Entry:" alone when
+			// empty, "Entry: <key>" otherwise) -- call after every
+			// fCurrentKey assignment. Without this a Strong's-number
+			// click (which never touches fLookupField) left no visible
+			// indication anywhere in the window of which number was
+			// actually being shown.
+			void			_UpdateEntryLabel();
 
 			SwordBackend*	fBackend;
 			SGModule*		fCurrentLexicon;
