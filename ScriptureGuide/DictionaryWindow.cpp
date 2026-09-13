@@ -10,6 +10,7 @@
 #include <Button.h>
 #include <Catalog.h>
 #include <LayoutBuilder.h>
+#include <List.h>
 #include <ListItem.h>
 #include <ListView.h>
 #include <MenuField.h>
@@ -243,8 +244,13 @@ private:
 SGDictionaryWindow::SGDictionaryWindow(BRect frame, SwordBackend* backend,
 	BMessenger* owner)
 	:
-	BWindow(frame, B_TRANSLATE("Dictionary"), B_TITLED_WINDOW,
-		B_ASYNCHRONOUS_CONTROLS),
+	// B_FLOATING_APP_WINDOW_FEEL, not B_TITLED_WINDOW's own
+	// B_NORMAL_WINDOW_FEEL -- asked for: repeated Strong's-number clicks
+	// from Bible text kept needing this window re-activated/re-found
+	// rather than just staying visible above the main window it serves,
+	// the way a reference/tool window is expected to.
+	BWindow(frame, B_TRANSLATE("Dictionary"), B_TITLED_WINDOW_LOOK,
+		B_FLOATING_APP_WINDOW_FEEL, B_ASYNCHRONOUS_CONTROLS),
 	fBackend(backend),
 	fCurrentLexicon(NULL),
 	fOwner(owner),
@@ -310,7 +316,7 @@ SGDictionaryWindow::_BuildGUI()
 	// not one that should trigger this early. A narrower floor still
 	// shows a short key before truncating, while leaving much more room
 	// to drag before the collapse threshold kicks in.
-	fResultScroll->SetExplicitMinSize(BSize(60.0f, B_SIZE_UNSET));
+	fResultScroll->SetExplicitMinSize(BSize(77.0f, B_SIZE_UNSET));
 
 	fEntryView = new DictionaryEntryView("dictEntry", fOwner);
 	fEntryView->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
@@ -468,7 +474,7 @@ SGDictionaryWindow::_ShowEntryForKey(const BString& key)
 	// The module's own canonical key text, not necessarily `key` as
 	// passed in -- see _LookupKey()'s own comment on why this matters
 	// for the sidebar-selection lookup just below. `key` here already
-	// comes from fAllKeys/a search result, so it should already BE
+	// comes from fAllKeysByLexicon/a search result, so it should already BE
 	// canonical, but reading it back after GetEntry() actually resolved
 	// it is one less thing to keep in sync by hand.
 	fCurrentKey = fCurrentLexicon->GetModule()->getKeyText();
@@ -491,9 +497,11 @@ SGDictionaryWindow::_ShowEntryForKey(const BString& key)
 void
 SGDictionaryWindow::_EnsureAllKeys()
 {
-	if (!fAllKeys.empty() || fCurrentLexicon == NULL)
+	if (fCurrentLexicon == NULL)
 		return;
-	fAllKeys = fCurrentLexicon->AllKeys();
+	if (fAllKeysByLexicon.find(fCurrentLexicon) != fAllKeysByLexicon.end())
+		return;
+	fAllKeysByLexicon[fCurrentLexicon] = fCurrentLexicon->AllKeys();
 }
 
 
@@ -505,8 +513,12 @@ SGDictionaryWindow::_PopulateAllKeysList()
 	_EnsureAllKeys();
 	while (fResultList->CountItems() > 0)
 		delete fResultList->RemoveItem((int32)0);
-	for (size_t i = 0; i < fAllKeys.size(); i++)
-		fResultList->AddItem(new BStringItem(fAllKeys[i].String()));
+
+	const std::vector<BString>& keys = fAllKeysByLexicon[fCurrentLexicon];
+	BList items(keys.size());
+	for (size_t i = 0; i < keys.size(); i++)
+		items.AddItem(new BStringItem(keys[i].String()));
+	fResultList->AddList(&items);
 	fListShowingAllKeys = true;
 }
 
@@ -547,10 +559,10 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 				if (lexicon != NULL)
 					fCurrentLexicon = lexicon;
 			}
-			// A different module: the cached key list and the entry it
-			// pointed at both belong to whatever module was current
-			// before.
-			fAllKeys.clear();
+			// A different module: the entry the old key pointed to
+			// belongs to whatever module was current before -- the key
+			// list itself stays cached per lexicon (fAllKeysByLexicon),
+			// so switching back to this module later costs nothing.
 			fCurrentKey = "";
 			_PopulateAllKeysList();
 			break;
@@ -631,7 +643,6 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 					// picker and sidebar showing something unrelated.
 					if (lexicon != fCurrentLexicon) {
 						fCurrentLexicon = lexicon;
-						fAllKeys.clear();
 						fListShowingAllKeys = false;
 						_SelectModuleInMenu(lexicon);
 					}

@@ -5,6 +5,7 @@
 #ifndef DICTIONARY_WINDOW_H
 #define DICTIONARY_WINDOW_H
 
+#include <map>
 #include <vector>
 
 #include <Messenger.h>
@@ -87,17 +88,29 @@ private:
 			void			_LookupKey(const char* key);
 			// Looks up `key` directly (no exact-match-then-search
 			// fallback -- the caller already knows this key exists,
-			// e.g. from fAllKeys or a result the user just clicked) and
-			// records it as fCurrentKey.
+			// e.g. from fAllKeysByLexicon or a result the user just
+			// clicked) and records it as fCurrentKey.
 			void			_ShowEntryForKey(const BString& key);
 			void			_ShowEntry(const BString& rawEntry);
-			// Fills fAllKeys from fCurrentLexicon if not already
+			// Fills fAllKeysByLexicon[fCurrentLexicon] if not already
 			// populated for it -- see SGModule::AllKeys()'s own comment
-			// on why this is cached rather than re-walked every time.
+			// on why the walk itself is expensive enough to cache
+			// (measured live: 186ms for GerStrongsGreek's 5522 keys,
+			// proportionally more for StrongsHebrew's 8675), and
+			// _PopulateAllKeysList()'s own comment on why that cache is
+			// keyed per lexicon rather than a single slot cleared on
+			// every switch -- switching back to a lexicon already
+			// visited this session should be instant, not a second
+			// full walk.
 			void			_EnsureAllKeys();
 			// Replaces fResultList's contents with every key of
-			// fCurrentLexicon (see _EnsureAllKeys()) and sets
-			// fListShowingAllKeys -- the sidebar's steady state. A
+			// fCurrentLexicon (see _EnsureAllKeys()), via BListView::
+			// AddList() rather than one AddItem() call per key --
+			// measured live: 736ms for 5522 individual AddItem() calls
+			// vs. 351ms for the same items via one AddList() call, and
+			// this runs synchronously on the window's own thread, which
+			// is what made the whole window appear to freeze/disappear
+			// for a second or two on a lexicon switch. Also sets
 			// plain-text search (see _LookupKey()'s fallback) replaces
 			// it with matches instead, temporarily, and clears that
 			// flag; the next entry actually shown calls this again via
@@ -131,10 +144,12 @@ private:
 			BScrollView*	fResultScroll;
 			DictionaryEntryView*	fEntryView;
 
-			// Cached for fCurrentLexicon specifically -- cleared on
-			// every module switch (see DICT_SELECT_MODULE) so a stale
-			// list from a different module is never paged through.
-			std::vector<BString>	fAllKeys;
+			// One entry per lexicon ever visited this session -- see
+			// _EnsureAllKeys()'s own comment on why a single slot
+			// cleared on every switch (the original design) cost a
+			// full re-walk every time the user went back to a lexicon
+			// they'd already opened once.
+			std::map<SGModule*, std::vector<BString> >	fAllKeysByLexicon;
 			BString			fCurrentKey;
 			// See _PopulateAllKeysList()'s own comment.
 			bool			fListShowingAllKeys;
