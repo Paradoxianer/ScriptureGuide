@@ -304,7 +304,13 @@ SGDictionaryWindow::_BuildGUI()
 	fResultList->SetSelectionMessage(new BMessage(DICT_SELECT_RESULT));
 	fResultScroll = new BScrollView("dictResultsScroll", fResultList,
 		0, false, true);
-	fResultScroll->SetExplicitMinSize(BSize(150.0f, B_SIZE_UNSET));
+	// Reported: 150px made the collapse-or-snap-to-minimum zone (see
+	// _BuildGUI()'s own comment on the split below) feel too aggressive
+	// -- collapsing the sidebar entirely is a real, wanted feature, just
+	// not one that should trigger this early. A narrower floor still
+	// shows a short key before truncating, while leaving much more room
+	// to drag before the collapse threshold kicks in.
+	fResultScroll->SetExplicitMinSize(BSize(60.0f, B_SIZE_UNSET));
 
 	fEntryView = new DictionaryEntryView("dictEntry", fOwner);
 	fEntryView->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
@@ -328,18 +334,18 @@ SGDictionaryWindow::_BuildGUI()
 		.End()
 		// Weighted 1:2 for its initial size only -- the divider drags
 		// freely from there, fResultScroll's own min-width (above) is
-		// the only hard floor. SetCollapsible(false): BSplitLayout's
-		// items default to collapsible (confirmed by reading Haiku's
-		// own SplitLayout.cpp -- true in ItemLayoutInfo's constructor),
-		// which snaps a pane shut entirely once it's dragged past half
-		// its minimum size instead of just stopping at that minimum --
-		// reported live as the divider "only opening and closing"
-		// rather than smoothly redistributing width between the two
-		// sides, which is what was actually wanted here.
+		// the only hard floor. Collapsible left at its default (true):
+		// BSplitLayout snaps a pane shut once it's dragged past half its
+		// minimum size (confirmed by reading Haiku's own
+		// SplitLayout.cpp) -- initially turned off here after that felt
+		// like an on/off toggle at a 150px minimum, but collapsing the
+		// sidebar away entirely is a real, wanted feature on its own;
+		// the actual fix was narrowing fResultScroll's own minimum
+		// (above) so the collapse threshold sits much closer to fully
+		// closed instead of eating most of the usable drag range.
 		.AddSplit(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
 			.Add(fResultScroll, 1.0f)
 			.Add(entryScroll, 2.0f)
-			.SetCollapsible(false)
 		.End()
 	.End();
 
