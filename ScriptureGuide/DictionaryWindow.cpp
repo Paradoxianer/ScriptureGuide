@@ -328,10 +328,18 @@ SGDictionaryWindow::_BuildGUI()
 		.End()
 		// Weighted 1:2 for its initial size only -- the divider drags
 		// freely from there, fResultScroll's own min-width (above) is
-		// the only hard floor.
+		// the only hard floor. SetCollapsible(false): BSplitLayout's
+		// items default to collapsible (confirmed by reading Haiku's
+		// own SplitLayout.cpp -- true in ItemLayoutInfo's constructor),
+		// which snaps a pane shut entirely once it's dragged past half
+		// its minimum size instead of just stopping at that minimum --
+		// reported live as the divider "only opening and closing"
+		// rather than smoothly redistributing width between the two
+		// sides, which is what was actually wanted here.
 		.AddSplit(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
 			.Add(fResultScroll, 1.0f)
 			.Add(entryScroll, 2.0f)
+			.SetCollapsible(false)
 		.End()
 	.End();
 
