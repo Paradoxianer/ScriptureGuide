@@ -15,9 +15,7 @@
 #include "SwordBackend.h"
 
 class BButton;
-class BListView;
 class BMenuField;
-class BScrollView;
 class BTextControl;
 // #32: a plain BTextView subclass, not the app's own TextDocumentView
 // engine every OTHER reference-clickable surface (Bible columns, notes,
@@ -26,6 +24,15 @@ class BTextControl;
 // addition was the point: this window's entry display had no rich-text
 // machinery at all before this, so there was nothing bigger to extend.
 class DictionaryEntryView;
+// A thin BColumnListView wrapper (defined in DictionaryWindow.cpp, next
+// to its one use) -- replaced a plain BListView after it turned out to
+// scale badly to a Strong's-numbered lexicon's several thousand keys:
+// BListView::FrameResized() unconditionally re-measures every item on
+// every resize tick (confirmed by reading Haiku's own ListView.cpp),
+// which is what made dragging the sidebar/entry divider (see
+// _BuildGUI()) laggy. BColumnListView's own OutlineView::FrameResized()
+// only touches its tracked visible-rect bookkeeping, no per-item work.
+class DictionaryResultListView;
 
 #define DICT_SELECT_MODULE	'DCsm'
 #define DICT_LOOKUP			'DClk'
@@ -104,13 +111,15 @@ private:
 			// full walk.
 			void			_EnsureAllKeys();
 			// Replaces fResultList's contents with every key of
-			// fCurrentLexicon (see _EnsureAllKeys()), via BListView::
-			// AddList() rather than one AddItem() call per key --
-			// measured live: 736ms for 5522 individual AddItem() calls
-			// vs. 351ms for the same items via one AddList() call, and
-			// this runs synchronously on the window's own thread, which
-			// is what made the whole window appear to freeze/disappear
-			// for a second or two on a lexicon switch. Also sets
+			// fCurrentLexicon (see _EnsureAllKeys()), via
+			// DictionaryResultListView::AddKeyRows() (one bulk
+			// BColumnListView::AddRows() call) rather than one row at a
+			// time -- measured live against the old plain-BListView
+			// design: 736ms for 5522 individual AddItem() calls vs.
+			// 351ms for the same items via one AddList() call, and this
+			// runs synchronously on the window's own thread, which is
+			// what made the whole window appear to freeze/disappear for
+			// a second or two on a lexicon switch. Also sets
 			// plain-text search (see _LookupKey()'s fallback) replaces
 			// it with matches instead, temporarily, and clears that
 			// flag; the next entry actually shown calls this again via
@@ -140,8 +149,7 @@ private:
 
 			BMenuField*		fModuleField;
 			BTextControl*	fLookupField;
-			BListView*		fResultList;
-			BScrollView*	fResultScroll;
+			DictionaryResultListView*	fResultList;
 			DictionaryEntryView*	fEntryView;
 
 			// One entry per lexicon ever visited this session -- see

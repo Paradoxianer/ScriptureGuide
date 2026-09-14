@@ -9,10 +9,10 @@
 
 #include <Button.h>
 #include <Catalog.h>
+#include <ColumnListView.h>
+#include <ColumnTypes.h>
 #include <LayoutBuilder.h>
 #include <List.h>
-#include <ListItem.h>
-#include <ListView.h>
 #include <MenuField.h>
 #include <MenuItem.h>
 #include <Messenger.h>
@@ -241,6 +241,91 @@ private:
 };
 
 
+// The sidebar's own list widget -- a plain BListView until it turned out
+// not to scale to a Strong's-numbered lexicon's several thousand keys.
+// Confirmed by reading Haiku's own ListView.cpp: BListView::FrameResized()
+// unconditionally calls _UpdateItems(), which re-measures EVERY item on
+// EVERY resize tick, regardless of whether it's actually visible -- this
+// is what made dragging the sidebar/entry divider (see _BuildGUI()) laggy
+// at that item count. BColumnListView's own OutlineView::FrameResized()
+// only updates its own tracked visible-rect bookkeeping; no per-item
+// work at all. Modeled directly on LogosVerseListWindow.cpp's own
+// VerseListRowListView -- same CountItems()/CurrentSelection(int32)/
+// Select(int32)/MakeEmpty() position-based wrappers, so every *caller*
+// here keeps the same BListView-shaped mental model it already had.
+class DictionaryResultListView : public BColumnListView {
+public:
+	DictionaryResultListView(const char* name)
+		:
+		BColumnListView(name, B_WILL_DRAW | B_NAVIGABLE | B_FRAME_EVENTS,
+			B_FANCY_BORDER, true)
+	{
+		SetSelectionMode(B_SINGLE_SELECTION_LIST);
+		// Off: these rows reflect a lexicon's own natural key order --
+		// numeric for a Strong's-numbered module, alphabetic for a
+		// word-keyed one -- and a header-click re-sort as a plain
+		// string would put "00010" before "00002".
+		SetSortingEnabled(false);
+		// No latch column -- these rows are always flat, never nested,
+		// so the space BColumnListView normally reserves on the left
+		// for an expand/collapse arrow is just wasted width here.
+		SetLatchWidth(0);
+		AddColumn(new BStringColumn("", 200, 40, 1000, B_TRUNCATE_END), 0);
+	}
+
+	int32 CountItems() { return CountRows(); }
+
+	// Position-based, matching fCurrentKey/fAllKeysByLexicon's own
+	// index-free bookkeeping. CurrentSelection(BRow*) walks a linked
+	// chain of *pointers*, not indices -- see VerseListRowListView's own
+	// comment on the same pattern.
+	int32 CurrentSelection(int32 index = 0)
+	{
+		BRow* row = BColumnListView::CurrentSelection();
+		for (int32 i = 0; i < index && row != NULL; i++)
+			row = BColumnListView::CurrentSelection(row);
+		return row != NULL ? IndexOf(row) : -1;
+	}
+
+	void Select(int32 index)
+	{
+		DeselectAll();
+		BRow* row = RowAt(index);
+		if (row != NULL)
+			AddToSelection(row);
+	}
+
+	void MakeEmpty() { Clear(); }
+
+	// One BColumnListView::AddRows() bulk call rather than one AddRow()
+	// per key -- measured live against the plain-BListView design this
+	// replaced: 736ms for 5522 individual BListView::AddItem() calls
+	// vs. 351ms for the same items via one BListView::AddList() call;
+	// BColumnListView::AddRows() batches its own relayout/invalidate the
+	// same way (confirmed by reading ColumnListView.cpp), so this keeps
+	// that win rather than trading it away for the resize-lag fix.
+	void AddKeyRows(const std::vector<BString>& keys)
+	{
+		BList rows((int32)keys.size());
+		for (size_t i = 0; i < keys.size(); i++) {
+			BRow* row = new BRow();
+			row->SetField(new BStringField(keys[i].String()), 0);
+			rows.AddItem(row);
+		}
+		AddRows(&rows, -1, NULL);
+	}
+
+	const char* TextAt(int32 index)
+	{
+		BRow* row = RowAt(index);
+		if (row == NULL)
+			return NULL;
+		BStringField* field = (BStringField*)row->GetField(0);
+		return field != NULL ? field->String() : NULL;
+	}
+};
+
+
 SGDictionaryWindow::SGDictionaryWindow(BRect frame, SwordBackend* backend,
 	BMessenger* owner)
 	:
@@ -306,17 +391,18 @@ SGDictionaryWindow::_BuildGUI()
 	// either -- reported: once the sidebar always shows every key with
 	// the current one highlighted, a label repeating that same key in
 	// words next to it was pure redundancy.
-	fResultList = new BListView("dictResults", B_SINGLE_SELECTION_LIST);
+	// DictionaryResultListView (BColumnListView-backed, see its own
+	// comment) manages its own scrolling -- no separate BScrollView
+	// wrapper needed the way a plain BListView required.
+	fResultList = new DictionaryResultListView("dictResults");
 	fResultList->SetSelectionMessage(new BMessage(DICT_SELECT_RESULT));
-	fResultScroll = new BScrollView("dictResultsScroll", fResultList,
-		0, false, true);
 	// Reported: 150px made the collapse-or-snap-to-minimum zone (see
 	// _BuildGUI()'s own comment on the split below) feel too aggressive
 	// -- collapsing the sidebar entirely is a real, wanted feature, just
 	// not one that should trigger this early. A narrower floor still
 	// shows a short key before truncating, while leaving much more room
 	// to drag before the collapse threshold kicks in.
-	fResultScroll->SetExplicitMinSize(BSize(77.0f, B_SIZE_UNSET));
+	fResultList->SetExplicitMinSize(BSize(77.0f, B_SIZE_UNSET));
 
 	fEntryView = new DictionaryEntryView("dictEntry", fOwner);
 	fEntryView->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
@@ -339,18 +425,18 @@ SGDictionaryWindow::_BuildGUI()
 			.Add(lookupButton)
 		.End()
 		// Weighted 1:2 for its initial size only -- the divider drags
-		// freely from there, fResultScroll's own min-width (above) is
+		// freely from there, fResultList's own min-width (above) is
 		// the only hard floor. Collapsible left at its default (true):
 		// BSplitLayout snaps a pane shut once it's dragged past half its
 		// minimum size (confirmed by reading Haiku's own
 		// SplitLayout.cpp) -- initially turned off here after that felt
 		// like an on/off toggle at a 150px minimum, but collapsing the
 		// sidebar away entirely is a real, wanted feature on its own;
-		// the actual fix was narrowing fResultScroll's own minimum
+		// the actual fix was narrowing fResultList's own minimum
 		// (above) so the collapse threshold sits much closer to fully
 		// closed instead of eating most of the usable drag range.
 		.AddSplit(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
-			.Add(fResultScroll, 1.0f)
+			.Add(fResultList, 1.0f)
 			.Add(entryScroll, 2.0f)
 		.End()
 	.End();
@@ -430,13 +516,11 @@ SGDictionaryWindow::_LookupKey(const char* key)
 	// _ShowEntryForKey()). Not any one key any more until a result is
 	// actually picked.
 	fCurrentKey = "";
-	while (fResultList->CountItems() > 0)
-		delete fResultList->RemoveItem((int32)0);
+	fResultList->MakeEmpty();
 	fListShowingAllKeys = false;
 
 	std::vector<BString> matches = fCurrentLexicon->SearchEntries(key);
-	for (size_t i = 0; i < matches.size(); i++)
-		fResultList->AddItem(new BStringItem(matches[i].String()));
+	fResultList->AddKeyRows(matches);
 
 	if (matches.empty()) {
 		fEntryView->SetText(B_TRANSLATE("No matching entry found."));
@@ -511,14 +595,8 @@ SGDictionaryWindow::_PopulateAllKeysList()
 	if (fCurrentLexicon == NULL)
 		return;
 	_EnsureAllKeys();
-	while (fResultList->CountItems() > 0)
-		delete fResultList->RemoveItem((int32)0);
-
-	const std::vector<BString>& keys = fAllKeysByLexicon[fCurrentLexicon];
-	BList items(keys.size());
-	for (size_t i = 0; i < keys.size(); i++)
-		items.AddItem(new BStringItem(keys[i].String()));
-	fResultList->AddList(&items);
+	fResultList->MakeEmpty();
+	fResultList->AddKeyRows(fAllKeysByLexicon[fCurrentLexicon]);
 	fListShowingAllKeys = true;
 }
 
@@ -527,10 +605,9 @@ void
 SGDictionaryWindow::_SelectKeyInList(const BString& key)
 {
 	for (int32 i = 0; i < fResultList->CountItems(); i++) {
-		BStringItem* item = (BStringItem*)fResultList->ItemAt(i);
-		if (key == item->Text()) {
+		if (key == fResultList->TextAt(i)) {
 			fResultList->Select(i);
-			fResultList->ScrollToSelection();
+			fResultList->ScrollTo(fResultList->RowAt(i));
 			return;
 		}
 	}
@@ -577,9 +654,9 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 		case DICT_SELECT_RESULT:
 		{
 			int32 selected = fResultList->CurrentSelection();
-			if (selected >= 0 && fCurrentLexicon != NULL) {
-				BStringItem* item
-					= (BStringItem*)fResultList->ItemAt(selected);
+			const char* text = selected >= 0
+				? fResultList->TextAt(selected) : NULL;
+			if (text != NULL && fCurrentLexicon != NULL) {
 				// _ShowEntryForKey() re-selects this same list to sync
 				// the sidebar after showing any entry, which sends this
 				// same message right back -- asynchronously, through
@@ -589,8 +666,8 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 				// cycle; see _ShowEntryForKey()'s own comment for why a
 				// plain re-entrancy bool does not (confirmed live: it
 				// does not, this recursed with one in place).
-				if (item->Text() != fCurrentKey)
-					_ShowEntryForKey(item->Text());
+				if (fCurrentKey != text)
+					_ShowEntryForKey(text);
 			}
 			break;
 		}
