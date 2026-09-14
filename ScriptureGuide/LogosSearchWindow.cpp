@@ -459,6 +459,13 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 						&& (searchText[0] == 'g' || searchText[0] == 'h')) {
 						searchText.SetByteAt(0, toupper(searchText[0]));
 					}
+				}
+				// Kept separate from `searchText` below (which goes on to
+				// grow the "Word//Lemma.//" wrapper) -- this is what a
+				// genuine hit's own FindStrongsWordsInText() result will
+				// report back, so it's what a hit gets checked against.
+				BString normalizedNumber(searchText);
+				if (fSearchMode == SEARCH_STRONGS) {
 					searchText.Prepend("Word//Lemma./");
 					searchText.Append("/");
 				}
@@ -476,6 +483,33 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 					sword::VerseKey myKey = sword::VerseKey(verseList[i].String());
 					myKey.setLocale(language.Code());
 					BString tmpstr(fCurrentModule->GetVerse(verseList[i].String()));
+
+					// SEARCHTYPE_ENTRYATTR can report a hit the module's
+					// own attribute data does not actually back up --
+					// confirmed live against a real installed module
+					// (GerSch): searching H7456 returned Deuteronomy 8:4
+					// ("thy clothes... thy feet... forty years"), which
+					// has nothing to do with hunger and no H7456 tag
+					// anywhere in it. 8 of 9 hits for that search were
+					// this kind of false positive. Re-checking each hit
+					// against the same FindStrongsWordsInText() #106
+					// already trusts for highlighting -- the module's
+					// own Word/Lemma attributes, not SWORD's search
+					// index -- filters these out instead of showing (or
+					// counting, for #107) a result that is not real.
+					if (fSearchMode == SEARCH_STRONGS) {
+						std::vector<StrongsWord> words
+							= FindStrongsWordsInText(fCurrentModule->GetModule(),
+								tmpstr);
+						bool confirmed = false;
+						for (size_t w = 0; w < words.size() && !confirmed; w++) {
+							if (words[w].strongsNumber == normalizedNumber)
+								confirmed = true;
+						}
+						if (!confirmed)
+							continue;
+					}
+
 					searchResults->AddItem(new BibleItem(myKey.getText(), tmpstr.String(), fSearchString.String()));
        			}
 				findButton->SetEnabled(true);
