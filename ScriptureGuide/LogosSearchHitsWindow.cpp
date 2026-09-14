@@ -1,0 +1,536 @@
+/*
+ * Copyright 2026, ScriptureGuide contributors.
+ * All rights reserved. Distributed under the terms of the GPL v2 license.
+ */
+
+#include "LogosSearchHitsWindow.h"
+
+#include <algorithm>
+#include <map>
+
+#include <Catalog.h>
+#include <LayoutBuilder.h>
+#include <ScrollView.h>
+#include <StringView.h>
+#include <View.h>
+#include <Window.h>
+
+#include "constants.h"
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "SearchHitsWindow"
+
+
+// Six broad genre groups across the 66-book canonical order
+// GetBookNames()/GetBookChapterCounts() already enumerate in (5 Law +
+// 12 History + 5 Poetry/Wisdom + 17 Prophets [major and minor combined]
+// + 5 Gospels/Acts + 22 Epistles/Revelation = 66) -- matched by
+// POSITION in that list, not by name, so this works under any locale
+// (a German system's book names are already localized by the time
+// they reach here; matching English names against them would silently
+// group nothing).
+static int32
+BookGroup(int32 bookIndex)
+{
+	if (bookIndex < 5)
+		return 0;	// Law
+	if (bookIndex < 17)
+		return 1;	// History
+	if (bookIndex < 22)
+		return 2;	// Poetry / Wisdom
+	if (bookIndex < 39)
+		return 3;	// Prophets
+	if (bookIndex < 44)
+		return 4;	// Gospels / Acts
+	return 5;		// Epistles / Revelation
+}
+
+
+static rgb_color
+BookGroupColor(int32 group)
+{
+	static const rgb_color kColors[6] = {
+		{ 216, 191, 230, 255 },	// Law -- light purple
+		{ 191, 209, 232, 255 },	// History -- light blue
+		{ 197, 224, 197, 255 },	// Poetry/Wisdom -- light green
+		{ 232, 219, 180, 255 },	// Prophets -- light tan
+		{ 184, 224, 224, 255 },	// Gospels/Acts -- light teal
+		{ 232, 197, 197, 255 }	// Epistles/Revelation -- light red
+	};
+	return kColors[group % 6];
+}
+
+
+// A hit chapter is drawn in one consistent, high-contrast colour
+// regardless of genre group -- the point is to be easy to spot against
+// the muted per-group background, not to also encode genre for
+// chapters that already carry the far more important "has a hit" fact.
+static const rgb_color kHitColor = { 214, 90, 50, 255 };
+
+
+// One row per book (see GetBookChapterCounts()), one small square per
+// chapter of that book -- coloured by genre group (see BookGroupColor())
+// normally, or kHitColor if this exact book+chapter has at least one
+// hit. Hovering a hit square shows its first hit's verse text as a
+// native tool tip; clicking it posts SEARCHHITS_JUMP with that hit's
+// reference to the window itself.
+class ChapterGridView : public BView {
+public:
+	ChapterGridView(const char* name, const std::vector<SearchHit>& hits)
+		:
+		BView(name, B_WILL_DRAW | B_FRAME_EVENTS),
+		fBooks(GetBookChapterCounts())
+	{
+		SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+
+		for (size_t i = 0; i < fBooks.size(); i++)
+			fBookIndex[fBooks[i].book] = (int32)i;
+
+		for (size_t i = 0; i < hits.size(); i++) {
+			BString key;
+			key << hits[i].book << "|" << hits[i].chapter;
+			fHits[key].push_back(&hits[i]);
+		}
+		// `hits` outlives this view (owned by SGSearchHitsWindow, which
+		// owns this view too, and never mutates it after construction)
+		// -- storing pointers into it directly is safe and avoids a
+		// second full copy of every hit's rendered verse text.
+
+		font_height fh;
+		GetFontHeight(&fh);
+		fRowHeight = ceilf(fh.ascent + fh.descent + fh.leading) + 2.0f;
+		fSquareSize = fRowHeight - 2.0f;
+		fLabelWidth = 0.0f;
+		for (size_t i = 0; i < fBooks.size(); i++) {
+			float width = StringWidth(fBooks[i].book.String());
+			if (width > fLabelWidth)
+				fLabelWidth = width;
+		}
+		fLabelWidth += 8.0f;
+
+		int32 maxChapters = 0;
+		for (size_t i = 0; i < fBooks.size(); i++) {
+			if (fBooks[i].chapters > maxChapters)
+				maxChapters = fBooks[i].chapters;
+		}
+		fMaxChapters = maxChapters;
+	}
+
+	virtual void GetPreferredSize(float* _width, float* _height)
+	{
+		if (_width != NULL) {
+			*_width = fLabelWidth
+				+ fMaxChapters * fSquareSize + 8.0f;
+		}
+		if (_height != NULL)
+			*_height = fBooks.size() * fRowHeight + 8.0f;
+	}
+
+	virtual BSize MinSize()
+	{
+		float width, height;
+		GetPreferredSize(&width, &height);
+		return BSize(width, 200.0f);
+	}
+
+	virtual BSize MaxSize()
+	{
+		float width, height;
+		GetPreferredSize(&width, &height);
+		return BSize(width, height);
+	}
+
+	virtual void Draw(BRect updateRect)
+	{
+		SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+		FillRect(updateRect, B_SOLID_LOW);
+
+		for (size_t row = 0; row < fBooks.size(); row++) {
+			float top = 4.0f + row * fRowHeight;
+			if (top > updateRect.bottom)
+				break;
+			if (top + fRowHeight < updateRect.top)
+				continue;
+
+			font_height fh;
+			GetFontHeight(&fh);
+			DrawString(fBooks[row].book.String(),
+				BPoint(4.0f, top + fh.ascent));
+
+			int32 group = BookGroup((int32)row);
+			for (int32 chapter = 1; chapter <= fBooks[row].chapters;
+					chapter++) {
+				BRect square = _SquareFor((int32)row, chapter);
+				bool hasHit = _HitsFor(fBooks[row].book, chapter) != NULL;
+				SetHighColor(hasHit ? kHitColor : BookGroupColor(group));
+				FillRect(square);
+			}
+		}
+	}
+
+						// `hits` must outlive this view -- same
+						// requirement and reasoning as the constructor's
+						// own comment above (SGSearchHitsWindow::SetHits()
+						// reassigns its own fHits member first, then calls
+						// this with that now-updated member).
+	void SetHits(const std::vector<SearchHit>& hits)
+	{
+		fHits.clear();
+		for (size_t i = 0; i < hits.size(); i++) {
+			BString key;
+			key << hits[i].book << "|" << hits[i].chapter;
+			fHits[key].push_back(&hits[i]);
+		}
+		Invalidate();
+	}
+
+	virtual void MouseMoved(BPoint where, uint32 code,
+		const BMessage* dragMessage)
+	{
+		int32 row, chapter;
+		if (_SquareAt(where, &row, &chapter)) {
+			const std::vector<const SearchHit*>* hits
+				= _HitsFor(fBooks[row].book, chapter);
+			if (hits != NULL && !hits->empty()) {
+				BString tip((*hits)[0]->reference);
+				tip << ": " << (*hits)[0]->verseText;
+				SetToolTip(tip.String());
+				return;
+			}
+		}
+		SetToolTip((BToolTip*)NULL);
+	}
+
+	virtual void MouseDown(BPoint where)
+	{
+		int32 row, chapter;
+		if (_SquareAt(where, &row, &chapter)) {
+			const std::vector<const SearchHit*>* hits
+				= _HitsFor(fBooks[row].book, chapter);
+			if (hits != NULL && !hits->empty()) {
+				BMessage jump(SEARCHHITS_JUMP);
+				jump.AddString("key", (*hits)[0]->reference);
+				if (Window() != NULL)
+					Window()->PostMessage(&jump);
+				return;
+			}
+		}
+		BView::MouseDown(where);
+	}
+
+private:
+	BRect _SquareFor(int32 row, int32 chapter) const
+	{
+		float top = 4.0f + row * fRowHeight;
+		float left = fLabelWidth + (chapter - 1) * fSquareSize;
+		return BRect(left, top, left + fSquareSize - 1,
+			top + fSquareSize - 1);
+	}
+
+	bool _SquareAt(BPoint where, int32* _row, int32* _chapter) const
+	{
+		if (where.x < fLabelWidth)
+			return false;
+		int32 row = (int32)((where.y - 4.0f) / fRowHeight);
+		if (row < 0 || (size_t)row >= fBooks.size())
+			return false;
+		int32 chapter = (int32)((where.x - fLabelWidth) / fSquareSize) + 1;
+		if (chapter < 1 || chapter > fBooks[row].chapters)
+			return false;
+		*_row = row;
+		*_chapter = chapter;
+		return true;
+	}
+
+	const std::vector<const SearchHit*>* _HitsFor(const BString& book,
+		int32 chapter) const
+	{
+		BString key;
+		key << book << "|" << chapter;
+		std::map<BString, std::vector<const SearchHit*> >::const_iterator
+			it = fHits.find(key);
+		return it != fHits.end() ? &it->second : NULL;
+	}
+
+	std::vector<BookChapterCount>	fBooks;
+	std::map<BString, int32>		fBookIndex;
+	std::map<BString, std::vector<const SearchHit*> >	fHits;
+	float	fRowHeight;
+	float	fSquareSize;
+	float	fLabelWidth;
+	int32	fMaxChapters;
+};
+
+
+// One rectangle per book that has at least one hit, area-proportional
+// to that book's hit count, coloured by the same genre grouping the
+// chapter grid uses. A plain slice-and-dice layout (alternating
+// horizontal/vertical strips, each sized by its share of the
+// remaining total) rather than a fully squarified treemap -- less
+// visually optimal for very uneven data (can produce a thin sliver for
+// a book with very few hits next to one with many), but a handful of
+// lines instead of the Bruls/Huizing/van Wijk algorithm, and always
+// geometrically correct.
+class TreemapView : public BView {
+public:
+	TreemapView(const char* name, const std::vector<SearchHit>& hits)
+		:
+		BView(name, B_WILL_DRAW | B_FRAME_EVENTS)
+	{
+		SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+		_BuildItems(hits);
+	}
+
+	virtual void FrameResized(float width, float height)
+	{
+		BView::FrameResized(width, height);
+		_Layout();
+		Invalidate();
+	}
+
+	void SetHits(const std::vector<SearchHit>& hits)
+	{
+		_BuildItems(hits);
+		_Layout();
+		Invalidate();
+	}
+
+	virtual void AttachedToWindow()
+	{
+		BView::AttachedToWindow();
+		_Layout();
+	}
+
+	virtual void Draw(BRect updateRect)
+	{
+		SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+		FillRect(updateRect, B_SOLID_LOW);
+
+		for (size_t i = 0; i < fItems.size(); i++) {
+			if (!fItems[i].rect.Intersects(updateRect))
+				continue;
+			SetHighColor(BookGroupColor(fItems[i].group));
+			FillRect(fItems[i].rect);
+			SetHighColor(0, 0, 0);
+			StrokeRect(fItems[i].rect);
+
+			BString label(fItems[i].book);
+			label << " (" << fItems[i].count << ")";
+			if (StringWidth(label.String()) < fItems[i].rect.Width() - 4
+				&& fItems[i].rect.Height() > 14) {
+				font_height fh;
+				GetFontHeight(&fh);
+				DrawString(label.String(),
+					fItems[i].rect.LeftTop()
+						+ BPoint(3.0f, fh.ascent + 2.0f));
+			}
+		}
+	}
+
+	virtual void MouseDown(BPoint where)
+	{
+		for (size_t i = 0; i < fItems.size(); i++) {
+			if (!fItems[i].rect.Contains(where))
+				continue;
+			BMessage jump(SEARCHHITS_JUMP);
+			// The bare book name alone (what this used to send) isn't a
+			// resolvable reference -- confirmed live: SGMainWindow's
+			// JumpToKey()/BookFromKey() silently misparsed it and landed
+			// on Revelation (the last book) instead of the book actually
+			// clicked. This book's first hit's own reference is a real,
+			// already-valid key, same as what the chapter grid sends.
+			jump.AddString("key", fItems[i].firstReference);
+			if (Window() != NULL)
+				Window()->PostMessage(&jump);
+			return;
+		}
+		BView::MouseDown(where);
+	}
+
+private:
+	struct Item {
+		BString	book;
+		BString	firstReference;
+		int32	count;
+		int32	group;
+		BRect	rect;
+
+		static bool MoreFirst(const Item& a, const Item& b)
+		{
+			return a.count > b.count;
+		}
+	};
+
+	void _BuildItems(const std::vector<SearchHit>& hits)
+	{
+		std::vector<const char*> bookNames = GetBookNames();
+		std::map<BString, int32> bookIndex;
+		for (size_t i = 0; i < bookNames.size(); i++)
+			bookIndex[bookNames[i]] = (int32)i;
+
+		std::map<BString, int32> countByBook;
+		std::map<BString, BString> firstReferenceByBook;
+		std::vector<BString> order;
+		for (size_t i = 0; i < hits.size(); i++) {
+			if (countByBook.find(hits[i].book) == countByBook.end()) {
+				order.push_back(hits[i].book);
+				firstReferenceByBook[hits[i].book] = hits[i].reference;
+			}
+			countByBook[hits[i].book]++;
+		}
+
+		fItems.clear();
+		for (size_t i = 0; i < order.size(); i++) {
+			Item item;
+			item.book = order[i];
+			item.firstReference = firstReferenceByBook[order[i]];
+			item.count = countByBook[order[i]];
+			std::map<BString, int32>::iterator idxIt
+				= bookIndex.find(order[i]);
+			item.group = idxIt != bookIndex.end()
+				? BookGroup(idxIt->second) : 0;
+			fItems.push_back(item);
+		}
+		std::sort(fItems.begin(), fItems.end(), &Item::MoreFirst);
+	}
+
+	void _Layout()
+	{
+		int32 total = 0;
+		for (size_t i = 0; i < fItems.size(); i++)
+			total += fItems[i].count;
+		if (total <= 0)
+			return;
+
+		BRect bounds = Bounds();
+		bool horizontal = true;
+		// Alternates axis every item -- a plain, always-terminating
+		// slice-and-dice variant (each remaining item gets its exact
+		// share of whatever space is left, alternating which edge it's
+		// sliced from) rather than one single-axis pass, which would
+		// put every item in one row/column regardless of how many
+		// there are.
+		BRect remaining = bounds;
+		int32 remainingTotal = total;
+		for (size_t i = 0; i < fItems.size(); i++) {
+			float fraction = (float)fItems[i].count / remainingTotal;
+			if (horizontal) {
+				float width = remaining.Width() * fraction;
+				fItems[i].rect = BRect(remaining.left, remaining.top,
+					remaining.left + width, remaining.bottom);
+				remaining.left += width;
+			} else {
+				float height = remaining.Height() * fraction;
+				fItems[i].rect = BRect(remaining.left, remaining.top,
+					remaining.right, remaining.top + height);
+				remaining.top += height;
+			}
+			remainingTotal -= fItems[i].count;
+			horizontal = !horizontal;
+		}
+	}
+
+	std::vector<Item>	fItems;
+};
+
+
+SGSearchHitsWindow::SGSearchHitsWindow(BRect frame,
+	const std::vector<SearchHit>& hits, const char* title,
+	BMessenger* owner)
+	:
+	BWindow(frame, B_TRANSLATE("Search Hits"), B_TITLED_WINDOW_LOOK,
+		B_NORMAL_WINDOW_FEEL, B_ASYNCHRONOUS_CONTROLS),
+	fOwner(owner),
+	fHits(hits),
+	fTitle(title)
+{
+	_BuildGUI();
+}
+
+
+SGSearchHitsWindow::~SGSearchHitsWindow()
+{
+	fOwner->SendMessage(SEARCHHITS_QUIT);
+	delete fOwner;
+}
+
+
+bool
+SGSearchHitsWindow::QuitRequested()
+{
+	Hide();
+	return false;
+}
+
+
+void
+SGSearchHitsWindow::SetHits(const std::vector<SearchHit>& hits,
+	const char* title)
+{
+	// Called directly (a plain C++ call, not a posted BMessage) from
+	// SGSearchWindow's own thread -- crashed the whole team with Haiku's
+	// "Looper must be locked" debugger call the first time a second
+	// search reused an already-shown hits window, since touching this
+	// window's views from another window's thread without locking this
+	// one first is exactly what that assertion catches. The first-ever
+	// build (the constructor, from the same calling thread) never hit
+	// this: a BWindow is constructed already locked for its creating
+	// thread, and Show() is what first releases that -- SetHits() runs
+	// well after that point, once the window is running its own looper.
+	if (!Lock())
+		return;
+	fHits = hits;
+	fTitle = title;
+	fTitleView->SetText(fTitle.String());
+	fGridView->SetHits(fHits);
+	fTreemapView->SetHits(fHits);
+	Unlock();
+}
+
+
+void
+SGSearchHitsWindow::_BuildGUI()
+{
+	fTitleView = new BStringView("searchHitsTitle", fTitle.String());
+	fTitleView->SetFont(be_bold_font);
+
+	fGridView = new ChapterGridView("searchHitsGrid", fHits);
+	BScrollView* gridScroll = new BScrollView("searchHitsGridScroll",
+		fGridView, 0, false, true);
+
+	fTreemapView = new TreemapView("searchHitsTreemap", fHits);
+	fTreemapView->SetExplicitMinSize(BSize(B_SIZE_UNSET, 150.0f));
+
+	BLayoutBuilder::Group<>(this, B_VERTICAL)
+		.SetInsets(B_USE_SMALL_INSETS)
+		.Add(fTitleView)
+		.AddSplit(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
+			.Add(gridScroll, 2.0f)
+			.Add(fTreemapView, 1.0f)
+		.End()
+	.End();
+
+	SetSizeLimits(400.0f, 4000.0f, 300.0f, 4000.0f);
+}
+
+
+void
+SGSearchHitsWindow::MessageReceived(BMessage* message)
+{
+	switch (message->what) {
+		case SEARCHHITS_JUMP:
+		{
+			BString key;
+			if (message->FindString("key", &key) == B_OK && fOwner != NULL) {
+				BMessage jump(SG_BIBLE);
+				jump.AddString("key", key);
+				fOwner->SendMessage(&jump);
+			}
+			break;
+		}
+
+		default:
+			BWindow::MessageReceived(message);
+			break;
+	}
+}

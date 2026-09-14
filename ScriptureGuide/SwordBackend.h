@@ -231,6 +231,31 @@ std::vector<StrongsCrossReference> FindStrongsCrossReferencesInText(
 
 std::vector<const char*>	GetBookNames(void);
 
+// One book's chapter count, in the same canonical (Genesis..Revelation)
+// order GetBookNames() already enumerates -- what the search-hits
+// chapter grid needs to know how many squares to draw per row,
+// regardless of which module answered the search (chapter counts are a
+// versification-system property, not a per-module one).
+struct BookChapterCount {
+	BString	book;
+	int32	chapters;
+};
+
+std::vector<BookChapterCount>	GetBookChapterCounts(void);
+
+// One verse-level hit from a search -- generic across whatever produced
+// it (#83's Strong's-number search, a plain text search, ...) so the
+// search-hits visualization (a book treemap plus a per-chapter grid,
+// modeled on bibleanalyzer.com's "Interactive Search Hits Chart") can
+// work from any of them without knowing which.
+struct SearchHit {
+	BString	book;
+	int32	chapter;
+	int32	verse;
+	BString	reference;	// display key, e.g. "Genesis 1:1"
+	BString	verseText;	// rendered verse text, for a hover preview
+};
+
 // The main interface with the SWORD library	
 class SGModule
 {
@@ -315,6 +340,15 @@ private:
 };
 
 typedef BObjectList<SGModule, true> SGModuleList;
+
+// Turns a plain list of verse keys (SGModule::SearchModule()'s own
+// return shape) into the richer SearchHit list the search-hits
+// visualization (LogosSearchHitsWindow) needs -- parses each key's
+// book/chapter/verse via VerseKey and renders its text via `module`
+// itself, so the caller doesn't have to duplicate that per search type
+// (#83's Strong's-number search, a plain text search, ...).
+std::vector<SearchHit>	BuildSearchHits(SGModule* module,
+							const std::vector<BString>& verseKeys);
 
 class SwordBackend
 {

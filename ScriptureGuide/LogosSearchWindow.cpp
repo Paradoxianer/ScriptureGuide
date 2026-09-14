@@ -33,6 +33,7 @@
 
 #include "constants.h"
 #include "LogosApp.h"
+#include "LogosSearchHitsWindow.h"
 #include "LogosSearchWindow.h"
 #include "SwordBackend.h"
 #include "Preferences.h"
@@ -83,6 +84,7 @@ SGSearchWindow::SGSearchWindow(BRect frame,
 					BMessenger* owner)
  :	BWindow(frame, "", B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL,
 			B_NOT_ZOOMABLE | B_CLOSE_ON_ESCAPE),
+ 	fHitsWindow(NULL),
  	fMessenger(owner)
 {
 	float minw, minh, maxw, maxh;
@@ -203,9 +205,20 @@ SGSearchWindow::_ApplyModuleSelection(int32 selectIndex)
 void SGSearchWindow::BuildGUI(void)
 {
 	// The find button
-	findButton = new BButton("find_button", B_TRANSLATE("Find"), 
+	findButton = new BButton("find_button", B_TRANSLATE("Find"),
 							new BMessage(FIND_BUTTON_OK), B_WILL_DRAW);
 	SetDefaultButton(findButton);
+
+	// A per-book/per-chapter breakdown of the current results -- see
+	// LogosSearchHitsWindow's own comment (modeled on bibleanalyzer.com's
+	// "Interactive Search Hits Chart"). Works for any search mode, not
+	// only #83's Strong's-number one -- it only ever needs the hit list
+	// FIND_BUTTON_OK already produced (verseList), not anything specific
+	// to how those hits were found.
+	showHitsButton = new BButton("show_hits_button",
+		B_TRANSLATE("Show Hits Chart"), new BMessage(FIND_SHOW_HITS),
+		B_WILL_DRAW);
+	showHitsButton->SetEnabled(false);
 	
 	// The search query box
 	searchString = new BTextControl("searchstring", B_TRANSLATE("Find: "), "", 
@@ -298,6 +311,7 @@ void SGSearchWindow::BuildGUI(void)
 		.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
 			.Add(searchString)
 			.Add(findButton)
+			.Add(showHitsButton)
 		.End()
 		.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
 			.Add(moduleField)
@@ -470,19 +484,25 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 					searchText.Append("/");
 				}
 
-				verseList = fCurrentModule->SearchModule(fSearchMode, fSearchFlags,
+				std::vector<BString> rawHits = fCurrentModule->SearchModule(
+														fSearchMode, fSearchFlags,
 														searchText.String(),
 														books[fSearchStart],
 														books[fSearchEnd],
 														searchStatus);
+				// Rebuilt below from whichever of rawHits actually get
+				// confirmed -- see the false-positive comment just below
+				// -- so verseList (also used by FIND_SHOW_HITS) never
+				// disagrees with what searchResults actually displays.
+				verseList.clear();
 				searchResults->MakeEmpty();
 				BLanguage language;
 				BLocale::Default()->GetLanguage(&language);
-				for (uint32 i = 0; i < verseList.size(); i++)
+				for (uint32 i = 0; i < rawHits.size(); i++)
        			{
-					sword::VerseKey myKey = sword::VerseKey(verseList[i].String());
+					sword::VerseKey myKey = sword::VerseKey(rawHits[i].String());
 					myKey.setLocale(language.Code());
-					BString tmpstr(fCurrentModule->GetVerse(verseList[i].String()));
+					BString tmpstr(fCurrentModule->GetVerse(rawHits[i].String()));
 
 					// SEARCHTYPE_ENTRYATTR can report a hit the module's
 					// own attribute data does not actually back up --
@@ -510,10 +530,12 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 							continue;
 					}
 
+					verseList.push_back(rawHits[i]);
 					searchResults->AddItem(new BibleItem(myKey.getText(), tmpstr.String(), fSearchString.String()));
        			}
 				findButton->SetEnabled(true);
 				searchString->SetEnabled(true);
+				showHitsButton->SetEnabled(!verseList.empty());
 			}
  			break;
 		}
@@ -551,6 +573,39 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 				verseSelected->Insert(fCurrentModule->GetParagraph(item->GetKey()));
 				verseSelected->Select(0, 0);
 			}
+			break;
+		}
+
+		case FIND_SHOW_HITS:
+		{
+			std::vector<SearchHit> hits
+				= BuildSearchHits(fCurrentModule, verseList);
+
+			BString title;
+			title << hits.size() << " "
+				<< B_TRANSLATE("hits for") << " \"" << fSearchString
+				<< "\" " << B_TRANSLATE("in") << " "
+				<< fCurrentModule->FullName();
+
+			if (fHitsWindow == NULL) {
+				BRect r(Frame());
+				r.OffsetBy(30, 30);
+				r.right = r.left + 520;
+				r.bottom = r.top + 420;
+				// fMessenger already targets the SGMainWindow that opened
+				// this search window -- a copy of it (not fMessenger
+				// itself, which this window's own destructor still needs)
+				// gives the hits window the same jump target, so clicking
+				// a chart square/rectangle navigates that main window
+				// directly rather than this search window (which doesn't
+				// handle SG_BIBLE at all).
+				fHitsWindow = new SGSearchHitsWindow(r, hits, title.String(),
+					new BMessenger(*fMessenger));
+			} else {
+				fHitsWindow->SetHits(hits, title.String());
+			}
+			fHitsWindow->Show();
+			fHitsWindow->Activate(true);
 			break;
 		}
 

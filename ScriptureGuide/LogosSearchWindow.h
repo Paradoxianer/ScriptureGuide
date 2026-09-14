@@ -17,12 +17,14 @@
 
 class VersePreview;
 class SGModule;
+class SGSearchHitsWindow;
 
 #define FIND_QUIT			'FTqu'
 #define M_ACTIVATE_WINDOW	'ACwn'
 #define FIND_RUN_SEARCH		'FRun'
 #define FIND_SELECT_MODULE	'FSmd'
 #define FIND_UPDATE_MODULES	'FUmd'
+#define FIND_SHOW_HITS		'FShh'
 
 using namespace std;
 
@@ -107,7 +109,14 @@ private:
 	BCheckBox			*caseSensitiveCheckBox;
 	BStatusBar			*searchStatus;
 	BButton				*findButton;
-	
+	BButton				*showHitsButton;
+
+	// Lazily built the first time FIND_SHOW_HITS fires, then just
+	// Show()n/Hide()n again -- same "never actually destruct, avoid the
+	// dangling-pointer-after-Quit() race" idiom SGMainWindow already
+	// uses for fDictionaryWindow/fSearchWindow themselves.
+	SGSearchHitsWindow	*fHitsWindow;
+
 	SGModule			*fCurrentModule;
 	
 	int					fSearchMode;

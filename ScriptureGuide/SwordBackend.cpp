@@ -775,6 +775,46 @@ vector<const char*> GetBookNames(void)
 }
 
 
+std::vector<BookChapterCount> GetBookChapterCounts(void)
+{
+	std::vector<BookChapterCount> result;
+	vector<const char*> books = GetBookNames();
+	for (size_t i = 0; i < books.size(); i++) {
+		BookChapterCount entry;
+		entry.book = books[i];
+		entry.chapters = ChaptersInBook(books[i]);
+		result.push_back(entry);
+	}
+	return result;
+}
+
+
+std::vector<SearchHit>
+BuildSearchHits(SGModule* module, const std::vector<BString>& verseKeys)
+{
+	std::vector<SearchHit> result;
+	if (module == NULL)
+		return result;
+
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+
+	for (size_t i = 0; i < verseKeys.size(); i++) {
+		VerseKey key(verseKeys[i].String());
+		key.setLocale(language.Code());
+
+		SearchHit hit;
+		hit.book = key.getBookName();
+		hit.chapter = key.getChapter();
+		hit.verse = key.getVerse();
+		hit.reference = key.getText();
+		hit.verseText = module->GetVerse(verseKeys[i].String());
+		result.push_back(hit);
+	}
+	return result;
+}
+
+
 int ChaptersInBook(const char* book)
 {
 	BLanguage language;

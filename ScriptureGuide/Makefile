@@ -35,6 +35,7 @@ SRCS = \
 	 FontPanel.cpp  \
 	 LogosApp.cpp  \
 	 LogosMainWindow.cpp  \
+	 LogosSearchHitsWindow.cpp  \
 	 LogosSearchWindow.cpp  \
 	 LogosVerseListWindow.cpp  \
 	 Preferences.cpp  \
