@@ -309,20 +309,29 @@ public:
 		for (size_t i = 0; i < fItems.size(); i++) {
 			if (!fItems[i].rect.Intersects(updateRect))
 				continue;
+			// Drawn slightly smaller than the slot _Layout() actually
+			// gave this item -- a visible gap between neighbours, not
+			// just a 1px line, since adjacent same-genre-group books
+			// (light, muted colours by design -- see BookGroupColor())
+			// otherwise read as one undivided block. MouseDown() still
+			// hits-test the full, ungapped rect, so the click target
+			// stays exactly as generous as before.
+			BRect visual = fItems[i].rect.InsetByCopy(2.0f, 2.0f);
 			SetHighColor(BookGroupColor(fItems[i].group));
-			FillRect(fItems[i].rect);
-			SetHighColor(0, 0, 0);
-			StrokeRect(fItems[i].rect);
+			FillRect(visual);
+			SetHighColor(60, 60, 60);
+			SetPenSize(1.5f);
+			StrokeRect(visual);
+			SetPenSize(1.0f);
 
 			BString label(fItems[i].book);
 			label << " (" << fItems[i].count << ")";
-			if (StringWidth(label.String()) < fItems[i].rect.Width() - 4
-				&& fItems[i].rect.Height() > 14) {
+			if (StringWidth(label.String()) < visual.Width() - 4
+				&& visual.Height() > 14) {
 				font_height fh;
 				GetFontHeight(&fh);
 				DrawString(label.String(),
-					fItems[i].rect.LeftTop()
-						+ BPoint(3.0f, fh.ascent + 2.0f));
+					visual.LeftTop() + BPoint(3.0f, fh.ascent + 2.0f));
 			}
 		}
 	}
@@ -495,8 +504,13 @@ SGSearchHitsWindow::_BuildGUI()
 	fTitleView->SetFont(be_bold_font);
 
 	fGridView = new ChapterGridView("searchHitsGrid", fHits);
+	// Both scrollbars, not just vertical -- a book with many chapters
+	// (Psalms' 150) needs far more width than this window's frame ever
+	// gives it (fMaxChapters * fSquareSize easily exceeds 2000px), and
+	// with only a vertical scrollbar every chapter past whatever fits in
+	// the window's own width was simply unreachable.
 	BScrollView* gridScroll = new BScrollView("searchHitsGridScroll",
-		fGridView, 0, false, true);
+		fGridView, 0, true, true);
 
 	fTreemapView = new TreemapView("searchHitsTreemap", fHits);
 	fTreemapView->SetExplicitMinSize(BSize(B_SIZE_UNSET, 150.0f));
