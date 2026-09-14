@@ -61,19 +61,71 @@ BookGroupColor(int32 group)
 }
 
 
-// A hit chapter is drawn in one consistent, high-contrast colour
-// regardless of genre group -- the point is to be easy to spot against
-// the muted per-group background, not to also encode genre for
-// chapters that already carry the far more important "has a hit" fact.
-static const rgb_color kHitColor = { 214, 90, 50, 255 };
+// A single book's own colour -- the same genre hue BookGroupColor()
+// already gives its whole group, shaded darker the further into the
+// group this book falls, so books sharing a genre stay distinguishable
+// from each other instead of all reading as one indistinct block. Used
+// for both the chapter grid's per-row swatch and the treemap's fill, so
+// a book reads as the same colour in both places -- the two views were
+// only ever tied together by genre before, which does not help pick out
+// one specific book from among several its own colour shares a hue with.
+static rgb_color
+BookColor(int32 bookIndex)
+{
+	static const int32 kGroupStart[6] = { 0, 5, 17, 22, 39, 44 };
+	static const int32 kGroupSize[6] = { 5, 12, 5, 17, 5, 22 };
+
+	int32 group = BookGroup(bookIndex);
+	rgb_color base = BookGroupColor(group);
+
+	int32 within = bookIndex - kGroupStart[group];
+	int32 size = kGroupSize[group];
+	float t = size > 1 ? (float)within / (float)(size - 1) : 0.0f;
+	float factor = 1.0f - 0.35f * t;	// 1.0 (first in group) .. 0.65 (last)
+
+	rgb_color color;
+	color.red = (uint8)(base.red * factor);
+	color.green = (uint8)(base.green * factor);
+	color.blue = (uint8)(base.blue * factor);
+	color.alpha = 255;
+	return color;
+}
+
+
+// A hit chapter's colour scales with how many hits it actually has --
+// otherwise a chapter with one hit and a chapter with a dozen looked
+// identical, and there was no way to tell a single red square apart
+// from one standing in for several. Saturates at 4 hits rather than the
+// dataset's true maximum so one unusually dense chapter (a common word
+// can turn up 10+ times in one chapter) doesn't wash out every other
+// chapter's shade to near-white by comparison.
+static rgb_color
+HitColorForCount(int32 count)
+{
+	static const rgb_color kLight = { 245, 200, 175, 255 };
+	static const rgb_color kStrong = { 200, 60, 30, 255 };
+
+	float t = count > 4 ? 1.0f : (count <= 1 ? 0.0f : (count - 1) / 3.0f);
+	rgb_color color;
+	color.red = (uint8)(kLight.red + (kStrong.red - kLight.red) * t);
+	color.green = (uint8)(kLight.green + (kStrong.green - kLight.green) * t);
+	color.blue = (uint8)(kLight.blue + (kStrong.blue - kLight.blue) * t);
+	color.alpha = 255;
+	return color;
+}
+
+
+// Width of the per-book colour swatch ChapterGridView draws next to each
+// row's label (see BookColor()).
+static const float kSwatchWidth = 10.0f;
 
 
 // One row per book (see GetBookChapterCounts()), one small square per
 // chapter of that book -- coloured by genre group (see BookGroupColor())
-// normally, or kHitColor if this exact book+chapter has at least one
-// hit. Hovering a hit square shows its first hit's verse text as a
-// native tool tip; clicking it posts SEARCHHITS_JUMP with that hit's
-// reference to the window itself.
+// normally, or a count-scaled shade of red (see HitColorForCount()) if
+// this exact book+chapter has at least one hit. Hovering a hit square
+// shows its first hit's verse text as a native tool tip; clicking it
+// posts SEARCHHITS_JUMP with that hit's reference to the window itself.
 class ChapterGridView : public BView {
 public:
 	ChapterGridView(const char* name, const std::vector<SearchHit>& hits)
@@ -106,7 +158,9 @@ public:
 			if (width > fLabelWidth)
 				fLabelWidth = width;
 		}
-		fLabelWidth += 8.0f;
+		// kSwatchWidth + two 4px gaps -- room for the per-book colour
+		// swatch (see Draw()) between the left edge and the book name.
+		fLabelWidth += kSwatchWidth + 16.0f;
 
 		int32 maxChapters = 0;
 		for (size_t i = 0; i < fBooks.size(); i++) {
@@ -154,16 +208,34 @@ public:
 
 			font_height fh;
 			GetFontHeight(&fh);
+			// The swatch ties this row to its book's own treemap
+			// rectangle below (see BookColor()) -- genre colour alone
+			// left no way to tell, say, Job's row from Psalms' at a
+			// glance, since both share the Poetry/Wisdom hue.
+			SetHighColor(BookColor((int32)row));
+			FillRect(BRect(4.0f, top + 1.0f,
+				4.0f + kSwatchWidth, top + fRowHeight - 3.0f));
+			SetHighColor(0, 0, 0);
 			DrawString(fBooks[row].book.String(),
-				BPoint(4.0f, top + fh.ascent));
+				BPoint(8.0f + kSwatchWidth, top + fh.ascent));
 
 			int32 group = BookGroup((int32)row);
+			rgb_color plain = BookGroupColor(group);
 			for (int32 chapter = 1; chapter <= fBooks[row].chapters;
 					chapter++) {
 				BRect square = _SquareFor((int32)row, chapter);
-				bool hasHit = _HitsFor(fBooks[row].book, chapter) != NULL;
-				SetHighColor(hasHit ? kHitColor : BookGroupColor(group));
+				const std::vector<const SearchHit*>* hits
+					= _HitsFor(fBooks[row].book, chapter);
+				bool hasHit = hits != NULL && !hits->empty();
+				SetHighColor(hasHit
+					? HitColorForCount((int32)hits->size()) : plain);
 				FillRect(square);
+				// A thin border between chapters -- without it, several
+				// consecutive hit chapters read as one solid block with
+				// no way to tell how many chapters (or, combined with
+				// the colour above, how many hits) it actually covers.
+				SetHighColor(120, 120, 120);
+				StrokeRect(square);
 			}
 		}
 	}
@@ -281,6 +353,20 @@ public:
 		_BuildItems(hits);
 	}
 
+	// Fills whatever space the split (see _BuildGUI()) actually gives
+	// it, same as before -- an attempt to instead give this an intrinsic,
+	// scrollable size that grows with the book count (mirroring
+	// ChapterGridView's own fixed-size/scrollbar approach) was tried and
+	// reverted: a slice-and-dice treemap wants comparable width and
+	// height to produce sensible rectangles, and forcing the height to
+	// grow while the width stayed fixed produced an extremely tall,
+	// narrow canvas where the first one or two (of what can be 60+ for a
+	// common word) items swallowed the entire visible viewport, with
+	// every other item pushed out of view below rather than merely
+	// smaller -- confirmed live via a debug dump of the actual item
+	// list against what the window showed. A dense mosaic of small
+	// rectangles (what filling the available space instead produces)
+	// is the normal, useful treemap outcome for a many-book result.
 	virtual void FrameResized(float width, float height)
 	{
 		BView::FrameResized(width, height);
@@ -317,7 +403,11 @@ public:
 			// hits-test the full, ungapped rect, so the click target
 			// stays exactly as generous as before.
 			BRect visual = fItems[i].rect.InsetByCopy(2.0f, 2.0f);
-			SetHighColor(BookGroupColor(fItems[i].group));
+			// The same per-book colour as this book's row swatch in the
+			// chapter grid (see BookColor()) -- ties a treemap rectangle
+			// back to a specific grid row instead of just its genre.
+			SetHighColor(fItems[i].bookIndex >= 0
+				? BookColor(fItems[i].bookIndex) : BookGroupColor(0));
 			FillRect(visual);
 			SetHighColor(60, 60, 60);
 			SetPenSize(1.5f);
@@ -361,7 +451,10 @@ private:
 		BString	book;
 		BString	firstReference;
 		int32	count;
-		int32	group;
+		// Canonical 0-65 book index (see GetBookNames()), -1 if this
+		// book's name did not match any of them -- used to look up this
+		// item's own colour (see BookColor()), not just its genre group.
+		int32	bookIndex;
 		BRect	rect;
 
 		static bool MoreFirst(const Item& a, const Item& b)
@@ -396,8 +489,7 @@ private:
 			item.count = countByBook[order[i]];
 			std::map<BString, int32>::iterator idxIt
 				= bookIndex.find(order[i]);
-			item.group = idxIt != bookIndex.end()
-				? BookGroup(idxIt->second) : 0;
+			item.bookIndex = idxIt != bookIndex.end() ? idxIt->second : -1;
 			fItems.push_back(item);
 		}
 		std::sort(fItems.begin(), fItems.end(), &Item::MoreFirst);
