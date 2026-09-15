@@ -281,8 +281,39 @@ public:
 			const std::vector<const SearchHit*>* hits
 				= _HitsFor(fBooks[row].book, chapter);
 			if (hits != NULL && !hits->empty()) {
-				BString tip((*hits)[0]->reference);
-				tip << ": " << (*hits)[0]->verseText;
+				BString tip;
+				if (hits->size() == 1) {
+					tip << (*hits)[0]->reference << ": "
+						<< (*hits)[0]->verseText;
+				} else {
+					// A single hit's reference+text used to be shown
+					// even when this chapter's own square (see
+					// HitColorForCount()) was already visibly darker for
+					// having several -- nothing actually said how many,
+					// or what the others were. Caps at 4 lines so one
+					// very dense chapter (a common word can turn up
+					// 10+ times) doesn't turn the tooltip into a wall of
+					// text.
+					static const size_t kMaxShown = 4;
+					size_t shown = std::min(hits->size(), kMaxShown);
+					BString header;
+					header.SetToFormat(
+						B_TRANSLATE("%d hits in this chapter:"),
+						(int)hits->size());
+					tip << header << "\n";
+					for (size_t k = 0; k < shown; k++) {
+						if (k > 0)
+							tip << "\n";
+						tip << (*hits)[k]->reference << ": "
+							<< (*hits)[k]->verseText;
+					}
+					if (hits->size() > shown) {
+						BString more;
+						more.SetToFormat(B_TRANSLATE("… and %d more"),
+							(int)(hits->size() - shown));
+						tip << "\n" << more;
+					}
+				}
 				SetToolTip(tip.String());
 				return;
 			}
@@ -446,6 +477,17 @@ public:
 		SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 		FillRect(updateRect, B_SOLID_LOW);
 
+		// A smaller font than the surrounding UI (labels are truncated
+		// with an ellipsis below, but that only goes so far before
+		// there's no legible label left) -- computed once, not per item.
+		BFont font;
+		GetFont(&font);
+		font.SetSize(font.Size() * 0.85f);
+		font_height fh;
+		font.GetHeight(&fh);
+		float lineHeight = fh.ascent + fh.descent;
+		SetFont(&font);
+
 		for (size_t i = 0; i < fItems.size(); i++) {
 			if (!fItems[i].rect.Intersects(updateRect))
 				continue;
@@ -468,12 +510,18 @@ public:
 			StrokeRect(visual);
 			SetPenSize(1.0f);
 
+			// Truncated with an ellipsis to whatever width this specific
+			// rectangle actually has -- squarified rectangles vary
+			// continuously in size (see _Layout()), and the previous
+			// all-or-nothing "does the full label fit" check left most
+			// of them with no label at all the moment a full
+			// "Book (count)" string didn't fit, which was most of them
+			// for any but the largest few books.
 			BString label(fItems[i].book);
 			label << " (" << fItems[i].count << ")";
-			if (StringWidth(label.String()) < visual.Width() - 4
-				&& visual.Height() > 14) {
-				font_height fh;
-				GetFontHeight(&fh);
+			float maxWidth = visual.Width() - 6.0f;
+			if (maxWidth > 16.0f && visual.Height() > lineHeight + 4.0f) {
+				font.TruncateString(&label, B_TRUNCATE_END, maxWidth);
 				DrawString(label.String(),
 					visual.LeftTop() + BPoint(3.0f, fh.ascent + 2.0f));
 			}
