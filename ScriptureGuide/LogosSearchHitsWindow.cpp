@@ -180,48 +180,18 @@ public:
 			*_height = fBooks.size() * fRowHeight + 8.0f;
 	}
 
-	// Width is pinned exactly (Min == Max == the real full width) --
-	// safe, and needed for the horizontal scrollbar, because the
-	// enclosing split is B_VERTICAL: it only ever divides HEIGHT between
-	// this and the treemap below, so a large declared width here never
-	// competes with anything and just becomes this pane's own
-	// scrollable content width.
-	//
-	// Height is deliberately NOT pinned to the real full height the same
-	// way -- tried first, and it broke both panes completely rather than
-	// just this one: height IS the axis the split divides, and 66 books'
-	// worth of real height (1000px+) is far more than this split can
-	// ever actually give this pane alongside the treemap, so the split's
-	// own collapse-when-a-share-falls-far-short-of-its-minimum behaviour
-	// (the same rule documented on the splitter fix earlier this
-	// project) took hold immediately, on the very first automatic
-	// layout pass, not just on a user drag -- confirmed live: both the
-	// grid AND the treemap went completely blank, not merely the grid
-	// alone. Advertising a small, always-satisfiable height here instead
-	// keeps the split happy; _ResizeToFullHeight() (called once this
-	// view is actually attached) then forces the view's REAL height
-	// directly, independently of what these two virtuals ever told the
-	// split -- which is exactly what makes the wrapping BScrollView see
-	// a content taller than its own viewport and grow a real, working
-	// vertical scrollbar for it.
 	virtual BSize MinSize()
 	{
 		float width, height;
 		GetPreferredSize(&width, &height);
-		return BSize(width, 150.0f);
+		return BSize(width, 200.0f);
 	}
 
 	virtual BSize MaxSize()
 	{
 		float width, height;
 		GetPreferredSize(&width, &height);
-		return BSize(width, B_SIZE_UNLIMITED);
-	}
-
-	virtual void AttachedToWindow()
-	{
-		BView::AttachedToWindow();
-		_ResizeToFullHeight();
+		return BSize(width, height);
 	}
 
 	virtual void Draw(BRect updateRect)
@@ -321,14 +291,6 @@ public:
 	}
 
 private:
-	void _ResizeToFullHeight()
-	{
-		float width, height;
-		GetPreferredSize(&width, &height);
-		if (Bounds().Width() != width || Bounds().Height() != height)
-			ResizeTo(width, height);
-	}
-
 	BRect _SquareFor(int32 row, int32 chapter) const
 	{
 		float top = 4.0f + row * fRowHeight;
@@ -391,30 +353,20 @@ public:
 		_BuildItems(hits);
 	}
 
-	// A defined, growing WIDTH (see _BuildItems()) rather than height --
-	// an earlier attempt grew height instead while keeping width fixed,
-	// which (combined with the alternating horizontal/vertical slicing
-	// _Layout() used to do) produced an extremely tall, narrow canvas
-	// where the first one or two of what can be 60+ books for a common
-	// word swallowed the entire visible viewport, pushing every other
-	// book out of view below rather than merely shrinking it -- confirmed
-	// live via a debug dump of the actual item list against what the
-	// window showed. Width only needed here since _Layout() below now
-	// only ever slices left-to-right, all items sharing the view's full
-	// height (see _Layout()'s own comment for why that's what avoids the
-	// same degeneration this time), and pinning MinSize()==MaxSize() only
-	// for width is what actually gives the enclosing BScrollView (see
-	// _BuildGUI()) something real to scroll across horizontally.
-	virtual BSize MinSize()
-	{
-		return BSize(fWidth, 150.0f);
-	}
-
-	virtual BSize MaxSize()
-	{
-		return BSize(fWidth, B_SIZE_UNLIMITED);
-	}
-
+	// Fills whatever space the split (see _BuildGUI()) actually gives
+	// it, same as before -- an attempt to instead give this an intrinsic,
+	// scrollable size that grows with the book count (mirroring
+	// ChapterGridView's own fixed-size/scrollbar approach) was tried and
+	// reverted: a slice-and-dice treemap wants comparable width and
+	// height to produce sensible rectangles, and forcing the height to
+	// grow while the width stayed fixed produced an extremely tall,
+	// narrow canvas where the first one or two (of what can be 60+ for a
+	// common word) items swallowed the entire visible viewport, with
+	// every other item pushed out of view below rather than merely
+	// smaller -- confirmed live via a debug dump of the actual item
+	// list against what the window showed. A dense mosaic of small
+	// rectangles (what filling the available space instead produces)
+	// is the normal, useful treemap outcome for a many-book result.
 	virtual void FrameResized(float width, float height)
 	{
 		BView::FrameResized(width, height);
@@ -541,19 +493,6 @@ private:
 			fItems.push_back(item);
 		}
 		std::sort(fItems.begin(), fItems.end(), &Item::MoreFirst);
-
-		// kMinPerItem guarantees every book (even one with a single hit,
-		// sorted to the far end) gets a legible sliver rather than being
-		// squeezed toward zero width by a few dominant books -- the
-		// previous alternating-axis layout had no such guarantee and
-		// items far down the list could end up sub-pixel. The width
-		// still only needs to be this generous when there ARE many
-		// books; std::max keeps a two- or three-book result exactly as
-		// wide as before (filling whatever the split's own width is,
-		// once wrapped in a horizontal-only scroll view -- see
-		// _BuildGUI()).
-		static const float kMinPerItem = 60.0f;
-		fWidth = std::max(300.0f, fItems.size() * kMinPerItem);
 	}
 
 	void _Layout()
@@ -564,29 +503,35 @@ private:
 		if (total <= 0)
 			return;
 
-		// Left-to-right only, every item sharing the view's full height
-		// -- the previous version alternated horizontal/vertical slices
-		// (a normal treemap technique), but that assumes comparable
-		// width and height to divide; forcing an EXTRA dimension to grow
-		// (first height, now width) while the algorithm kept treating
-		// both axes as equally divisible compounded a small fraction
-		// twice over for items several slices in, degenerating toward
-		// zero on BOTH axes at once. A single axis never compounds --
-		// even the smallest book's fraction of a wide-enough total
-		// (see _BuildItems()) stays a plainly visible, clickable sliver
-		// of the FULL height, just a narrow one.
 		BRect bounds = Bounds();
-		float left = bounds.left;
+		bool horizontal = true;
+		// Alternates axis every item -- a plain, always-terminating
+		// slice-and-dice variant (each remaining item gets its exact
+		// share of whatever space is left, alternating which edge it's
+		// sliced from) rather than one single-axis pass, which would
+		// put every item in one row/column regardless of how many
+		// there are.
+		BRect remaining = bounds;
+		int32 remainingTotal = total;
 		for (size_t i = 0; i < fItems.size(); i++) {
-			float width = bounds.Width() * ((float)fItems[i].count / total);
-			fItems[i].rect = BRect(left, bounds.top,
-				left + width, bounds.bottom);
-			left += width;
+			float fraction = (float)fItems[i].count / remainingTotal;
+			if (horizontal) {
+				float width = remaining.Width() * fraction;
+				fItems[i].rect = BRect(remaining.left, remaining.top,
+					remaining.left + width, remaining.bottom);
+				remaining.left += width;
+			} else {
+				float height = remaining.Height() * fraction;
+				fItems[i].rect = BRect(remaining.left, remaining.top,
+					remaining.right, remaining.top + height);
+				remaining.top += height;
+			}
+			remainingTotal -= fItems[i].count;
+			horizontal = !horizontal;
 		}
 	}
 
 	std::vector<Item>	fItems;
-	float				fWidth;
 };
 
 
@@ -660,29 +605,14 @@ SGSearchHitsWindow::_BuildGUI()
 		fGridView, 0, true, true);
 
 	fTreemapView = new TreemapView("searchHitsTreemap", fHits);
-	// Horizontal only -- fTreemapView's own MinSize()/MaxSize() pin its
-	// width to a real, grows-with-the-book-count value (see
-	// _BuildItems()) needing a scrollbar, but leave height flexible
-	// (matching whatever the split gives it, same as before).
-	BScrollView* treemapScroll = new BScrollView("searchHitsTreemapScroll",
-		fTreemapView, 0, true, false);
+	fTreemapView->SetExplicitMinSize(BSize(B_SIZE_UNSET, 150.0f));
 
-	// A plain weighted group, not a BSplitView -- a split's own
-	// constraint solver snaps a pane fully shut once its allotted share
-	// falls far enough below its declared minimum (confirmed earlier
-	// this project, and confirmed again live here: giving the grid a
-	// real, correct MinSize() -- large enough to hold all 66 books --
-	// made BOTH panes render as entirely blank the moment the split
-	// couldn't satisfy it, not merely the grid). A plain group simply
-	// gives each child its weighted share without that collapse
-	// behaviour, and neither pane here needs a user-draggable divider
-	// between them.
 	BLayoutBuilder::Group<>(this, B_VERTICAL)
 		.SetInsets(B_USE_SMALL_INSETS)
 		.Add(fTitleView)
-		.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
+		.AddSplit(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
 			.Add(gridScroll, 2.0f)
-			.Add(treemapScroll, 1.0f)
+			.Add(fTreemapView, 1.0f)
 		.End()
 	.End();
 
