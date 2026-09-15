@@ -130,7 +130,16 @@ class ChapterGridView : public BView {
 public:
 	ChapterGridView(const char* name, const std::vector<SearchHit>& hits)
 		:
-		BView(name, B_WILL_DRAW | B_FRAME_EVENTS),
+		// B_SUPPORTS_LAYOUT is what makes the enclosing BScrollView use
+		// GetPreferredSize() to drive the scrollbars' range directly
+		// (BScrollView::FrameResized()), instead of its default
+		// behaviour of forcibly ResizeTo()-ing this view to match its
+		// own viewport on every layout pass (BScrollView::DoLayout()) --
+		// confirmed by reading Haiku's own ScrollView.cpp. Without it,
+		// there was never a real 66-book-tall (or 150-chapter-wide)
+		// canvas for a scrollbar to reveal by scrolling, no matter what
+		// MinSize()/MaxSize() below advertised.
+		BView(name, B_WILL_DRAW | B_FRAME_EVENTS | B_SUPPORTS_LAYOUT),
 		fBooks(GetBookChapterCounts())
 	{
 		SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
@@ -180,18 +189,25 @@ public:
 			*_height = fBooks.size() * fRowHeight + 8.0f;
 	}
 
+	// Deliberately modest on BOTH axes -- this is what the enclosing
+	// BScrollView tells the split it needs, and what actually decides
+	// how big the scroll view's own on-screen frame becomes. Pinning
+	// width to the full content width here (150+ chapters wide) was the
+	// actual bug: the scroll view's own frame then had to BE that
+	// width, extending 2600+px past the right edge of an ordinary
+	// window instead of staying window-sized with a working horizontal
+	// scrollbar inside it -- confirmed live (BRect(0,0,2704,218), a
+	// window only 520px wide). GetPreferredSize() (the real content
+	// size) is what B_SUPPORTS_LAYOUT above needs for the scrollbars'
+	// actual range; it has nothing to do with what these two report.
 	virtual BSize MinSize()
 	{
-		float width, height;
-		GetPreferredSize(&width, &height);
-		return BSize(width, 200.0f);
+		return BSize(200.0f, 150.0f);
 	}
 
 	virtual BSize MaxSize()
 	{
-		float width, height;
-		GetPreferredSize(&width, &height);
-		return BSize(width, height);
+		return BSize(B_SIZE_UNLIMITED, B_SIZE_UNLIMITED);
 	}
 
 	virtual void Draw(BRect updateRect)
