@@ -549,40 +549,112 @@ private:
 		std::sort(fItems.begin(), fItems.end(), &Item::MoreFirst);
 	}
 
+	// Squarified treemap (Bruls/Huizing/van Wijk, "Squarified Treemaps",
+	// 2000): repeatedly grows a "row" laid out across whichever side of
+	// the remaining rectangle is currently shorter, adding items
+	// (already sorted largest-first -- see _BuildItems()) for as long as
+	// doing so keeps improving the WORST aspect ratio any item in that
+	// row would get; the moment the next item would make that worse, the
+	// row is closed off and laid out, and a new row starts in whatever
+	// rectangle is left. This is what actually keeps rectangles close to
+	// square regardless of how skewed the underlying counts are -- the
+	// previous alternating-horizontal/vertical slice-and-dice had no
+	// such feedback and could still produce arbitrarily thin slivers.
 	void _Layout()
 	{
-		int32 total = 0;
+		double total = 0;
 		for (size_t i = 0; i < fItems.size(); i++)
 			total += fItems[i].count;
 		if (total <= 0)
 			return;
 
 		BRect bounds = Bounds();
-		bool horizontal = true;
-		// Alternates axis every item -- a plain, always-terminating
-		// slice-and-dice variant (each remaining item gets its exact
-		// share of whatever space is left, alternating which edge it's
-		// sliced from) rather than one single-axis pass, which would
-		// put every item in one row/column regardless of how many
-		// there are.
+		double totalArea = (double)bounds.Width() * bounds.Height();
+		if (totalArea <= 0)
+			return;
+
+		std::vector<double> areas(fItems.size());
+		for (size_t i = 0; i < fItems.size(); i++)
+			areas[i] = totalArea * fItems[i].count / total;
+
 		BRect remaining = bounds;
-		int32 remainingTotal = total;
-		for (size_t i = 0; i < fItems.size(); i++) {
-			float fraction = (float)fItems[i].count / remainingTotal;
-			if (horizontal) {
-				float width = remaining.Width() * fraction;
-				fItems[i].rect = BRect(remaining.left, remaining.top,
-					remaining.left + width, remaining.bottom);
-				remaining.left += width;
-			} else {
-				float height = remaining.Height() * fraction;
-				fItems[i].rect = BRect(remaining.left, remaining.top,
-					remaining.right, remaining.top + height);
-				remaining.top += height;
+		size_t i = 0;
+		while (i < fItems.size()) {
+			float side = std::min(remaining.Width(), remaining.Height());
+
+			std::vector<size_t> row;
+			double rowSum = 0;
+			double bestWorst = 0;
+			size_t j = i;
+			while (j < fItems.size()) {
+				double candidateSum = rowSum + areas[j];
+				double worst = _WorstRatio(row, areas, j, candidateSum, side);
+				if (!row.empty() && worst > bestWorst)
+					break;
+				row.push_back(j);
+				rowSum = candidateSum;
+				bestWorst = worst;
+				j++;
 			}
-			remainingTotal -= fItems[i].count;
-			horizontal = !horizontal;
+
+			remaining = _LayoutRow(row, areas, rowSum, remaining);
+			i = j;
 		}
+	}
+
+	// The largest ratio any item in `row` (plus the candidate at index
+	// `candidate`) would have between its own longer and shorter side,
+	// if that row were laid out across a strip of width `side`. Lower is
+	// squarer; this is what _Layout() minimizes greedily.
+	double _WorstRatio(const std::vector<size_t>& row,
+		const std::vector<double>& areas, size_t candidate,
+		double sum, double side)
+	{
+		double maxArea = areas[candidate];
+		double minArea = areas[candidate];
+		for (size_t k = 0; k < row.size(); k++) {
+			maxArea = std::max(maxArea, areas[row[k]]);
+			minArea = std::min(minArea, areas[row[k]]);
+		}
+		double side2 = side * side;
+		double sum2 = sum * sum;
+		return std::max((side2 * maxArea) / sum2, sum2 / (side2 * minArea));
+	}
+
+	// Lays `row`'s items out as a single strip across the shorter side
+	// of `rect`, each getting a share of that strip proportional to its
+	// own area within the row, and returns whatever of `rect` is left
+	// over once the strip is removed.
+	BRect _LayoutRow(const std::vector<size_t>& row,
+		const std::vector<double>& areas, double rowSum, BRect rect)
+	{
+		if (row.empty() || rowSum <= 0)
+			return rect;
+
+		if (rect.Width() <= rect.Height()) {
+			float rowHeight = (float)(rowSum / rect.Width());
+			rowHeight = std::min(rowHeight, rect.Height());
+			float x = rect.left;
+			for (size_t k = 0; k < row.size(); k++) {
+				float w = (float)(areas[row[k]] / rowSum * rect.Width());
+				fItems[row[k]].rect = BRect(x, rect.top,
+					x + w, rect.top + rowHeight);
+				x += w;
+			}
+			rect.top += rowHeight;
+		} else {
+			float rowWidth = (float)(rowSum / rect.Height());
+			rowWidth = std::min(rowWidth, rect.Width());
+			float y = rect.top;
+			for (size_t k = 0; k < row.size(); k++) {
+				float h = (float)(areas[row[k]] / rowSum * rect.Height());
+				fItems[row[k]].rect = BRect(rect.left, y,
+					rect.left + rowWidth, y + h);
+				y += h;
+			}
+			rect.left += rowWidth;
+		}
+		return rect;
 	}
 
 	std::vector<Item>	fItems;
