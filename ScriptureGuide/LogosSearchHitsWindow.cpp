@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <map>
+#include <math.h>
 
 #include <Catalog.h>
 #include <LayoutBuilder.h>
@@ -363,26 +364,59 @@ class TreemapView : public BView {
 public:
 	TreemapView(const char* name, const std::vector<SearchHit>& hits)
 		:
-		BView(name, B_WILL_DRAW | B_FRAME_EVENTS)
+		// See ChapterGridView's own comment on B_SUPPORTS_LAYOUT: this is
+		// what makes the enclosing BScrollView (see _BuildGUI()) drive
+		// its scrollbars from GetPreferredSize() below, instead of
+		// forcibly resizing this view to match its viewport -- confirmed
+		// live to be the actual, only thing needed for real scrolling,
+		// independent of whatever the chapter grid above is doing.
+		BView(name, B_WILL_DRAW | B_FRAME_EVENTS | B_SUPPORTS_LAYOUT)
 	{
 		SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 		_BuildItems(hits);
 	}
 
-	// Fills whatever space the split (see _BuildGUI()) actually gives
-	// it, same as before -- an attempt to instead give this an intrinsic,
-	// scrollable size that grows with the book count (mirroring
-	// ChapterGridView's own fixed-size/scrollbar approach) was tried and
-	// reverted: a slice-and-dice treemap wants comparable width and
-	// height to produce sensible rectangles, and forcing the height to
-	// grow while the width stayed fixed produced an extremely tall,
-	// narrow canvas where the first one or two (of what can be 60+ for a
-	// common word) items swallowed the entire visible viewport, with
-	// every other item pushed out of view below rather than merely
-	// smaller -- confirmed live via a debug dump of the actual item
-	// list against what the window showed. A dense mosaic of small
-	// rectangles (what filling the available space instead produces)
-	// is the normal, useful treemap outcome for a many-book result.
+	// A roughly square canvas that grows with the book count, rather
+	// than filling whatever oddly-shaped space the split happens to
+	// give this pane -- a slice-and-dice layout (see _Layout()) wants
+	// comparable width and height to produce sensible rectangles; an
+	// elongated canvas (this pane's actual on-screen shape is usually
+	// wide and short) made every item after the first one or two read
+	// as a thin sliver instead of a legible box. Scrolling (now real --
+	// see the B_SUPPORTS_LAYOUT comment above) is what lets this stay
+	// square-ish instead of being squashed into whatever aspect ratio
+	// the window happens to have.
+	virtual void GetPreferredSize(float* _width, float* _height)
+	{
+		// ~60x60px of screen space per item on average, then split that
+		// total area between a slightly-wider-than-tall canvas (a 1.4:1
+		// ratio reads as "roughly square" without being a perfect
+		// square, which would waste width on a typical wide window).
+		float totalArea = std::max((size_t)1, fItems.size()) * 3600.0f;
+		static const float kAspect = 1.4f;
+		float height = sqrtf(totalArea / kAspect);
+		float width = height * kAspect;
+		if (_width != NULL)
+			*_width = std::max(300.0f, width);
+		if (_height != NULL)
+			*_height = std::max(150.0f, height);
+	}
+
+	// Deliberately modest -- see ChapterGridView's own comment on why
+	// pinning these to the real content size (GetPreferredSize() above)
+	// is the wrong thing to do here: that made the SCROLL VIEW itself
+	// balloon to the content's full size instead of staying a normal,
+	// window-fitting viewport with a working scrollbar inside it.
+	virtual BSize MinSize()
+	{
+		return BSize(200.0f, 150.0f);
+	}
+
+	virtual BSize MaxSize()
+	{
+		return BSize(B_SIZE_UNLIMITED, B_SIZE_UNLIMITED);
+	}
+
 	virtual void FrameResized(float width, float height)
 	{
 		BView::FrameResized(width, height);
@@ -393,6 +427,10 @@ public:
 	void SetHits(const std::vector<SearchHit>& hits)
 	{
 		_BuildItems(hits);
+		// A later search reusing this same window otherwise kept
+		// whatever scroll position an earlier, differently-shaped
+		// result left behind.
+		ScrollTo(BPoint(0.0f, 0.0f));
 		_Layout();
 		Invalidate();
 	}
@@ -621,14 +659,19 @@ SGSearchHitsWindow::_BuildGUI()
 		fGridView, 0, true, true);
 
 	fTreemapView = new TreemapView("searchHitsTreemap", fHits);
-	fTreemapView->SetExplicitMinSize(BSize(B_SIZE_UNSET, 150.0f));
+	// Own, independent scroll view -- same reasoning as gridScroll above,
+	// and entirely unaffected by it: each pane's scrolling is now a
+	// purely local concern of that pane's own B_SUPPORTS_LAYOUT content
+	// view, with nothing shared between them beyond the splitter itself.
+	BScrollView* treemapScroll = new BScrollView("searchHitsTreemapScroll",
+		fTreemapView, 0, true, true);
 
 	BLayoutBuilder::Group<>(this, B_VERTICAL)
 		.SetInsets(B_USE_SMALL_INSETS)
 		.Add(fTitleView)
 		.AddSplit(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
 			.Add(gridScroll, 2.0f)
-			.Add(fTreemapView, 1.0f)
+			.Add(treemapScroll, 1.0f)
 		.End()
 	.End();
 
