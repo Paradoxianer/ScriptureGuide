@@ -23,6 +23,8 @@
 #include <Window.h>
 
 #include "constants.h"
+#include "LogosSearchHitsWindow.h"
+#include "Preferences.h"
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "DictionaryWindow"
@@ -339,6 +341,7 @@ SGDictionaryWindow::SGDictionaryWindow(BRect frame, SwordBackend* backend,
 	fBackend(backend),
 	fCurrentLexicon(NULL),
 	fOwner(owner),
+	fHitsWindow(NULL),
 	fListShowingAllKeys(false)
 {
 	_BuildGUI();
@@ -374,6 +377,18 @@ SGDictionaryWindow::_BuildGUI()
 
 	BButton* lookupButton = new BButton("dictLookupButton",
 		B_TRANSLATE("Look up"), new BMessage(DICT_LOOKUP));
+
+	// #107: which Bible to search when "Show Hits Chart" runs -- this
+	// window (unlike SGSearchWindow) has no reading-pane columns of its
+	// own to offer, so SearchableModuleNames() (every installed Bible/
+	// Commentary) fills the same role SGSearchWindow's own "Search in"
+	// field does.
+	BPopUpMenu* bibleModuleMenu = new BPopUpMenu("dictBibleModuleChoice");
+	fBibleModuleField = new BMenuField("dictBibleModule",
+		B_TRANSLATE("Search in "), bibleModuleMenu);
+	fShowHitsButton = new BButton("dictShowHitsButton",
+		B_TRANSLATE("Show Hits Chart"), new BMessage(DICT_SHOW_HITS));
+	fShowHitsButton->SetEnabled(false);
 
 	// Reported: a separate "Browse" button that expanded a normally-
 	// hidden results list was less usable than just always having the
@@ -424,6 +439,10 @@ SGDictionaryWindow::_BuildGUI()
 			.Add(fLookupField)
 			.Add(lookupButton)
 		.End()
+		.AddGroup(B_HORIZONTAL, B_USE_HALF_ITEM_SPACING)
+			.Add(fBibleModuleField)
+			.Add(fShowHitsButton)
+		.End()
 		// Weighted 1:2 for its initial size only -- the divider drags
 		// freely from there, fResultList's own min-width (above) is
 		// the only hard floor. Collapsible left at its default (true):
@@ -443,6 +462,7 @@ SGDictionaryWindow::_BuildGUI()
 
 	_RebuildModuleMenu();
 	_PopulateAllKeysList();
+	_RebuildBibleModuleMenu();
 
 	SetSizeLimits(300.0f, 4000.0f, 300.0f, 4000.0f);
 }
@@ -490,6 +510,166 @@ SGDictionaryWindow::_SelectModuleInMenu(SGModule* lexicon)
 		item->SetMarked(true);
 	if (fModuleField->MenuItem() != NULL)
 		fModuleField->MenuItem()->SetLabel(lexicon->Name());
+}
+
+
+void
+SGDictionaryWindow::_RebuildBibleModuleMenu()
+{
+	BMenu* menu = fBibleModuleField->Menu();
+	while (menu->CountItems() > 0)
+		delete menu->RemoveItem((int32)0);
+
+	std::vector<BString> names = fBackend->SearchableModuleNames();
+
+	// The saved "module" preference (same fallback SGSearchWindow's own
+	// constructor uses when it has no reading-pane columns to offer
+	// either) if it's actually installed, else whatever sorts first --
+	// SearchableModuleNames() itself makes no promise about order.
+	BString preferred;
+	prefsLock.Lock();
+	if (preferences.FindString("module", &preferred) != B_OK)
+		preferred = "";
+	prefsLock.Unlock();
+
+	std::sort(names.begin(), names.end());
+
+	// Keeps whatever was already selected (a previous rebuild, or the
+	// user's own pick via DICT_SELECT_BIBLE_MODULE) if it's still
+	// installed; otherwise falls back to `preferred`, then to whatever
+	// sorts first.
+	BString keep = fBibleModuleName;
+	fBibleModuleName = "";
+	int32 markIndex = -1;
+	for (size_t i = 0; i < names.size(); i++) {
+		if (names[i] == keep)
+			markIndex = (int32)i;
+		else if (markIndex < 0 && names[i] == preferred)
+			markIndex = (int32)i;
+	}
+	if (markIndex < 0 && !names.empty())
+		markIndex = 0;
+
+	for (size_t i = 0; i < names.size(); i++) {
+		BMessage* select = new BMessage(DICT_SELECT_BIBLE_MODULE);
+		select->AddString("module", names[i]);
+		BMenuItem* item = new BMenuItem(names[i].String(), select);
+		menu->AddItem(item);
+		if ((int32)i == markIndex) {
+			item->SetMarked(true);
+			fBibleModuleName = names[i];
+		}
+	}
+	if (fBibleModuleField->MenuItem() != NULL)
+		fBibleModuleField->MenuItem()->SetLabel(fBibleModuleName.String());
+}
+
+
+void
+SGDictionaryWindow::_UpdateShowHitsButtonState()
+{
+	bool isStrongsNumber = fCurrentLexicon != NULL
+		&& SwordBackend::StrongsPrefixForLexicon(fCurrentLexicon) != 0
+		&& !fCurrentKey.IsEmpty();
+	fShowHitsButton->SetEnabled(isStrongsNumber && !fBibleModuleName.IsEmpty());
+}
+
+
+void
+SGDictionaryWindow::_ShowHitsChart()
+{
+	if (fCurrentLexicon == NULL || fCurrentKey.IsEmpty()
+		|| fBibleModuleName.IsEmpty()) {
+		return;
+	}
+
+	char prefix = SwordBackend::StrongsPrefixForLexicon(fCurrentLexicon);
+	if (prefix == 0)
+		return;
+
+	// fCurrentKey already carries the prefix when it came from a Bible-
+	// text click (DICT_SHOW_STRONGS), but not when it came from browsing
+	// the sidebar list directly (_ShowEntryForKey() sets it to the raw
+	// module key) -- see fCurrentKey's own comment.
+	BString fullNumber = fCurrentKey;
+	if (fullNumber.ByteAt(0) != prefix) {
+		// The module's own raw key text is zero-padded ("00026", not
+		// "26" -- confirmed live: this produced "G00026", a number
+		// SEARCHTYPE_ENTRYATTR's "Word//Lemma./<number>/" never matches
+		// anything with, silently returning zero hits instead of an
+		// error). Strip the padding before combining with the prefix.
+		int32 firstNonZero = 0;
+		while (firstNonZero < fullNumber.Length() - 1
+			&& fullNumber.ByteAt(firstNonZero) == '0') {
+			firstNonZero++;
+		}
+		fullNumber.Remove(0, firstNonZero);
+		BString withPrefix;
+		withPrefix << prefix << fullNumber;
+		fullNumber = withPrefix;
+	}
+
+	SGModule* bibleModule = fBackend->FindModule(fBibleModuleName.String());
+	if (bibleModule == NULL)
+		return;
+
+	// Same "Word//Lemma./<number>/" SEARCHTYPE_ENTRYATTR wrapping and
+	// FindStrongsWordsInText() re-validation LogosSearchWindow.cpp's own
+	// #83 handler uses, and for the same reason: SWORD's own search
+	// index can report a hit the module's own attribute data does not
+	// actually back up (confirmed live against a real installed module --
+	// see that handler's own comment). No book-range/case-sensitivity
+	// controls here (this window has none), so the whole Bible,
+	// case-insensitive -- the same defaults the search window itself
+	// starts with.
+	BString wrapped("Word//Lemma./");
+	wrapped << fullNumber << "/";
+	std::vector<const char*> books = GetBookNames();
+	// -3 == SWORD's own SEARCHTYPE_ENTRYATTR (swmodule.h's search() doc
+	// comment) -- LogosSearchWindow.h names this SEARCH_STRONGS, but
+	// that enum is window-local (its own comment explains why), not
+	// worth pulling in that whole header just for one constant.
+	std::vector<BString> rawHits = bibleModule->SearchModule(
+		-3, REG_ICASE, wrapped.String(), books.front(),
+		books.back(), NULL);
+
+	BLanguage language;
+	BLocale::Default()->GetLanguage(&language);
+	std::vector<BString> verseList;
+	for (size_t i = 0; i < rawHits.size(); i++) {
+		sword::VerseKey key(rawHits[i].String());
+		key.setLocale(language.Code());
+		BString verseText(bibleModule->GetVerse(rawHits[i].String()));
+		std::vector<StrongsWord> words
+			= FindStrongsWordsInText(bibleModule->GetModule(), verseText);
+		bool confirmed = false;
+		for (size_t w = 0; w < words.size() && !confirmed; w++) {
+			if (words[w].strongsNumber == fullNumber)
+				confirmed = true;
+		}
+		if (confirmed)
+			verseList.push_back(rawHits[i]);
+	}
+
+	std::vector<SearchHit> hits = BuildSearchHits(bibleModule, verseList);
+
+	BString title;
+	title.SetToFormat(
+		B_TRANSLATE("%d occurrences of %s in %s"),
+		(int)hits.size(), fullNumber.String(), bibleModule->FullName());
+
+	if (fHitsWindow == NULL) {
+		BRect r(Frame());
+		r.OffsetBy(30, 30);
+		r.right = r.left + 520;
+		r.bottom = r.top + 420;
+		fHitsWindow = new SGSearchHitsWindow(r, hits, title.String(),
+			new BMessenger(*fOwner));
+	} else {
+		fHitsWindow->SetHits(hits, title.String());
+	}
+	fHitsWindow->Show();
+	fHitsWindow->Activate(true);
 }
 
 
@@ -575,6 +755,7 @@ SGDictionaryWindow::_ShowEntryForKey(const BString& key)
 	_SelectKeyInList(fCurrentKey);
 
 	_ShowEntry(entry);
+	_UpdateShowHitsButtonState();
 }
 
 
@@ -642,6 +823,25 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 			// so switching back to this module later costs nothing.
 			fCurrentKey = "";
 			_PopulateAllKeysList();
+			_UpdateShowHitsButtonState();
+			break;
+		}
+
+		case DICT_SELECT_BIBLE_MODULE:
+		{
+			BString module;
+			if (message->FindString("module", &module) == B_OK) {
+				fBibleModuleName = module;
+				if (fBibleModuleField->MenuItem() != NULL)
+					fBibleModuleField->MenuItem()->SetLabel(module.String());
+				_UpdateShowHitsButtonState();
+			}
+			break;
+		}
+
+		case DICT_SHOW_HITS:
+		{
+			_ShowHitsChart();
 			break;
 		}
 
@@ -733,6 +933,7 @@ SGDictionaryWindow::MessageReceived(BMessage* message)
 					_ShowEntryForKey(bareNumber);
 				}
 			}
+			_UpdateShowHitsButtonState();
 			Activate(true);
 			break;
 		}

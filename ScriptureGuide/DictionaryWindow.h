@@ -17,6 +17,7 @@
 class BButton;
 class BMenuField;
 class BTextControl;
+class SGSearchHitsWindow;
 // #32: a plain BTextView subclass, not the app's own TextDocumentView
 // engine every OTHER reference-clickable surface (Bible columns, notes,
 // the description field) is built on -- defined in DictionaryWindow.cpp
@@ -39,6 +40,18 @@ class DictionaryResultListView;
 #define DICT_SELECT_RESULT	'DCsr'
 #define DICT_SHOW_STRONGS	'DCst'
 #define DICT_QUIT			'DCqu'
+// Which Bible module "Show Hits Chart" (below) searches -- a plain
+// BMenuField over SwordBackend::SearchableModuleNames(), same idea as
+// SGSearchWindow's own "Search in" field, since this window (unlike
+// that one) has no reading-pane columns of its own to default to.
+#define DICT_SELECT_BIBLE_MODULE	'DCbm'
+// #107: statistics for whichever Strong's number is currently shown --
+// same chapter-grid + treemap window a search result or a verse list
+// opens (see SGSearchHitsWindow's own comment). Only enabled while
+// fCurrentKey is actually a Strong's number in a Strong's lexicon (see
+// _UpdateShowHitsButtonState()) -- an ordinary lexicon entry (AmTract,
+// Hitchcock, ...) has no Bible occurrences to chart.
+#define DICT_SHOW_HITS		'DCsh'
 
 // A small, single-purpose lookup window for installed Lexicon/Dictionary
 // modules (#31) -- pick a module, type a key or word, see the rendered
@@ -142,6 +155,26 @@ private:
 			// answered it, so the module picker doesn't silently drift
 			// out of sync with what the sidebar/entry now show.
 			void			_SelectModuleInMenu(SGModule* lexicon);
+			// fBibleModuleField's own items -- one per
+			// SwordBackend::SearchableModuleNames(), defaulting to the
+			// saved "module" preference (same fallback SGSearchWindow's
+			// constructor uses) if it's among them, else the first.
+			void			_RebuildBibleModuleMenu();
+			// Enabled only while fCurrentKey is a genuine Strong's
+			// number in a Strong's lexicon (StrongsPrefixForLexicon()
+			// != 0) and a Bible module is selected -- called wherever
+			// either of those can change: _ShowEntryForKey(),
+			// DICT_SELECT_MODULE, and DICT_SHOW_STRONGS.
+			void			_UpdateShowHitsButtonState();
+			// DICT_SHOW_HITS -- builds the fully-prefixed number (adding
+			// StrongsPrefixForLexicon()'s own prefix if fCurrentKey
+			// doesn't already carry one -- see fCurrentKey's own
+			// comment for why it doesn't always), runs the same
+			// SearchModule()-vs-FindStrongsWordsInText()-validated
+			// search #83 already needed after real false positives
+			// turned up (see LogosSearchWindow.cpp's own comment on
+			// that), and opens/reuses fHitsWindow with the result.
+			void			_ShowHitsChart();
 
 			SwordBackend*	fBackend;
 			SGModule*		fCurrentLexicon;
@@ -151,6 +184,18 @@ private:
 			BTextControl*	fLookupField;
 			DictionaryResultListView*	fResultList;
 			DictionaryEntryView*	fEntryView;
+
+			// #107: "Show Hits Chart". fBibleModuleName is fBibleModuleField's
+			// current selection -- a plain BString, not an SGModule* index,
+			// since SearchableModuleNames() (unlike LexiconAt()) has no
+			// stable index to key a message on.
+			BMenuField*		fBibleModuleField;
+			BString			fBibleModuleName;
+			BButton*		fShowHitsButton;
+			// Lazily built the first time DICT_SHOW_HITS fires, then just
+			// Show()n/Hide()n again -- same idiom as SGSearchWindow's own
+			// fHitsWindow.
+			SGSearchHitsWindow*	fHitsWindow;
 
 			// One entry per lexicon ever visited this session -- see
 			// _EnsureAllKeys()'s own comment on why a single slot
