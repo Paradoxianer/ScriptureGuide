@@ -21,6 +21,8 @@ class BMenuItem;
 class BPopUpMenu;
 class BScrollView;
 class BStringView;
+class SGSearchHitsWindow;
+class SwordBackend;
 class TextDocumentView;
 class VerseListRowListView;
 
@@ -137,6 +139,14 @@ class VerseListRowListView;
 #define VLIST_TAG_TOGGLE		'VLtt'
 #define VLIST_TAG_NEW			'VLtn'
 #define VLIST_TAG_NEW_RESULT	'VLtN'
+// File > Show Hits Chart -- same chapter-grid + treemap window
+// LogosSearchWindow.cpp opens for a search result (SGSearchHitsWindow,
+// see its own comment: it only ever needs a plain list of verse-key
+// strings, not anything search-specific), applied here to the open
+// collection's own references instead. Respects the current tag filter
+// (fVisibleBookmarkIndices), so what the chart shows always matches
+// what the row list itself is currently showing.
+#define VLIST_SHOW_HITS			'VLhc'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -308,6 +318,11 @@ private:
 			void			_ExportTextFile(const char* path);
 			// #99: opens fCollectionPath in a Tracker window.
 			void			_ShowInTracker();
+			// VLIST_SHOW_HITS -- builds a SearchHit list from the
+			// currently VISIBLE bookmarks (fVisibleBookmarkIndices, so
+			// this always matches whatever the tag filter is currently
+			// showing in fRowList) and opens/reuses fHitsWindow with it.
+			void			_ShowHitsChart();
 			// #72: shows the same New-Verse-List prompt _NewList() does,
 			// but with VLIST_DROP_NAME_RESULT as the result -- called from
 			// _AppendDroppedReferences() when a drop lands with nothing
@@ -511,6 +526,7 @@ private:
 			BStringView*			fPathView;
 			BMenuItem*				fExportItem;
 			BMenuItem*				fShowInTrackerItem;
+			BMenuItem*				fShowHitsItem;
 			BMenuItem*				fRenameItem;
 			BMenuItem*				fDeleteItem;
 			BMenuItem*				fAddReferenceItem;
@@ -573,6 +589,18 @@ private:
 			class BMessageRunner*		fDescriptionSaveRunner;
 
 			BMessenger*				fMessenger;
+
+			// Only for VLIST_SHOW_HITS -- this window otherwise has no
+			// need to load/search Bible modules at all, unlike
+			// SGSearchWindow/SGDictionaryWindow, which both keep one of
+			// these for their entire lifetime for the same reason
+			// (constructing SwordBackend rescans every installed module,
+			// worth paying for once rather than on every click).
+			SwordBackend*			fBackend;
+			// Lazily built the first time VLIST_SHOW_HITS fires, then
+			// just Show()n/Hide()n again -- same idiom as
+			// SGSearchWindow's own fHitsWindow.
+			SGSearchHitsWindow*		fHitsWindow;
 };
 
 #endif // VERSE_LIST_WINDOW_H

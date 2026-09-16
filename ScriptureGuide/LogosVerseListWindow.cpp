@@ -46,6 +46,8 @@
 #include "TextListener.h"
 
 #include "constants.h"
+#include "LogosSearchHitsWindow.h"
+#include "Preferences.h"
 #include "SwordBackend.h"
 
 // The current system locale's BLanguage::Code() (e.g. "de") -- what a
@@ -540,6 +542,7 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fPathView(NULL),
 	fExportItem(NULL),
 	fShowInTrackerItem(NULL),
+	fShowHitsItem(NULL),
 	fRenameItem(NULL),
 	fDeleteItem(NULL),
 	fAddReferenceItem(NULL),
@@ -560,7 +563,9 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fImportPanel(NULL),
 	fExportPanel(NULL),
 	fDescriptionSaveRunner(NULL),
-	fMessenger(owner)
+	fMessenger(owner),
+	fBackend(new SwordBackend()),
+	fHitsWindow(NULL)
 {
 	float minWidth, minHeight, maxWidth, maxHeight;
 	GetSizeLimits(&minWidth, &maxWidth, &minHeight, &maxHeight);
@@ -608,6 +613,7 @@ SGVerseListWindow::~SGVerseListWindow()
 	delete fImportPanel;
 	delete fExportPanel;
 	delete fMessenger;
+	delete fBackend;
 }
 
 
@@ -852,6 +858,12 @@ SGVerseListWindow::_BuildMenuBar()
 	fShowInTrackerItem = new BMenuItem(B_TRANSLATE("Show in Tracker"),
 		new BMessage(VLIST_SHOW_IN_TRACKER));
 	fileMenu->AddItem(fShowInTrackerItem);
+	// Same chapter-grid + treemap window a search result opens (see
+	// VLIST_SHOW_HITS's own comment) -- a book/chapter distribution view
+	// of this list's own references.
+	fShowHitsItem = new BMenuItem(B_TRANSLATE("Show Hits Chart"),
+		new BMessage(VLIST_SHOW_HITS));
+	fileMenu->AddItem(fShowHitsItem);
 	fileMenu->AddSeparatorItem();
 	fRenameItem = new BMenuItem(
 		B_TRANSLATE("Rename List" B_UTF8_ELLIPSIS),
@@ -1179,6 +1191,10 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 
 		case VLIST_SHOW_IN_TRACKER:
 			_ShowInTracker();
+			break;
+
+		case VLIST_SHOW_HITS:
+			_ShowHitsChart();
 			break;
 
 		case VLIST_ADD_REFERENCE:
@@ -2128,6 +2144,60 @@ SGVerseListWindow::_ShowInTracker()
 
 
 void
+SGVerseListWindow::_ShowHitsChart()
+{
+	if (!fHasOpenFile || fVisibleBookmarkIndices.empty())
+		return;
+
+	// NavigationKey(), not Reference() -- the one form guaranteed to
+	// parse regardless of the current system locale (see its own
+	// comment in BookmarkFile.h). fVisibleBookmarkIndices, not
+	// fBookmarks directly, so the chart always matches whatever the
+	// current tag filter is showing in fRowList.
+	std::vector<BString> keys;
+	for (size_t i = 0; i < fVisibleBookmarkIndices.size(); i++) {
+		int32 index = fVisibleBookmarkIndices[i];
+		keys.push_back(fBookmarks[index].NavigationKey());
+	}
+
+	// This window has no Bible-module concept of its own (unlike
+	// SGSearchWindow, whose search already happened in some specific
+	// module) -- falls back to the same saved-preference/"WEB" default
+	// SGSearchWindow's own constructor uses when it has no open reading-
+	// pane columns to offer either, simpler than adding a module picker
+	// or cross-window messaging just for this one chart.
+	BString moduleName;
+	prefsLock.Lock();
+	if (preferences.FindString("module", &moduleName) != B_OK)
+		moduleName = "WEB";
+	prefsLock.Unlock();
+	SGModule* module = fBackend->FindModule(moduleName.String());
+	if (module == NULL)
+		return;
+
+	std::vector<SearchHit> hits = BuildSearchHits(module, keys);
+
+	BString title;
+	title.SetToFormat(
+		B_TRANSLATE("%d references in \"%s\" (%s)"),
+		(int)hits.size(), fNameView->Text(), module->FullName());
+
+	if (fHitsWindow == NULL) {
+		BRect r(Frame());
+		r.OffsetBy(30, 30);
+		r.right = r.left + 520;
+		r.bottom = r.top + 420;
+		fHitsWindow = new SGSearchHitsWindow(r, hits, title.String(),
+			new BMessenger(*fMessenger));
+	} else {
+		fHitsWindow->SetHits(hits, title.String());
+	}
+	fHitsWindow->Show();
+	fHitsWindow->Activate(true);
+}
+
+
+void
 SGVerseListWindow::_CloseList()
 {
 	_StopWatchingCollection();
@@ -2615,6 +2685,7 @@ SGVerseListWindow::_UpdateTitle()
 	bool onList = fHasOpenFile;
 	fExportItem->SetEnabled(onList);
 	fShowInTrackerItem->SetEnabled(onList);
+	fShowHitsItem->SetEnabled(onList && !fBookmarks.empty());
 	fRenameItem->SetEnabled(onList);
 	fDeleteItem->SetEnabled(onList);
 	fAddReferenceItem->SetEnabled(onList);
