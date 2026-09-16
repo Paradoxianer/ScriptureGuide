@@ -11,6 +11,7 @@
 
 #include <Catalog.h>
 #include <LayoutBuilder.h>
+#include <ScrollBar.h>
 #include <ScrollView.h>
 #include <StringView.h>
 #include <View.h>
@@ -182,12 +183,21 @@ public:
 
 	virtual void GetPreferredSize(float* _width, float* _height)
 	{
+		// The scrollbars' own range is computed by BScrollView from
+		// this size versus its own Bounds() (see B_SUPPORTS_LAYOUT's
+		// comment above) -- padding by a whole scrollbar's thickness,
+		// not just a few decorative pixels, is what actually leaves
+		// enough slack for the last row/column (reported live:
+		// Revelation, the very last book) to still land above the
+		// horizontal scrollbar rather than exactly behind it.
 		if (_width != NULL) {
-			*_width = fLabelWidth
-				+ fMaxChapters * fSquareSize + 8.0f;
+			*_width = fLabelWidth + fMaxChapters * fSquareSize + 8.0f
+				+ B_V_SCROLL_BAR_WIDTH;
 		}
-		if (_height != NULL)
-			*_height = fBooks.size() * fRowHeight + 8.0f;
+		if (_height != NULL) {
+			*_height = fBooks.size() * fRowHeight + 8.0f
+				+ B_H_SCROLL_BAR_HEIGHT;
+		}
 	}
 
 	// Deliberately modest on BOTH axes -- this is what the enclosing
@@ -616,7 +626,25 @@ private:
 		if (total <= 0)
 			return;
 
-		BRect bounds = Bounds();
+		// The FIXED logical canvas (see GetPreferredSize()), not
+		// Bounds() -- laying out against the view's actual current
+		// size adapted correctly when that size shrank a big canvas
+		// down to fit, but silently broke the scrollbar the moment the
+		// view was instead given LESS than its preferred size and had
+		// to scroll: the scrollbar's range (BScrollView::FrameResized(),
+		// via B_SUPPORTS_LAYOUT) comes from GetPreferredSize() alone,
+		// completely unaware that _Layout() had privately shrunk every
+		// rectangle to fit a smaller Bounds() instead -- confirmed live
+		// via a debug dump (Bounds() 486x150 against a genuine preferred
+		// height of 325), which is exactly what let the scrollbar offer
+		// to scroll into an area nothing had ever actually been drawn
+		// into. A fixed canvas is what ChapterGridView already does
+		// (its own per-item math never depends on Bounds() either) --
+		// scrolling now correctly reveals more of the SAME rectangles,
+		// rather than the rectangles themselves changing shape.
+		float canvasWidth, canvasHeight;
+		GetPreferredSize(&canvasWidth, &canvasHeight);
+		BRect bounds(0, 0, canvasWidth, canvasHeight);
 		double totalArea = (double)bounds.Width() * bounds.Height();
 		if (totalArea <= 0)
 			return;
