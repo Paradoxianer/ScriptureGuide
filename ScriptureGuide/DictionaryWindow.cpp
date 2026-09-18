@@ -350,6 +350,16 @@ SGDictionaryWindow::SGDictionaryWindow(BRect frame, SwordBackend* backend,
 
 SGDictionaryWindow::~SGDictionaryWindow()
 {
+	// See SGSearchWindow's own destructor comment: fHitsWindow's
+	// QuitRequested() only ever Hide()s, so this direct Quit() (reached
+	// via SGMainWindow's shutdown cascade calling Quit() on THIS
+	// window, bypassing its own QuitRequested()) is the only thing
+	// that ever actually tears it down.
+	if (fHitsWindow != NULL) {
+		if (fHitsWindow->LockLooper())
+			fHitsWindow->Quit();
+	}
+
 	fOwner->SendMessage(DICT_QUIT);
 	delete fOwner;
 }
@@ -571,12 +581,30 @@ SGDictionaryWindow::_UpdateShowHitsButtonState()
 	bool isStrongsNumber = fCurrentLexicon != NULL
 		&& SwordBackend::StrongsPrefixForLexicon(fCurrentLexicon) != 0
 		&& !fCurrentKey.IsEmpty();
-	fShowHitsButton->SetEnabled(isStrongsNumber && !fBibleModuleName.IsEmpty());
+	bool canShowHits = isStrongsNumber && !fBibleModuleName.IsEmpty();
+	fShowHitsButton->SetEnabled(canShowHits);
+
+	// Live-update: the current key or the Bible module just changed
+	// (this is called from every place either of those can) -- if this
+	// window's own chart is already open, keep it showing whatever the
+	// current selection now points at, without stealing focus back
+	// from wherever the user actually is. Nothing to do if fHitsWindow
+	// was never opened -- a selection change shouldn't pop one open
+	// uninvited.
+	if (canShowHits && fHitsWindow != NULL && !fHitsWindow->IsHidden())
+		_RefreshHitsWindow(false);
 }
 
 
 void
 SGDictionaryWindow::_ShowHitsChart()
+{
+	_RefreshHitsWindow(true);
+}
+
+
+void
+SGDictionaryWindow::_RefreshHitsWindow(bool activate)
 {
 	if (fCurrentLexicon == NULL || fCurrentKey.IsEmpty()
 		|| fBibleModuleName.IsEmpty()) {
@@ -659,6 +687,8 @@ SGDictionaryWindow::_ShowHitsChart()
 		(int)hits.size(), fullNumber.String(), bibleModule->FullName());
 
 	if (fHitsWindow == NULL) {
+		// Passive refresh (activate == false) never gets here -- its
+		// own call site only fires once fHitsWindow already exists.
 		BRect r(Frame());
 		r.OffsetBy(30, 30);
 		r.right = r.left + 520;
@@ -668,8 +698,10 @@ SGDictionaryWindow::_ShowHitsChart()
 	} else {
 		fHitsWindow->SetHits(hits, title.String());
 	}
-	fHitsWindow->Show();
-	fHitsWindow->Activate(true);
+	if (activate) {
+		fHitsWindow->Show();
+		fHitsWindow->Activate(true);
+	}
 }
 
 

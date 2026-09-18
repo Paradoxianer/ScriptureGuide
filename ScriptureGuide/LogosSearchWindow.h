@@ -114,8 +114,22 @@ private:
 	// Lazily built the first time FIND_SHOW_HITS fires, then just
 	// Show()n/Hide()n again -- same "never actually destruct, avoid the
 	// dangling-pointer-after-Quit() race" idiom SGMainWindow already
-	// uses for fDictionaryWindow/fSearchWindow themselves.
+	// uses for fDictionaryWindow/fSearchWindow themselves. A search
+	// that completes while it's already open (see FIND_BUTTON_OK) also
+	// refreshes its content in place, without stealing focus back from
+	// whatever the user is doing -- deliberately its OWN window, not
+	// shared with DictionaryWindow/SGVerseListWindow's own charts, so
+	// results from different sources can be placed side by side to
+	// compare instead of one replacing another.
 	SGSearchHitsWindow	*fHitsWindow;
+
+	// Shared building of the SearchHit list + title text for
+	// fHitsWindow, used by both FIND_SHOW_HITS (activate = true, and
+	// lazily creates fHitsWindow if this is the first time) and the
+	// passive refresh at the end of FIND_BUTTON_OK (activate = false,
+	// and only when fHitsWindow already exists and is shown -- a
+	// search the user didn't ask a chart for shouldn't pop one open).
+	void			_RefreshHitsWindow(bool activate);
 
 	SGModule			*fCurrentModule;
 	

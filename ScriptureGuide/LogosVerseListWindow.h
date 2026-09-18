@@ -323,6 +323,11 @@ private:
 			// this always matches whatever the tag filter is currently
 			// showing in fRowList) and opens/reuses fHitsWindow with it.
 			void			_ShowHitsChart();
+			// Shared by VLIST_SHOW_HITS (activate = true, and lazily
+			// creates fHitsWindow if needed) and the passive refresh
+			// _RebuildRows() triggers (activate = false, only while
+			// fHitsWindow already exists and is shown).
+			void			_RefreshHitsWindow(bool activate);
 			// #72: shows the same New-Verse-List prompt _NewList() does,
 			// but with VLIST_DROP_NAME_RESULT as the result -- called from
 			// _AppendDroppedReferences() when a drop lands with nothing
@@ -599,7 +604,13 @@ private:
 			SwordBackend*			fBackend;
 			// Lazily built the first time VLIST_SHOW_HITS fires, then
 			// just Show()n/Hide()n again -- same idiom as
-			// SGSearchWindow's own fHitsWindow.
+			// SGSearchWindow's own fHitsWindow. _RebuildRows() refreshes
+			// its content in place (no activation) whenever the open
+			// collection's references change while it's already open --
+			// deliberately its OWN window, not shared with
+			// SGSearchWindow/SGDictionaryWindow's own charts, so results
+			// from different sources can be placed side by side to
+			// compare.
 			SGSearchHitsWindow*		fHitsWindow;
 };
 

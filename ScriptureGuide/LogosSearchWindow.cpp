@@ -126,6 +126,20 @@ SGSearchWindow::~SGSearchWindow(void)
 {
 	delete myBible;
 
+	// fHitsWindow's own QuitRequested() only ever Hide()s, by design
+	// (same idiom as this window's own -- see SGMainWindow's), so
+	// nothing else will ever actually quit it. SGMainWindow reaches
+	// THIS destructor via a direct Quit() call on real app shutdown
+	// (QuitRequested()'s comment there), bypassing this window's own
+	// QuitRequested() entirely -- without this, fHitsWindow (if this
+	// window's own chart was ever opened) outlived the whole rest of
+	// the app: confirmed live, closing the main window left an
+	// unkillable hits-chart window blocking the app from exiting.
+	if (fHitsWindow != NULL) {
+		if (fHitsWindow->LockLooper())
+			fHitsWindow->Quit();
+	}
+
 	fMessenger->SendMessage(FIND_QUIT);
 	delete fMessenger;
 }
@@ -199,6 +213,42 @@ SGSearchWindow::_ApplyModuleSelection(int32 selectIndex)
 	BString title("Find in ");
 	title << fCurrentModule->FullName();
 	SetTitle(title.String());
+}
+
+
+void
+SGSearchWindow::_RefreshHitsWindow(bool activate)
+{
+	std::vector<SearchHit> hits = BuildSearchHits(fCurrentModule, verseList);
+
+	BString title;
+	title << hits.size() << " "
+		<< B_TRANSLATE("hits for") << " \"" << fSearchString
+		<< "\" " << B_TRANSLATE("in") << " "
+		<< fCurrentModule->FullName();
+
+	if (fHitsWindow == NULL) {
+		// Passive refresh (activate == false) never gets here -- its
+		// own call site only fires once fHitsWindow already exists.
+		BRect r(Frame());
+		r.OffsetBy(30, 30);
+		r.right = r.left + 520;
+		r.bottom = r.top + 420;
+		// fMessenger already targets the SGMainWindow that opened this
+		// search window -- a copy of it (not fMessenger itself, which
+		// this window's own destructor still needs) gives the hits
+		// window the same jump target, so clicking a chart square/
+		// rectangle navigates that main window directly rather than
+		// this search window (which doesn't handle SG_BIBLE at all).
+		fHitsWindow = new SGSearchHitsWindow(r, hits, title.String(),
+			new BMessenger(*fMessenger));
+	} else {
+		fHitsWindow->SetHits(hits, title.String());
+	}
+	if (activate) {
+		fHitsWindow->Show();
+		fHitsWindow->Activate(true);
+	}
 }
 
 
@@ -536,6 +586,17 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 				findButton->SetEnabled(true);
 				searchString->SetEnabled(true);
 				showHitsButton->SetEnabled(!verseList.empty());
+
+				// Live-update: if this window's own chart is already
+				// open (from an earlier "Show Hits Chart" click here), a
+				// fresh search should replace what it's showing without
+				// being asked again -- but only ever refresh content,
+				// never Activate() it into the foreground while the user
+				// is still looking at the search results here. Nothing
+				// to do if fHitsWindow was never opened in the first
+				// place -- a search shouldn't pop one open uninvited.
+				if (fHitsWindow != NULL && !fHitsWindow->IsHidden())
+					_RefreshHitsWindow(false);
 			}
  			break;
 		}
@@ -578,34 +639,7 @@ void SGSearchWindow::MessageReceived(BMessage* message)
 
 		case FIND_SHOW_HITS:
 		{
-			std::vector<SearchHit> hits
-				= BuildSearchHits(fCurrentModule, verseList);
-
-			BString title;
-			title << hits.size() << " "
-				<< B_TRANSLATE("hits for") << " \"" << fSearchString
-				<< "\" " << B_TRANSLATE("in") << " "
-				<< fCurrentModule->FullName();
-
-			if (fHitsWindow == NULL) {
-				BRect r(Frame());
-				r.OffsetBy(30, 30);
-				r.right = r.left + 520;
-				r.bottom = r.top + 420;
-				// fMessenger already targets the SGMainWindow that opened
-				// this search window -- a copy of it (not fMessenger
-				// itself, which this window's own destructor still needs)
-				// gives the hits window the same jump target, so clicking
-				// a chart square/rectangle navigates that main window
-				// directly rather than this search window (which doesn't
-				// handle SG_BIBLE at all).
-				fHitsWindow = new SGSearchHitsWindow(r, hits, title.String(),
-					new BMessenger(*fMessenger));
-			} else {
-				fHitsWindow->SetHits(hits, title.String());
-			}
-			fHitsWindow->Show();
-			fHitsWindow->Activate(true);
+			_RefreshHitsWindow(true);
 			break;
 		}
 

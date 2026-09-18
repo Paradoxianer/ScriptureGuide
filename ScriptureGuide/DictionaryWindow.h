@@ -175,6 +175,11 @@ private:
 			// turned up (see LogosSearchWindow.cpp's own comment on
 			// that), and opens/reuses fHitsWindow with the result.
 			void			_ShowHitsChart();
+			// Shared by DICT_SHOW_HITS (activate = true, and lazily
+			// creates fHitsWindow if needed) and the passive refresh
+			// _UpdateShowHitsButtonState() triggers (activate = false,
+			// only while fHitsWindow already exists and is shown).
+			void			_RefreshHitsWindow(bool activate);
 
 			SwordBackend*	fBackend;
 			SGModule*		fCurrentLexicon;
@@ -194,7 +199,12 @@ private:
 			BButton*		fShowHitsButton;
 			// Lazily built the first time DICT_SHOW_HITS fires, then just
 			// Show()n/Hide()n again -- same idiom as SGSearchWindow's own
-			// fHitsWindow.
+			// fHitsWindow. _UpdateShowHitsButtonState() refreshes its
+			// content in place (no activation) whenever the current key
+			// or module changes while it's already open -- deliberately
+			// its OWN window, not shared with SGSearchWindow/
+			// SGVerseListWindow's own charts, so results from different
+			// sources can be placed side by side to compare.
 			SGSearchHitsWindow*	fHitsWindow;
 
 			// One entry per lexicon ever visited this session -- see

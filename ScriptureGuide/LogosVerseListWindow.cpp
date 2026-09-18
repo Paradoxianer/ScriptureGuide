@@ -610,6 +610,16 @@ SGVerseListWindow::~SGVerseListWindow()
 	if (fMessenger != NULL)
 		fMessenger->SendMessage(VLIST_QUIT);
 
+	// See SGSearchWindow's own destructor comment: fHitsWindow's
+	// QuitRequested() only ever Hide()s, so this direct Quit() (reached
+	// via SGMainWindow's shutdown cascade calling Quit() on THIS
+	// window, bypassing its own QuitRequested()) is the only thing
+	// that ever actually tears it down.
+	if (fHitsWindow != NULL) {
+		if (fHitsWindow->LockLooper())
+			fHitsWindow->Quit();
+	}
+
 	delete fImportPanel;
 	delete fExportPanel;
 	delete fMessenger;
@@ -2146,6 +2156,13 @@ SGVerseListWindow::_ShowInTracker()
 void
 SGVerseListWindow::_ShowHitsChart()
 {
+	_RefreshHitsWindow(true);
+}
+
+
+void
+SGVerseListWindow::_RefreshHitsWindow(bool activate)
+{
 	if (!fHasOpenFile || fVisibleBookmarkIndices.empty())
 		return;
 
@@ -2177,12 +2194,25 @@ SGVerseListWindow::_ShowHitsChart()
 
 	std::vector<SearchHit> hits = BuildSearchHits(module, keys);
 
+	// The collection's own leaf name, not fNameView->Text() -- this can
+	// run from inside _RebuildRows() (the passive-refresh path), which
+	// _LoadFile() calls BEFORE _UpdateTitle() ever repoints fNameView at
+	// the newly opened collection (confirmed live: opening "Live Test"
+	// showed "5 references in \"(No list open)\"", the PREVIOUS/default
+	// name, even though the hit count itself was already correct).
+	// fCollectionPath, unlike fNameView, is set at the very top of
+	// _LoadFile(), before _RebuildRows() runs.
+	BPath collectionPath(fCollectionPath.String());
+	const char* listName = collectionPath.Leaf();
+
 	BString title;
 	title.SetToFormat(
 		B_TRANSLATE("%d references in \"%s\" (%s)"),
-		(int)hits.size(), fNameView->Text(), module->FullName());
+		(int)hits.size(), listName != NULL ? listName : "", module->FullName());
 
 	if (fHitsWindow == NULL) {
+		// Passive refresh (activate == false) never gets here -- its
+		// own call site only fires once fHitsWindow already exists.
 		BRect r(Frame());
 		r.OffsetBy(30, 30);
 		r.right = r.left + 520;
@@ -2192,8 +2222,10 @@ SGVerseListWindow::_ShowHitsChart()
 	} else {
 		fHitsWindow->SetHits(hits, title.String());
 	}
-	fHitsWindow->Show();
-	fHitsWindow->Activate(true);
+	if (activate) {
+		fHitsWindow->Show();
+		fHitsWindow->Activate(true);
+	}
 }
 
 
@@ -2359,6 +2391,17 @@ SGVerseListWindow::_RebuildRows()
 	// Move Down all need to fall back to disabled rather than keep
 	// whatever state a previous, now-gone selection left them in.
 	_UpdateRowActionState();
+
+	// Live-update: every content-changing operation on the open
+	// collection (opening a different list, adding/editing/removing a
+	// reference, reordering, changing the tag filter) rebuilds the row
+	// list through here -- one choke point is enough to keep this
+	// window's own already-open chart following whatever its list
+	// currently shows, without stealing focus back from wherever the
+	// user actually is. Nothing to do if fHitsWindow was never opened
+	// -- a list change shouldn't pop one open uninvited.
+	if (fHitsWindow != NULL && !fHitsWindow->IsHidden())
+		_RefreshHitsWindow(false);
 }
 
 
