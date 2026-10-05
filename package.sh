@@ -128,6 +128,13 @@ done
 # Requirements are read from the binaries rather than hard-coded: a
 # hand-written list rots the first time a library is added or dropped,
 # and the symptom is a package that installs cleanly and won't launch.
+# Secondary-architecture packages name their libraries with the arch as a
+# suffix (sword_x86 provides lib:libsword_1.8.1_x86), so the requirement has
+# to carry it too, or the install can never find a provider.
+case "$ARCH" in
+	x86) LIB_SUFFIX=_x86 ;;
+	*)   LIB_SUFFIX="" ;;
+esac
 requires=""
 for bin in "$STAGE/apps/ScriptureGuide/"*; do
 	for lib in $(readelf -d "$bin" 2>/dev/null |
@@ -143,7 +150,7 @@ for bin in "$STAGE/apps/ScriptureGuide/"*; do
 				# libfoo-1.2.3.so and libfoo.so.1 both become lib:libfoo_1
 				name=$(echo "$lib" | sed 's/\.so.*//; s/-/_/g')
 				requires="$requires
-	lib:$name"
+	lib:$name$LIB_SUFFIX"
 				;;
 		esac
 	done
