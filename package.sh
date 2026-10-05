@@ -91,6 +91,14 @@ minor=$(sed -n 's/^[[:space:]]*minor[[:space:]]*=[[:space:]]*\([0-9]*\).*/\1/p' 
 VERSION="$major.$middle.$minor"
 REVISION=1
 ARCH=$(getarch 2>/dev/null || echo x86_64)
+# A secondary-architecture build (setarch x86) is packaged as x86_gcc2 with
+# the arch suffix on its library names -- that is how Haiku's own secondary
+# packages (sword_x86 and friends) are named. A plain "x86" architecture
+# does not install on a gcc2 system.
+case "$ARCH" in
+	x86) LIB_SUFFIX=_x86; ARCH=x86_gcc2 ;;
+	*)   LIB_SUFFIX="" ;;
+esac
 echo "   ScriptureGuide $VERSION-$REVISION ($ARCH)"
 
 STAGE="$SRC/build-package/stage"
@@ -128,13 +136,8 @@ done
 # Requirements are read from the binaries rather than hard-coded: a
 # hand-written list rots the first time a library is added or dropped,
 # and the symptom is a package that installs cleanly and won't launch.
-# Secondary-architecture packages name their libraries with the arch as a
-# suffix (sword_x86 provides lib:libsword_1.8.1_x86), so the requirement has
-# to carry it too, or the install can never find a provider.
-case "$ARCH" in
-	x86) LIB_SUFFIX=_x86 ;;
-	*)   LIB_SUFFIX="" ;;
-esac
+# Secondary-architecture libraries carry the suffix too (sword_x86 provides
+# lib:libsword_1.8.1_x86), so the requirement has to name it.
 requires=""
 for bin in "$STAGE/apps/ScriptureGuide/"*; do
 	for lib in $(readelf -d "$bin" 2>/dev/null |
