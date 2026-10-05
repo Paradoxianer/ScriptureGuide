@@ -3,6 +3,7 @@
 #
 #   sh package.sh v1.2.2           <- what most people want
 #   sh package.sh v1.2.2 --install <- ... and install it straight away
+#   SKIP_DEPS=1 setarch x86 sh package.sh --install   <- 32-bit VM, deps present
 #   sh package.sh                  <- build from THIS checkout instead
 #
 # Why you might want this: a prebuilt .hpkg carries a "requires haiku >= "
@@ -49,8 +50,13 @@ fi
 step 1 "Abhaengigkeiten installieren"
 # -y so an unattended run doesn't stall on a prompt. Already-installed
 # packages are a no-op, so this is safe to run repeatedly.
-pkgman install -y haiku_devel devel:libsword_1.8.1 lib:libsword_1.8.1 \
-	devel:libz makefile_engine cmd:wget cmd:unzip cmd:awk
+# SKIP_DEPS=1 skips this: for a secondary-architecture build (setarch x86)
+# the same libraries are installed under other names (sword_x86 and so on),
+# which this list can't name, so the caller guarantees they are present.
+if [ -z "$SKIP_DEPS" ]; then
+	pkgman install -y haiku_devel devel:libsword_1.8.1 lib:libsword_1.8.1 \
+		devel:libz makefile_engine cmd:wget cmd:unzip cmd:awk
+fi
 # git is only needed to fetch a tag -- a checkout build doesn't touch it.
 # (Its package name also differs on the secondary-architecture install.)
 if [ -n "$TAG" ]; then
