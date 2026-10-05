@@ -48,6 +48,7 @@
 #include "constants.h"
 #include "LogosSearchHitsWindow.h"
 #include "Preferences.h"
+#include "PrintSupport.h"
 #include "SwordBackend.h"
 
 // The current system locale's BLanguage::Code() (e.g. "de") -- what a
@@ -359,14 +360,16 @@ private:
 };
 
 
-// The name view at the top of the window (#73): a double-click posts
-// VLIST_RENAME to the window, same not-a-friend reasoning as
-// VerseListRowListView above. A single click does nothing -- this is a
-// label, not a button, so there's no affordance to confuse with one.
-// Right-click (#97 follow-up) shows a small "Rename List.../Delete
-// File..." context menu -- both already exist as File-menu items, this
-// just makes them reachable right where the list's own name already is,
-// same menu+gesture pairing this window's other actions already have.
+// The name view at the top of the window (#73). A left click opens the
+// "Go to List" tree right under it (see MouseDown()); a right-click shows a
+// small "Rename List.../Show in Tracker/Delete File..." context menu --
+// all existing File-menu actions, just reachable right where the list's own
+// name already is.
+static void PopulateCollectionMenu(BMenu* menu, BHandler* target,
+	const char* path, uint32 what, const char* excludePath,
+	bool addNewSubCollectionHere);
+
+
 class VerseListNameView : public BStringView {
 public:
 	VerseListNameView(const char* name, const char* text)
@@ -375,6 +378,12 @@ public:
 	{
 	}
 
+	// A left click opens the same "Go to List" tree the menu bar has,
+	// right under this label -- this label sits where people naturally
+	// look for "switch list", so it should answer a click the same way.
+	// Renaming moved to the right-click menu (below) rather than staying
+	// on double-click, since the first click of a double-click would
+	// otherwise pop this menu open every time.
 	virtual void MouseDown(BPoint where)
 	{
 		uint32 buttons = 0;
@@ -382,22 +391,31 @@ public:
 			? Window()->CurrentMessage() : NULL;
 		if (current != NULL)
 			current->FindInt32("buttons", (int32*)&buttons);
+		BPoint screenPoint = where;
+		ConvertToScreen(&screenPoint);
 		if (buttons == B_SECONDARY_MOUSE_BUTTON) {
-			BPoint screenPoint = where;
-			ConvertToScreen(&screenPoint);
 			_ShowContextMenu(screenPoint);
 			return;
 		}
-
-		int32 clicks = 0;
-		if (current != NULL)
-			current->FindInt32("clicks", &clicks);
-		if (clicks >= 2)
-			Window()->PostMessage(VLIST_RENAME);
-		BStringView::MouseDown(where);
+		if (buttons == B_PRIMARY_MOUSE_BUTTON) {
+			BPoint below(Bounds().left, Bounds().bottom + 1.0f);
+			ConvertToScreen(&below);
+			_ShowGoToListMenu(below);
+		}
 	}
 
 private:
+	void _ShowGoToListMenu(BPoint screenPoint)
+	{
+		BPopUpMenu* menu = new BPopUpMenu("verseListNameGoTo", false, false);
+		BString root = BookmarkFile::RootDirectory();
+		PopulateCollectionMenu(menu, Window(), root.String(),
+			VLIST_NAV_SELECT, "", true);
+		menu->SetTargetForItems(Window());
+		menu->SetAsyncAutoDestruct(true);
+		menu->Go(screenPoint, true, true, true);
+	}
+
 	void _ShowContextMenu(BPoint screenPoint)
 	{
 		BPopUpMenu* menu = new BPopUpMenu("verseListNameMenu", false, false);
@@ -541,8 +559,11 @@ SGVerseListWindow::SGVerseListWindow(BRect frame, BMessenger* owner)
 	fNameView(NULL),
 	fPathView(NULL),
 	fExportItem(NULL),
+	fCloseItem(NULL),
 	fShowInTrackerItem(NULL),
 	fShowHitsItem(NULL),
+	fPrintRefsOnlyItem(NULL),
+	fPrintWithTextItem(NULL),
 	fRenameItem(NULL),
 	fDeleteItem(NULL),
 	fAddReferenceItem(NULL),
@@ -848,32 +869,56 @@ SGVerseListWindow::_BuildMenuBar()
 	// already covers navigation to anything in the standard tree, and
 	// crossing that tree's boundary goes through Import/Export instead
 	// of a raw file panel (#94). Relocating within the tree is #58, not
-	// built yet. No "Close Verse List" or "Save" either -- closing this
-	// window (which hides, not destroys, same as the search window)
-	// already gets you away from the current list, and everything here
-	// already writes itself immediately (rows, rename, description via
-	// a debounce timer that _LoadFile() now flushes before switching
-	// lists) -- a manual Save was only ever covering for that flush
+	// built yet. "Close List" (File menu) clears the window back to
+	// "(No list open)" without hiding it -- needed so the next import
+	// creates a new list rather than merging into the open one. No manual
+	// "Save": everything here already writes itself immediately (rows,
+	// rename, description via a debounce timer that _LoadFile() now
+	// flushes before switching lists) -- a manual Save was only ever
+	// covering for that flush
 	// gap, not a real save-vs-discard choice.
+	// Reported overloaded/hard to scan once Print joined the mix --
+	// regrouped into clusters (create/import, output/inspect, manage,
+	// destroy) with a separator between each, and the two print variants
+	// folded into their own submenu instead of two more top-level items.
 	BMenu* fileMenu = new BMenu(B_TRANSLATE("File"));
 	fileMenu->AddItem(new BMenuItem(B_TRANSLATE("New Verse List" B_UTF8_ELLIPSIS),
 		new BMessage(VLIST_NEW), 'N'));
 	fileMenu->AddItem(new BMenuItem(
 		B_TRANSLATE("Import Text List" B_UTF8_ELLIPSIS),
 		new BMessage(VLIST_IMPORT_PANEL)));
+	// Clears the window back to "(No list open)" -- the next import then
+	// asks for a name and location and creates a new list, instead of
+	// appending its references to whichever list happens to be open.
+	fCloseItem = new BMenuItem(B_TRANSLATE("Close List"),
+		new BMessage(VLIST_CLOSE_LIST));
+	fileMenu->AddItem(fCloseItem);
+	fileMenu->AddSeparatorItem();
 	fExportItem = new BMenuItem(
 		B_TRANSLATE("Export Text List" B_UTF8_ELLIPSIS),
 		new BMessage(VLIST_EXPORT_PANEL));
 	fileMenu->AddItem(fExportItem);
-	fShowInTrackerItem = new BMenuItem(B_TRANSLATE("Show in Tracker"),
-		new BMessage(VLIST_SHOW_IN_TRACKER));
-	fileMenu->AddItem(fShowInTrackerItem);
+	// #87: a submenu rather than two top-level items -- see the class
+	// comment above for why this whole menu got regrouped.
+	BMenu* printMenu = new BMenu(B_TRANSLATE("Print"));
+	fPrintRefsOnlyItem = new BMenuItem(
+		B_TRANSLATE("References Only" B_UTF8_ELLIPSIS),
+		new BMessage(VLIST_PRINT_REFS_ONLY));
+	printMenu->AddItem(fPrintRefsOnlyItem);
+	fPrintWithTextItem = new BMenuItem(
+		B_TRANSLATE("With Text" B_UTF8_ELLIPSIS),
+		new BMessage(VLIST_PRINT_WITH_TEXT));
+	printMenu->AddItem(fPrintWithTextItem);
+	fileMenu->AddItem(printMenu);
 	// Same chapter-grid + treemap window a search result opens (see
 	// VLIST_SHOW_HITS's own comment) -- a book/chapter distribution view
 	// of this list's own references.
 	fShowHitsItem = new BMenuItem(B_TRANSLATE("Show Hits Chart"),
 		new BMessage(VLIST_SHOW_HITS));
 	fileMenu->AddItem(fShowHitsItem);
+	fShowInTrackerItem = new BMenuItem(B_TRANSLATE("Show in Tracker"),
+		new BMessage(VLIST_SHOW_IN_TRACKER));
+	fileMenu->AddItem(fShowInTrackerItem);
 	fileMenu->AddSeparatorItem();
 	fRenameItem = new BMenuItem(
 		B_TRANSLATE("Rename List" B_UTF8_ELLIPSIS),
@@ -991,7 +1036,7 @@ public:
 		const char* windowTitle = NULL, const char* initialName = NULL,
 		const char* buttonLabel = NULL, const char* fieldLabel = NULL,
 		int32 index = -1, bool showLocation = false,
-		const char* fixedLocation = NULL)
+		const char* fixedLocation = NULL, bool showName = true)
 		:
 		BWindow(BRect(120, 120, 460, 210),
 			windowTitle != NULL ? windowTitle
@@ -1006,9 +1051,14 @@ public:
 		fLocationField(NULL),
 		fCarriesLocation(showLocation || fixedLocation != NULL)
 	{
-		fNameControl = new BTextControl("name",
-			fieldLabel != NULL ? fieldLabel : B_TRANSLATE("Name:"),
-			initialName != NULL ? initialName : "", new BMessage(kNamePromptOK));
+		// A batch import names each list after its own file, so it only
+		// needs the location -- no name field at all in that case.
+		fNameControl = NULL;
+		if (showName) {
+			fNameControl = new BTextControl("name",
+				fieldLabel != NULL ? fieldLabel : B_TRANSLATE("Name:"),
+				initialName != NULL ? initialName : "", new BMessage(kNamePromptOK));
+		}
 		BButton* cancelButton = new BButton("cancel", B_TRANSLATE("Cancel"),
 			new BMessage(kNamePromptCancel));
 		BButton* okButton = new BButton("ok", buttonLabel != NULL
@@ -1016,8 +1066,9 @@ public:
 		SetDefaultButton(okButton);
 
 		BLayoutBuilder::Group<> layout(this, B_VERTICAL);
-		layout.SetInsets(B_USE_WINDOW_SPACING)
-			.Add(fNameControl);
+		layout.SetInsets(B_USE_WINDOW_SPACING);
+		if (fNameControl != NULL)
+			layout.Add(fNameControl);
 
 		if (showLocation) {
 			BMenu* locationMenu = new BMenu("locationMenu");
@@ -1046,26 +1097,32 @@ public:
 			.End()
 		.End();
 
-		fNameControl->MakeFocus(true);
-		if (initialName != NULL && initialName[0] != '\0')
-			fNameControl->TextView()->SelectAll();
+		if (fNameControl != NULL) {
+			fNameControl->MakeFocus(true);
+			if (initialName != NULL && initialName[0] != '\0')
+				fNameControl->TextView()->SelectAll();
+		}
 	}
 
 	virtual void MessageReceived(BMessage* message)
 	{
 		if (message->what == kNamePromptOK) {
-			BString name(fNameControl->Text());
-			name.Trim();
-			if (!name.IsEmpty()) {
-				BMessage result(fResultWhat);
-				result.AddString("name", name);
-				if (fIndex >= 0)
-					result.AddInt32("index", fIndex);
-				if (fCarriesLocation)
-					result.AddString("location", fLocationPath);
-				fTarget.SendMessage(&result);
-				Quit();
+			BString name;
+			if (fNameControl != NULL) {
+				name = fNameControl->Text();
+				name.Trim();
+				if (name.IsEmpty())
+					return;
 			}
+			BMessage result(fResultWhat);
+			if (!name.IsEmpty())
+				result.AddString("name", name);
+			if (fIndex >= 0)
+				result.AddInt32("index", fIndex);
+			if (fCarriesLocation)
+				result.AddString("location", fLocationPath);
+			fTarget.SendMessage(&result);
+			Quit();
 			return;
 		}
 		if (message->what == kNamePromptCancel) {
@@ -1161,23 +1218,19 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 			_ImportPanel();
 			break;
 
-		case VLIST_IMPORT_RESULT:
-		{
-			entry_ref ref;
-			if (message->FindRef("refs", &ref) == B_OK) {
-				BPath path(&ref);
-				_ImportTextFile(path.Path());
-			}
+		case VLIST_CLOSE_LIST:
+			_CloseList();
 			break;
-		}
+
+		case VLIST_IMPORT_RESULT:
+			_QueueImportFiles(message);
+			break;
 
 		case VLIST_IMPORT_NAME_RESULT:
 		{
-			BString name, location;
-			if (message->FindString("name", &name) == B_OK) {
-				message->FindString("location", &location);
-				_ImportIntoNewList(name.String(), location.String());
-			}
+			BString location;
+			message->FindString("location", &location);
+			_ImportPending(location.String());
 			break;
 		}
 
@@ -1205,6 +1258,14 @@ SGVerseListWindow::MessageReceived(BMessage* message)
 
 		case VLIST_SHOW_HITS:
 			_ShowHitsChart();
+			break;
+
+		case VLIST_PRINT_REFS_ONLY:
+			_PrintList(false);
+			break;
+
+		case VLIST_PRINT_WITH_TEXT:
+			_PrintList(true);
 			break;
 
 		case VLIST_ADD_REFERENCE:
@@ -1378,7 +1439,7 @@ SGVerseListWindow::_BuildFilePanels()
 	// collection folder. Collection navigation itself goes through Go
 	// to List, not a file panel (#94).
 	fImportPanel = new BFilePanel(B_OPEN_PANEL, new BMessenger(this), NULL,
-		B_FILE_NODE, false, new BMessage(VLIST_IMPORT_RESULT));
+		B_FILE_NODE, true, new BMessage(VLIST_IMPORT_RESULT));
 	fImportPanel->SetButtonLabel(B_DEFAULT_BUTTON, B_TRANSLATE("Import"));
 
 	entry_ref dirRef;
@@ -2003,98 +2064,78 @@ ReadWholeFile(const char* path, BString& content)
 }
 
 
-// #68/#95: imports into whichever collection is already open, the same
-// way a manual Add Reference would, one call per line -- no new
-// collection, no location to choose. Only when nothing is open does
-// this need a destination at all; that path (#97) is
-// _StartImportIntoNewList()/_ImportIntoNewList() below.
+// Import: one file or many. Each file becomes its own list, named after the
+// file, so the only thing still asked is where they should go -- the
+// destination picker is the same location menu the New List prompt uses.
+// Nothing is merged into whichever list happens to be open.
 void
-SGVerseListWindow::_ImportTextFile(const char* path)
+SGVerseListWindow::_QueueImportFiles(const BMessage* message)
 {
-	BString content;
-	if (!ReadWholeFile(path, content))
-		return;
+	fPendingImports.clear();
 
-	if (!fHasOpenFile) {
-		_StartImportIntoNewList(path, content);
-		return;
+	entry_ref ref;
+	for (int32 i = 0; message->FindRef("refs", i, &ref) == B_OK; i++) {
+		BPath path(&ref);
+		BString content;
+		if (!ReadWholeFile(path.Path(), content))
+			continue;
+
+		BString name(path.Leaf());
+		int32 dot = name.FindLast('.');
+		if (dot > 0)
+			name.Truncate(dot);
+
+		PendingImport pending;
+		pending.name = TitleCaseWords(name);
+		pending.content = content;
+		fPendingImports.push_back(pending);
 	}
-
-	std::vector<BString> refs;
-	ParseReferenceLines(content, refs);
-
-	BString versification = _CollectionVersification();
-	int32 position = (int32)fBookmarks.size();
-	bool appendedAny = false;
-	for (size_t i = 0; i < refs.size(); i++) {
-		BookmarkFile bookmark;
-		if (bookmark.CreateNew(fCollectionPath.String(), refs[i].String(),
-				versification.String(), "", position) == B_OK) {
-			fBookmarks.push_back(bookmark);
-			position++;
-			appendedAny = true;
-		}
-	}
-	if (appendedAny)
-		_RebuildRows();
-}
-
-
-// #97: nothing was open, so unlike the merge path above this needs a
-// destination -- reuses the same name-plus-location prompt New Verse
-// List already has, pre-filled with a name derived from the file, and
-// remembers the source content (`fPendingImportContent`) until the
-// prompt returns.
-void
-SGVerseListWindow::_StartImportIntoNewList(const char* path,
-	const BString& content)
-{
-	fPendingImportContent = content;
-
-	BPath sourcePath(path);
-	BString name(sourcePath.Leaf());
-	int32 dot = name.FindLast('.');
-	if (dot > 0)
-		name.Truncate(dot);
-	name = TitleCaseWords(name);
+	if (fPendingImports.empty())
+		return;
 
 	VerseListNamePromptWindow* prompt = new VerseListNamePromptWindow(
 		BMessenger(this), VLIST_IMPORT_NAME_RESULT,
-		B_TRANSLATE("Import Text List"), name.String(),
-		B_TRANSLATE("Import"), NULL, -1, true);
+		B_TRANSLATE("Import Text Lists"), NULL, B_TRANSLATE("Import"),
+		NULL, -1, true, NULL, false);
 	prompt->Show();
 }
 
 
 void
-SGVerseListWindow::_ImportIntoNewList(const char* name,
-	const char* parentPath)
+SGVerseListWindow::_ImportPending(const char* parentPath)
 {
-	if (fPendingImportContent.IsEmpty())
+	if (fPendingImports.empty())
 		return;
 
-	BString collectionPath = BookmarkFile::CreateCollection(
-		parentPath != NULL && parentPath[0] != '\0' ? parentPath : NULL,
-		name);
-	if (collectionPath.IsEmpty())
-		return;
+	// CreateCollection() already gives a repeated name a " 2", " 3", ...
+	// suffix, so a batch with duplicate file names needs no check here.
+	BString firstPath;
+	for (size_t i = 0; i < fPendingImports.size(); i++) {
+		BString collectionPath = BookmarkFile::CreateCollection(
+			parentPath, fPendingImports[i].name.String());
+		if (collectionPath.IsEmpty())
+			continue;
+		if (firstPath.IsEmpty())
+			firstPath = collectionPath;
 
-	std::vector<BString> refs;
-	ParseReferenceLines(fPendingImportContent, refs);
-
-	int32 position = 0;
-	for (size_t i = 0; i < refs.size(); i++) {
-		BookmarkFile bookmark;
-		if (bookmark.CreateNew(collectionPath.String(), refs[i].String(),
-				"KJV", "", position) == B_OK) {
-			position++;
+		std::vector<BString> refs;
+		ParseReferenceLines(fPendingImports[i].content, refs);
+		int32 position = 0;
+		for (size_t r = 0; r < refs.size(); r++) {
+			BookmarkFile bookmark;
+			if (bookmark.CreateNew(collectionPath.String(), refs[r].String(),
+					"KJV", "", position) == B_OK) {
+				position++;
+			}
 		}
 	}
 
-	fPendingImportContent = "";
+	fPendingImports.clear();
 
-	// _LoadFile() rebuilds the navigation/destination menus itself now.
-	_LoadFile(collectionPath.String());
+	// Opens the first list of the batch; the rest are one click away in
+	// Go to List. _LoadFile() rebuilds the navigation menus itself.
+	if (!firstPath.IsEmpty())
+		_LoadFile(firstPath.String());
 }
 
 
@@ -2112,7 +2153,7 @@ SGVerseListWindow::_ExportPanel()
 }
 
 
-// #102: the reverse of _ImportTextFile() -- one reference per line, no
+// #102: the reverse of Import -- one reference per line, no
 // header, the same plain-text shape Import reads back in. Deliberately
 // just the references themselves, not position/tags/locale/
 // versification -- portable and human-readable rather than a full
@@ -2160,6 +2201,34 @@ SGVerseListWindow::_ShowHitsChart()
 }
 
 
+SGModule*
+SGVerseListWindow::_DefaultBibleModule() const
+{
+	BString moduleName;
+	prefsLock.Lock();
+	bool hasSaved = preferences.FindString("module", &moduleName) == B_OK;
+	prefsLock.Unlock();
+
+	SGModule* module = hasSaved
+		? fBackend->FindModule(moduleName.String()) : NULL;
+	if (module != NULL)
+		return module;
+
+	// The saved preference (or "WEB", hardcoded here until this was
+	// reported) didn't resolve to anything actually installed -- on a
+	// German-only install, FindModule("WEB") returns NULL and both
+	// callers used to just bail silently (Show Hits Chart did nothing,
+	// Print List "With Text" came out looking exactly like "References
+	// Only" since the whole text-resolving branch quietly gave up before
+	// ever building anything). Falling back to whatever IS installed is
+	// the one default that can't be wrong this way.
+	std::vector<BString> available = fBackend->SearchableModuleNames();
+	if (available.empty())
+		return NULL;
+	return fBackend->FindModule(available[0].String());
+}
+
+
 void
 SGVerseListWindow::_RefreshHitsWindow(bool activate)
 {
@@ -2177,18 +2246,7 @@ SGVerseListWindow::_RefreshHitsWindow(bool activate)
 		keys.push_back(fBookmarks[index].NavigationKey());
 	}
 
-	// This window has no Bible-module concept of its own (unlike
-	// SGSearchWindow, whose search already happened in some specific
-	// module) -- falls back to the same saved-preference/"WEB" default
-	// SGSearchWindow's own constructor uses when it has no open reading-
-	// pane columns to offer either, simpler than adding a module picker
-	// or cross-window messaging just for this one chart.
-	BString moduleName;
-	prefsLock.Lock();
-	if (preferences.FindString("module", &moduleName) != B_OK)
-		moduleName = "WEB";
-	prefsLock.Unlock();
-	SGModule* module = fBackend->FindModule(moduleName.String());
+	SGModule* module = _DefaultBibleModule();
 	if (module == NULL)
 		return;
 
@@ -2226,6 +2284,72 @@ SGVerseListWindow::_RefreshHitsWindow(bool activate)
 		fHitsWindow->Show();
 		fHitsWindow->Activate(true);
 	}
+}
+
+
+void
+SGVerseListWindow::_PrintList(bool includeText)
+{
+	if (!fHasOpenFile || fVisibleBookmarkIndices.empty())
+		return;
+
+	BPath collectionPath(fCollectionPath.String());
+	const char* listName = collectionPath.Leaf();
+
+	TextDocumentRef document(new TextDocument(), true);
+	AppendPrintHeading(document, listName != NULL ? listName : "");
+
+	// The collection's own description, one body paragraph per line --
+	// reported missing from the printed output entirely; split by hand
+	// (rather than one paragraph with embedded newlines) since a
+	// Paragraph only ever wraps by width, it doesn't treat an embedded
+	// "\n" as a forced line break (confirmed by TextDocument::
+	// NormalizeText()'s own reason for splitting on '\n' itself).
+	BString descriptionText(fDescriptionDocument->Text());
+	BString trimmedCheck(descriptionText);
+	trimmedCheck.Trim();
+	if (!trimmedCheck.IsEmpty()) {
+		BString remaining(descriptionText);
+		while (!remaining.IsEmpty()) {
+			int32 newlineAt = remaining.FindFirst('\n');
+			BString line = (newlineAt == B_ERROR) ? remaining
+				: BString(remaining.String(), newlineAt);
+			if (!line.IsEmpty())
+				AppendPrintBodyLine(document, line);
+			if (newlineAt == B_ERROR)
+				break;
+			remaining.Remove(0, newlineAt + 1);
+		}
+	}
+
+	if (!includeText) {
+		for (size_t i = 0; i < fVisibleBookmarkIndices.size(); i++) {
+			int32 index = fVisibleBookmarkIndices[i];
+			AppendPrintBodyLine(document, fBookmarks[index].Reference());
+		}
+	} else {
+		// Same NavigationKey()/_DefaultBibleModule()/BuildSearchHits()
+		// pattern _RefreshHitsWindow() already uses to resolve a
+		// bookmark list's own verse text -- see _DefaultBibleModule()'s
+		// own comment.
+		std::vector<BString> keys;
+		for (size_t i = 0; i < fVisibleBookmarkIndices.size(); i++) {
+			int32 index = fVisibleBookmarkIndices[i];
+			keys.push_back(fBookmarks[index].NavigationKey());
+		}
+		SGModule* module = _DefaultBibleModule();
+		if (module == NULL)
+			return;
+
+		std::vector<SearchHit> hits = BuildSearchHits(module, keys);
+		for (size_t i = 0; i < hits.size(); i++) {
+			BString line(hits[i].reference);
+			line << "  " << hits[i].verseText;
+			AppendPrintBodyLine(document, line);
+		}
+	}
+
+	PrintTextDocument(this, document, B_TRANSLATE("Print Verse List"));
 }
 
 
@@ -2391,6 +2515,20 @@ SGVerseListWindow::_RebuildRows()
 	// Move Down all need to fall back to disabled rather than keep
 	// whatever state a previous, now-gone selection left them in.
 	_UpdateRowActionState();
+
+	// Reported stuck permanently disabled: a list created new (correctly
+	// disabled here while still empty, via _CreateNewList()'s own
+	// _UpdateTitle() call) then populated one reference at a time (Add
+	// Reference, drag-and-drop) never re-enabled these two -- nothing
+	// but _UpdateTitle() itself ever touched them, and _UpdateTitle()
+	// only runs on load/create/close/rename, not on every content change
+	// this function already handles. Kept in _UpdateTitle() too (its own
+	// call from the constructor, before any bookmark ever exists, still
+	// needs to set the correct disabled default with no _RebuildRows()
+	// call to fall back on).
+	fShowHitsItem->SetEnabled(fHasOpenFile && !fBookmarks.empty());
+	fPrintRefsOnlyItem->SetEnabled(fHasOpenFile && !fBookmarks.empty());
+	fPrintWithTextItem->SetEnabled(fHasOpenFile && !fBookmarks.empty());
 
 	// Live-update: every content-changing operation on the open
 	// collection (opening a different list, adding/editing/removing a
@@ -2727,8 +2865,15 @@ SGVerseListWindow::_UpdateTitle()
 
 	bool onList = fHasOpenFile;
 	fExportItem->SetEnabled(onList);
+	fCloseItem->SetEnabled(onList);
 	fShowInTrackerItem->SetEnabled(onList);
+	// Also (really, now primarily) kept current by _RebuildRows() itself
+	// on every content change -- these three lines here only matter for
+	// the constructor's own call, before fBookmarks/fRowList exist and
+	// _RebuildRows() has never run yet to set the correct default.
 	fShowHitsItem->SetEnabled(onList && !fBookmarks.empty());
+	fPrintRefsOnlyItem->SetEnabled(onList && !fBookmarks.empty());
+	fPrintWithTextItem->SetEnabled(onList && !fBookmarks.empty());
 	fRenameItem->SetEnabled(onList);
 	fDeleteItem->SetEnabled(onList);
 	fAddReferenceItem->SetEnabled(onList);

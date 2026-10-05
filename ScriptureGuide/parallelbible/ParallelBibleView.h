@@ -397,6 +397,48 @@ public:
 				};
 				std::vector<ExportRow> BuildExportRows() const;
 
+				// The active chain's own column index range within
+				// ColumnLayout()'s result, both ends inclusive -- exactly
+				// the [start, end] BuildExportRows() itself walks
+				// (skipping any COLUMN_NOTES entries, same as there) to
+				// fill each row's columnText. A caller matching
+				// ColumnLayout() entries up against BuildExportRows()'s
+				// columnText (#113's print feature, in particular) needs
+				// this: ColumnLayout() alone spans every open chain, not
+				// just the active one (see its own comment), so without
+				// this range a multi-chain window would zip the wrong
+				// column headings against BuildExportRows()'s
+				// single-chain data. Both out params come back -1 if
+				// there is no active chain (mirrors BuildExportRows()'s
+				// own early return).
+				void				ActiveChainRange(int32& start,
+										int32& end) const;
+
+				// #113: does the Bible column at `position` (a
+				// ColumnLayout()/BuildExportRows() index, same numbering)
+				// currently have a text selection, and if so, what verse
+				// range does it cover? False (outputs untouched) for no
+				// selection, a notes column, or an out-of-range position
+				// -- the print feature's own default ("nothing selected
+				// in a column prints the whole thing, a selection narrows
+				// just that column to it") reads this per column it's
+				// about to print.
+				bool				ColumnSelectionVerseRange(
+										int32 position, int& firstVerse,
+										int& lastVerse) const;
+
+				// #113: the highlight ranges the Bible column at
+				// `position` is currently rendering, exactly as already
+				// computed for on-screen display (BibleTextDocument::
+				// Highlights()) -- Options > Include Highlight Colours
+				// When Printing reads this per column to colour each
+				// printed verse's whole line by its first overlapping
+				// highlight (sub-verse offset precision isn't attempted
+				// for print, see AppendPrintBodyLine()'s own comment).
+				// Empty for a notes column or an out-of-range position.
+				std::vector<BibleTextDocument::VerseHighlight>
+									ColumnHighlights(int32 position) const;
+
 				// Cross-column selection coordination (see #23) -- called
 				// by BibleColumnView instances, not meant for other
 				// callers. A selection-drag that starts in one column and

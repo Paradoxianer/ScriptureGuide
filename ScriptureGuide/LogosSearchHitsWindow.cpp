@@ -9,6 +9,8 @@
 #include <map>
 #include <math.h>
 
+#include <Bitmap.h>
+#include <Button.h>
 #include <Catalog.h>
 #include <LayoutBuilder.h>
 #include <ScrollBar.h>
@@ -18,6 +20,7 @@
 #include <Window.h>
 
 #include "constants.h"
+#include "PrintSupport.h"
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "SearchHitsWindow"
@@ -179,6 +182,9 @@ public:
 				maxChapters = fBooks[i].chapters;
 		}
 		fMaxChapters = maxChapters;
+		// Natural size: square cells, one per chapter -- FitTo() overrides
+		// this for print only.
+		fCellWidth = fSquareSize;
 	}
 
 	virtual void GetPreferredSize(float* _width, float* _height)
@@ -348,12 +354,44 @@ public:
 		BView::MouseDown(where);
 	}
 
+	// Print-only: stretches the chapter columns so the widest book (Psalms,
+	// 150 chapters) reaches exactly `width` -- every row then spans the full
+	// page width. The label font is set to a fixed, readable print size
+	// rather than whatever the view happened to inherit (which came out
+	// tiny on paper), and the rows are sized from that font. The grid runs
+	// over as many pages vertically as it needs. Returns the grid's full
+	// height. Only ever called before this view is rendered for print (see
+	// PrintHitsChartView), never on screen.
+	float FitWidth(float width)
+	{
+		static const float kPrintFontSize = 12.0f;
+		BFont font;
+		GetFont(&font);
+		font.SetSize(kPrintFontSize);
+		SetFont(&font);
+
+		font_height fh;
+		GetFontHeight(&fh);
+		fRowHeight = ceilf(fh.ascent + fh.descent + fh.leading) + 4.0f;
+		fSquareSize = fRowHeight - 2.0f;
+		fLabelWidth = 0.0f;
+		for (size_t i = 0; i < fBooks.size(); i++) {
+			float labelWidth = StringWidth(fBooks[i].book.String());
+			if (labelWidth > fLabelWidth)
+				fLabelWidth = labelWidth;
+		}
+		fLabelWidth += kSwatchWidth + 16.0f;
+		fCellWidth = (width - fLabelWidth - 4.0f)
+			/ std::max((int32)1, fMaxChapters);
+		return 8.0f + fBooks.size() * fRowHeight;
+	}
+
 private:
 	BRect _SquareFor(int32 row, int32 chapter) const
 	{
 		float top = 4.0f + row * fRowHeight;
-		float left = fLabelWidth + (chapter - 1) * fSquareSize;
-		return BRect(left, top, left + fSquareSize - 1,
+		float left = fLabelWidth + (chapter - 1) * fCellWidth;
+		return BRect(left, top, left + fCellWidth - 1,
 			top + fSquareSize - 1);
 	}
 
@@ -364,7 +402,7 @@ private:
 		int32 row = (int32)((where.y - 4.0f) / fRowHeight);
 		if (row < 0 || (size_t)row >= fBooks.size())
 			return false;
-		int32 chapter = (int32)((where.x - fLabelWidth) / fSquareSize) + 1;
+		int32 chapter = (int32)((where.x - fLabelWidth) / fCellWidth) + 1;
 		if (chapter < 1 || chapter > fBooks[row].chapters)
 			return false;
 		*_row = row;
@@ -387,6 +425,7 @@ private:
 	std::map<BString, std::vector<const SearchHit*> >	fHits;
 	float	fRowHeight;
 	float	fSquareSize;
+	float	fCellWidth;
 	float	fLabelWidth;
 	int32	fMaxChapters;
 };
@@ -427,8 +466,34 @@ public:
 	// see the B_SUPPORTS_LAYOUT comment above) is what lets this stay
 	// square-ish instead of being squashed into whatever aspect ratio
 	// the window happens to have.
+	// Print-only: lays the treemap out to fill exactly `width` x `height`
+	// instead of its natural, item-count-derived canvas. _Layout() reads
+	// its canvas size from GetPreferredSize() (see its own comment), so
+	// overriding that is all it takes for the rectangles themselves to
+	// fill the given area.
+	void FitTo(float width, float height)
+	{
+		// Same fixed print font as the chapter grid (see its FitWidth()) --
+		// the labels here are drawn at a fraction of this view's font.
+		BFont font;
+		GetFont(&font);
+		font.SetSize(12.0f);
+		SetFont(&font);
+
+		fFitWidth = width;
+		fFitHeight = height;
+		_Layout();
+	}
+
 	virtual void GetPreferredSize(float* _width, float* _height)
 	{
+		if (fFitWidth > 0.0f) {
+			if (_width != NULL)
+				*_width = fFitWidth;
+			if (_height != NULL)
+				*_height = fFitHeight;
+			return;
+		}
 		// ~60x60px of screen space per item on average, then split that
 		// total area between a slightly-wider-than-tall canvas (a 1.4:1
 		// ratio reads as "roughly square" without being a perfect
@@ -734,6 +799,148 @@ private:
 	}
 
 	std::vector<Item>	fItems;
+	float				fFitWidth = 0.0f;
+	float				fFitHeight = 0.0f;
+};
+
+
+// _PrintChart()'s own one-page view: the title plus a freshly built
+// chapter grid and treemap (never the on-screen fGridView/fTreemapView --
+// a BView can only be attached to one window at once), each re-laid out
+// to fill its own slot of the printable page. See PrintHitsChartView below.
+// Renders `view` (already sized to its own full logical content rect via
+// ResizeTo(), same as PrintSupport.cpp's own PrintPageView idiom) into a
+// freshly allocated offscreen bitmap and returns it, or NULL if the
+// bitmap couldn't be locked. Takes ownership of `view` either way -- it's
+// attached to (and destroyed along with) the bitmap on success, or
+// deleted directly on failure.
+//
+// Tried first: nesting `view` as a CHILD of a larger print-only container
+// view and letting a single BPrintJob::DrawView() call on that container
+// recurse into it (BPrintJob::DrawView()'s own documentation promises it
+// "renders the entire hierarchy of BViews" attached to the view it's
+// given). Reproduced live instead: the container's own title text came
+// out, every child view came out as blank, consistently, on all pages.
+// Rendering each chart to its own bitmap up front and drawing that
+// bitmap, flat, from a single childless print view (no second
+// BPrintJob::DrawView() recursion involved at all) is the same, already-
+// proven mechanism PrintSupport.cpp's PrintPageView already uses for text
+// -- one view, one Draw() override, nothing nested for BPrintJob itself
+// to have to walk.
+static BBitmap*
+RenderViewToBitmap(BView* view, float width, float height)
+{
+	BBitmap* bitmap = new BBitmap(BRect(0.0f, 0.0f, width - 1.0f,
+		height - 1.0f), B_RGB32, true /* acceptsViews */);
+	bitmap->AddChild(view);
+	if (!bitmap->Lock()) {
+		// AddChild() above already gave the bitmap ownership of `view` --
+		// deleting the bitmap takes `view` with it, same cleanup either
+		// branch takes.
+		delete bitmap;
+		return NULL;
+	}
+	// Bitmaps with views attach that view synchronously, as if to a real
+	// (just never shown) window -- including AttachedToWindow(), which is
+	// what TreemapView relies on to run its own one-time _Layout() pass.
+	// A manual Draw() call (nothing pumps an update/invalidate cycle for
+	// an offscreen bitmap on its own) is then enough to render the whole
+	// thing; Sync() waits for that drawing to actually finish before this
+	// bitmap is used as a source elsewhere.
+	view->Draw(view->Bounds());
+	view->Sync();
+	bitmap->Unlock();
+	return bitmap;
+}
+
+
+class PrintHitsChartView : public BView {
+public:
+	// `width` and `pageHeight` are the printable page size. The chapter
+	// grid is laid out to fill the width and runs over as many pages as it
+	// needs. The treemap always starts on a fresh page of its own, so it
+	// never gets squeezed in under the grid. `*contentHeight` reports the
+	// full height, which PrintViewFittedToPage() tiles over the pages.
+	PrintHitsChartView(const BString& title,
+		const std::vector<SearchHit>& hits, float width, float pageHeight,
+		float* contentHeight)
+		:
+		BView(BRect(0.0f, 0.0f, width, 10.0f), "printHitsChart",
+			B_FOLLOW_NONE, B_WILL_DRAW),
+		fTitle(title),
+		fContentWidth(width),
+		fGridBitmap(NULL),
+		fTreemapBitmap(NULL)
+	{
+		SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+		SetFont(be_bold_font);
+		font_height fh;
+		GetFontHeight(&fh);
+		fTitleHeight = ceilf(fh.ascent + fh.descent + fh.leading);
+
+		static const float kTitleGap = 8.0f;
+		static const float kSectionGap = 16.0f;
+
+		ChapterGridView* grid = new ChapterGridView("printHitsGrid", hits);
+		float gridHeight = grid->FitWidth(width);
+		grid->ResizeTo(width, gridHeight);
+		fGridBitmap = RenderViewToBitmap(grid, width, gridHeight);
+		fGridPos = BPoint(0.0f, fTitleHeight + kTitleGap);
+
+		// Treemap on a page of its own: the first page boundary at or below
+		// the end of the grid. A treemap at roughly 1.7:1 reads well across
+		// a page, capped so it never exceeds one page's height.
+		float gridEnd = fGridPos.y + gridHeight;
+		float treemapTop = ceilf(gridEnd / pageHeight) * pageHeight;
+		float treemapHeight = std::min(pageHeight,
+			std::max(150.0f, floorf(width * 0.6f)));
+
+		TreemapView* treemap = new TreemapView("printHitsTreemap", hits);
+		treemap->FitTo(width, treemapHeight);
+		treemap->ResizeTo(width, treemapHeight);
+		fTreemapBitmap = RenderViewToBitmap(treemap, width, treemapHeight);
+		fTreemapPos = BPoint(0.0f, treemapTop);
+
+		fContentHeight = treemapTop + treemapHeight;
+		ResizeTo(width, fContentHeight);
+		if (contentHeight != NULL)
+			*contentHeight = fContentHeight;
+	}
+
+	virtual ~PrintHitsChartView()
+	{
+		delete fGridBitmap;
+		delete fTreemapBitmap;
+	}
+
+	// No child views at all -- see RenderViewToBitmap()'s own comment on
+	// why. Just the title text plus two flat DrawBitmap() calls.
+	virtual void Draw(BRect updateRect)
+	{
+		SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+		FillRect(updateRect, B_SOLID_LOW);
+
+		SetHighColor(0, 0, 0);
+		SetFont(be_bold_font);
+		font_height fh;
+		GetFontHeight(&fh);
+		DrawString(fTitle.String(), BPoint(0.0f, fh.ascent));
+
+		if (fGridBitmap != NULL)
+			DrawBitmap(fGridBitmap, fGridPos);
+		if (fTreemapBitmap != NULL)
+			DrawBitmap(fTreemapBitmap, fTreemapPos);
+	}
+
+private:
+	BString		fTitle;
+	float		fTitleHeight;
+	float		fContentWidth;
+	float		fContentHeight;
+	BBitmap*	fGridBitmap;
+	BBitmap*	fTreemapBitmap;
+	BPoint		fGridPos;
+	BPoint		fTreemapPos;
 };
 
 
@@ -797,6 +1004,9 @@ SGSearchHitsWindow::_BuildGUI()
 	fTitleView = new BStringView("searchHitsTitle", fTitle.String());
 	fTitleView->SetFont(be_bold_font);
 
+	fPrintButton = new BButton("searchHitsPrint", B_TRANSLATE("Print…"),
+		new BMessage(SEARCHHITS_PRINT));
+
 	fGridView = new ChapterGridView("searchHitsGrid", fHits);
 	// Both scrollbars, not just vertical -- a book with many chapters
 	// (Psalms' 150) needs far more width than this window's frame ever
@@ -816,7 +1026,11 @@ SGSearchHitsWindow::_BuildGUI()
 
 	BLayoutBuilder::Group<>(this, B_VERTICAL)
 		.SetInsets(B_USE_SMALL_INSETS)
-		.Add(fTitleView)
+		.AddGroup(B_HORIZONTAL)
+			.Add(fTitleView)
+			.AddGlue()
+			.Add(fPrintButton)
+		.End()
 		.AddSplit(B_VERTICAL, B_USE_HALF_ITEM_SPACING)
 			.Add(gridScroll, 2.0f)
 			.Add(treemapScroll, 1.0f)
@@ -831,6 +1045,10 @@ void
 SGSearchHitsWindow::MessageReceived(BMessage* message)
 {
 	switch (message->what) {
+		case SEARCHHITS_PRINT:
+			_PrintChart();
+			break;
+
 		case SEARCHHITS_JUMP:
 		{
 			BString key;
@@ -846,4 +1064,19 @@ SGSearchHitsWindow::MessageReceived(BMessage* message)
 			BWindow::MessageReceived(message);
 			break;
 	}
+}
+
+
+void
+SGSearchHitsWindow::_PrintChart()
+{
+	// The page's real printable size is only known after the Print Server
+	// panels -- so the chart is built inside the factory, once it knows
+	// how big a page it has to fill.
+	PrintViewFittedToPage(this,
+		[this](float width, float height, float* contentHeight) -> BView* {
+			return new PrintHitsChartView(fTitle, fHits, width, height,
+				contentHeight);
+		},
+		fTitle.String());
 }

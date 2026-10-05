@@ -13,6 +13,7 @@
 
 #include "SwordBackend.h"
 
+class BButton;
 class BStringView;
 class BScrollView;
 // Both defined in LogosSearchHitsWindow.cpp, next to their one use --
@@ -23,6 +24,7 @@ class TreemapView;
 
 #define SEARCHHITS_QUIT		'SHqu'
 #define SEARCHHITS_JUMP		'SHjp'
+#define SEARCHHITS_PRINT	'SHpr'
 
 // A generic "here is where a search landed" visualization -- modeled on
 // bibleanalyzer.com's "Interactive Search Hits Chart": a per-chapter
@@ -60,12 +62,20 @@ public:
 
 private:
 			void			_BuildGUI();
+							// Builds a fresh chapter-grid + treemap pair
+							// (never the on-screen fGridView/fTreemapView
+							// themselves -- a BView can only ever be
+							// attached to one window at a time) stacked
+							// under the chart's own title, and runs them
+							// through PrintSupport.h's PrintViewFittedToPage().
+			void			_PrintChart();
 
 			BMessenger*		fOwner;
 			std::vector<SearchHit>	fHits;
 			BString			fTitle;
 
 			BStringView*	fTitleView;
+			BButton*		fPrintButton;
 			ChapterGridView*	fGridView;
 			TreemapView*	fTreemapView;
 };

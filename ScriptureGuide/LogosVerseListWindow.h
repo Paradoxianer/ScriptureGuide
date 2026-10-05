@@ -21,6 +21,7 @@ class BMenuItem;
 class BPopUpMenu;
 class BScrollView;
 class BStringView;
+class SGModule;
 class SGSearchHitsWindow;
 class SwordBackend;
 class TextDocumentView;
@@ -31,6 +32,7 @@ class VerseListRowListView;
 // they live here rather than in constants.h.
 #define VLIST_QUIT				'VLqu'
 #define VLIST_NEW				'VLnw'
+#define VLIST_CLOSE_LIST		'VLcl'
 #define VLIST_DELETE			'VLdl'
 #define VLIST_MOVE_UP			'VLmu'
 #define VLIST_MOVE_DOWN			'VLmd'
@@ -61,7 +63,7 @@ class VerseListRowListView;
 // File > Import Text List... (#68) -- one reference per line, no header,
 // same shape as a QuickVerse/WORDsearch-style plain-text export
 // (confirmed against a real sample: AARON.TXT, one OSIS-style
-// abbreviation like "EXO 4:14" per line). See _ImportTextFile() in the
+// abbreviation like "EXO 4:14" per line). See _QueueImportFiles() in the
 // .cpp for why this needed no format-specific parsing beyond splitting
 // lines -- sword::VerseKey::setText() already accepts these
 // abbreviations directly.
@@ -147,6 +149,14 @@ class VerseListRowListView;
 // (fVisibleBookmarkIndices), so what the chart shows always matches
 // what the row list itself is currently showing.
 #define VLIST_SHOW_HITS			'VLhc'
+// #87: File > Print List (References Only) / Print List (With Text) --
+// same idea as VLIST_SHOW_HITS's own comment, applied to printing instead
+// of the chart. "With Text" resolves each visible bookmark's own verse
+// text the same way _RefreshHitsWindow() already does (BuildSearchHits(),
+// same Bible-module fallback). Both go through PrintSupport.h's shared
+// BPrintJob driver -- see _PrintList()'s own comment.
+#define VLIST_PRINT_REFS_ONLY		'VLpr'
+#define VLIST_PRINT_WITH_TEXT		'VLpt'
 
 // A dedicated, standalone window for browsing, editing and reading a
 // verse list (#47, second attempt) -- a named, ordered collection of
@@ -305,13 +315,11 @@ private:
 			// the file and opens it. See the .cpp for the exact parsing
 			// and what happens to a line that doesn't parse.
 			void			_ImportPanel();
-			// #95: merges into the open collection if there is one.
-			// #97: if not, hands off to the two below for a destination.
-			void			_ImportTextFile(const char* path);
-			void			_StartImportIntoNewList(const char* path,
-								const BString& content);
-			void			_ImportIntoNewList(const char* name,
-								const char* parentPath);
+			// Import: the file panel takes several files at once. Each file
+			// becomes its own list, named after the file, in one destination
+			// folder chosen afterwards (see _QueueImportFiles()).
+			void			_QueueImportFiles(const BMessage* message);
+			void			_ImportPending(const char* parentPath);
 			// #102: the reverse of Import -- writes fBookmarks' own
 			// references, one per line, to a plain-text file.
 			void			_ExportPanel();
@@ -328,6 +336,25 @@ private:
 			// _RebuildRows() triggers (activate = false, only while
 			// fHitsWindow already exists and is shown).
 			void			_RefreshHitsWindow(bool activate);
+			// #87: VLIST_PRINT_REFS_ONLY/VLIST_PRINT_WITH_TEXT -- builds a
+			// print-ready TextDocument (title + one paragraph per visible
+			// bookmark) and hands it to PrintSupport.h's PrintTextDocument().
+			// `includeText` resolves each reference's own verse text via
+			// BuildSearchHits(), using _DefaultBibleModule() below.
+			void			_PrintList(bool includeText);
+			// This window has no Bible-module concept of its own (unlike
+			// SGSearchWindow, whose search already happened in some
+			// specific module) -- the saved "module" preference if it
+			// resolves to something actually installed, else the first
+			// entry of SearchableModuleNames(). NULL only if nothing at
+			// all is installed (LogosApp.cpp already refuses to start
+			// the main window in that case). Shared by _RefreshHitsWindow()
+			// and _PrintList()'s own "with text" branch -- both used to
+			// hardcode "WEB" here, which silently produced nothing at all
+			// on an install with no English modules (reported live: a
+			// German-only install, FindModule("WEB") returned NULL and
+			// both bailed before doing anything).
+			SGModule*		_DefaultBibleModule() const;
 			// #72: shows the same New-Verse-List prompt _NewList() does,
 			// but with VLIST_DROP_NAME_RESULT as the result -- called from
 			// _AppendDroppedReferences() when a drop lands with nothing
@@ -491,11 +518,13 @@ private:
 			BString					fTagFilter;
 			std::vector<int32>			fVisibleBookmarkIndices;
 
-			// #97: an import's own file content, held here between
-			// _StartImportIntoNewList() showing the name/location prompt
-			// and _ImportIntoNewList() consuming it once that prompt
-			// returns -- only used when nothing was open at import time.
-			BString					fPendingImportContent;
+			// Imports waiting for their destination folder -- filled by
+			// _QueueImportFiles(), emptied by _ImportPending().
+			struct PendingImport {
+				BString	name;
+				BString	content;
+			};
+			std::vector<PendingImport>	fPendingImports;
 			// #72: same idea, for a reference (or range) dropped onto the
 			// row list while nothing is open -- a verbatim copy of the
 			// drop message, held between the name/location prompt
@@ -530,8 +559,11 @@ private:
 			// see _UpdateTitle().
 			BStringView*			fPathView;
 			BMenuItem*				fExportItem;
+			BMenuItem*				fCloseItem;
 			BMenuItem*				fShowInTrackerItem;
 			BMenuItem*				fShowHitsItem;
+			BMenuItem*				fPrintRefsOnlyItem;
+			BMenuItem*				fPrintWithTextItem;
 			BMenuItem*				fRenameItem;
 			BMenuItem*				fDeleteItem;
 			BMenuItem*				fAddReferenceItem;

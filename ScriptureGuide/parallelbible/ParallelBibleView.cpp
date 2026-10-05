@@ -245,6 +245,24 @@ public:
 
 	void SetPosition(int32 position) { fPosition = position; }
 
+	// Public counterpart to _ComputeHighlightRange() (below, private) --
+	// for a caller outside this class that only needs the verse range of
+	// the current selection, not byte offsets/reference/text (#113's own
+	// print feature: "print just the selected verses of this column if
+	// it has one, else the whole thing" -- ParallelBibleView's own
+	// ColumnSelectionVerseRange() is the public entry point for that,
+	// this is what it actually calls). false (outputs untouched) if
+	// there is no selection.
+	bool ComputeSelectionVerseRange(int& firstVerse, int& lastVerse)
+	{
+		ParallelBibleView::HighlightRange range;
+		if (!_ComputeHighlightRange(range))
+			return false;
+		firstVerse = range.verse;
+		lastVerse = range.endVerse;
+		return true;
+	}
+
 	// One BScrollView per column now (see the class comment on
 	// ParallelBibleView) -- this is the one hook every scroll path for
 	// THIS column funnels through, same principle ParallelBibleView's
@@ -3751,6 +3769,50 @@ ParallelBibleView::ColumnLayout() const
 		result.push_back(desc);
 	}
 	return result;
+}
+
+
+void
+ParallelBibleView::ActiveChainRange(int32& start, int32& end) const
+{
+	start = -1;
+	end = -1;
+	if (fActivePosition < 0)
+		return;
+	start = _ChainStart(fActivePosition);
+	end = _ChainEnd(fActivePosition);
+}
+
+
+bool
+ParallelBibleView::ColumnSelectionVerseRange(int32 position, int& firstVerse,
+	int& lastVerse) const
+{
+	if (position < 0 || (size_t)position >= fColumnOrder.size()
+		|| fColumnOrder[position] == COLUMN_NOTES) {
+		return false;
+	}
+	if ((size_t)position >= fTextViews.size())
+		return false;
+	BibleColumnView* column
+		= dynamic_cast<BibleColumnView*>(fTextViews[position]);
+	if (column == NULL)
+		return false;
+	return column->ComputeSelectionVerseRange(firstVerse, lastVerse);
+}
+
+
+std::vector<BibleTextDocument::VerseHighlight>
+ParallelBibleView::ColumnHighlights(int32 position) const
+{
+	if (position < 0 || (size_t)position >= fColumnOrder.size()
+		|| fColumnOrder[position] == COLUMN_NOTES) {
+		return std::vector<BibleTextDocument::VerseHighlight>();
+	}
+	int32 bibleIndex = _BibleIndexForPosition(position);
+	if (bibleIndex < 0 || (size_t)bibleIndex >= fDocuments.size())
+		return std::vector<BibleTextDocument::VerseHighlight>();
+	return fDocuments[bibleIndex]->Highlights();
 }
 
 

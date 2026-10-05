@@ -862,16 +862,32 @@ BookmarkFile::EnsureMimeTypeRegistered()
 		mime.SetFileExtensions(&extensions);
 	}
 
-	// Icon and attribute info are refreshed on EVERY call, even when the
-	// type was already installed -- unlike the block above, which only
-	// needs to run once. Confirmed the hard way: an earlier build of
-	// this app installed this type with incomplete attribute info
-	// (missing "attr:width"/"attr:alignment" -- see the comment below),
-	// and the IsInstalled() guard alone left that system stuck with the
-	// gap permanently, since nothing short of manually clearing the MIME
-	// database entry could ever re-run the block that fixes it. A future
-	// icon/attribute fix should not require that.
+	// Icon and attribute info are refreshed once per app run (see
+	// sRefreshedThisSession below), even when the type was already
+	// installed -- unlike the block above, which only needs to run once
+	// ever. Confirmed the hard way: an earlier build of this app installed
+	// this type with incomplete attribute info (missing "attr:width"/
+	// "attr:alignment" -- see the comment below), and the IsInstalled()
+	// guard alone left that system stuck with the gap permanently, since
+	// nothing short of manually clearing the MIME database entry could
+	// ever re-run the block that fixes it. A future icon/attribute fix
+	// should not require that.
 	//
+	// "Once per app run", not once per call, though -- reported live:
+	// dragging ~200 search results into a new verse list at once froze
+	// the app for several minutes. CreateNew() calls Save(), and both
+	// call this, so that was 400 calls -- each one reopening this app's
+	// own executable to reload its icon resource and re-sending the
+	// whole 8-attribute SetAttrInfo() to the registrar, a real IPC round
+	// trip every time. A static, process-lifetime guard keeps the actual
+	// fix above (a stale install still gets corrected once, every time
+	// the app runs) while cutting several hundred redundant round trips
+	// down to one.
+	static bool sRefreshedThisSession = false;
+	if (sRefreshedThisSession)
+		return;
+	sRefreshedThisSession = true;
+
 	// The tilted ribbon-bookmark icon (see ScriptureGuide.rdef's
 	// "bookmark_icon" resource) -- read out of this app's own resources
 	// at runtime, same technique LogosMainWindow.cpp's _LoadVectorIcon()

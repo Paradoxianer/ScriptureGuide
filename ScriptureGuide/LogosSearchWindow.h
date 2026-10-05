@@ -54,9 +54,17 @@ public:
 					// defaults to and only ever offers what's actually
 					// visible rather than some separately tracked
 					// "current module" disconnected from the columns.
+					// defaultModuleName: pre-select this one in the
+					// "Search in" field if it's among moduleNames (the
+					// main window's own currently active module -- see
+					// SGMainWindow::EnsureSearchWindow()), falling back to
+					// the first entry otherwise. NULL/not-found means
+					// "just use the first", same as before this
+					// parameter existed.
 					SGSearchWindow(BRect frame,
 									const std::vector<BString>& moduleNames,
-									BMessenger* owner);
+									BMessenger* owner,
+									const char* defaultModuleName = NULL);
 					~SGSearchWindow();
 	virtual bool	QuitRequested();
 	virtual void	MessageReceived(BMessage* message);

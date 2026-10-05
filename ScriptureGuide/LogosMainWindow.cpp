@@ -1,6 +1,7 @@
 #include "LogosMainWindow.h"
 
 #include <algorithm>
+#include <map>
 
 #include "parallelbible/BookmarkFile.h"
 
@@ -43,6 +44,7 @@
 #include "FontPanel.h"
 #include "LogosApp.h"
 #include "Preferences.h"
+#include "PrintSupport.h"
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "MainWindow"
@@ -119,6 +121,21 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	fShowVerseNumbers = true;
 	fShowStrongsNumbers = true;
 	fShowCrossReferences = true;
+
+	// #113: global, not per-module, prefs -- unlike the three above,
+	// read directly from the app-wide `preferences` blob (already
+	// loaded by LogosApp before any SGMainWindow exists) rather than
+	// through LoadPrefsForModule()'s per-module file.
+	prefsLock.Lock();
+	if (preferences.FindBool("printNewPagePerTranslation",
+			&fPrintNewPagePerTranslation) != B_OK) {
+		fPrintNewPagePerTranslation = false;
+	}
+	if (preferences.FindBool("printIncludeHighlights",
+			&fPrintIncludeHighlights) != B_OK) {
+		fPrintIncludeHighlights = false;
+	}
+	prefsLock.Unlock();
 
 	fModManager = new SwordBackend();
 	BuildGUI();
@@ -289,6 +306,13 @@ void SGMainWindow::BuildGUI(void)
 	exportMenu->AddItem(new BMenuItem(B_TRANSLATE("As HTML Table"),
 		new BMessage(MENU_PROGRAM_EXPORT_HTML)));
 	menu->AddItem(exportMenu);
+	// #113: prints the active chain's currently open column(s) as shown
+	// (stacked section by section, not side by side -- see
+	// _PrintReadingPane()'s own comment for why), through the real Print
+	// Server panels (BPrintJob, PrintSupport.h). Same "active chain only"
+	// scope Copy Comparison above already has.
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Print…"),
+		new BMessage(MENU_PROGRAM_PRINT), 'P'));
 	menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Duplicate This Window…"),
 		new BMessage(MENU_FILE_NEW), 'D'));
@@ -348,6 +372,24 @@ void SGMainWindow::BuildGUI(void)
 	menu->AddItem(fHighlightColorsMenu);
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Choose Font…"),
 		new BMessage(MENU_OPTIONS_FONT)));
+	menu->AddSeparatorItem();
+	// #113: persistent print options -- reported wanted as a one-time
+	// setting rather than a dialog shown before every print, so they
+	// live here next to the other Options toggles instead.
+	fPrintNewPageItem = new BMenuItem(
+		B_TRANSLATE("New Page per Translation When Printing"),
+		new BMessage(MENU_OPTIONS_PRINT_NEW_PAGE));
+	fPrintNewPageItem->SetMarked(fPrintNewPagePerTranslation);
+	menu->AddItem(fPrintNewPageItem);
+	fPrintHighlightsItem = new BMenuItem(
+		B_TRANSLATE("Include Highlight Colours When Printing"),
+		new BMessage(MENU_OPTIONS_PRINT_HIGHLIGHTS));
+	fPrintHighlightsItem->SetMarked(fPrintIncludeHighlights);
+	menu->AddItem(fPrintHighlightsItem);
+	// No separate "print verse numbers" toggle -- unlike the two above,
+	// this already has an exact on-screen equivalent (fShowVerseNumbers,
+	// "Show Verse Numbers" above), so _PrintReadingPane() just reads that
+	// directly instead of maintaining a second, redundant switch.
 	fMenuBar->AddItem(menu);
 
 	// Prepare the book menu
@@ -982,6 +1024,11 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			}
 			break;
 		}
+		case MENU_PROGRAM_PRINT:
+		{
+			_PrintReadingPane();
+			break;
+		}
 		case FIND_QUIT:
 		{
 			// This message is received whenever the child find window quits
@@ -1038,6 +1085,32 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fShowCrossRefItem->SetMarked(fShowCrossReferences);
 			fParallelView->SetShowCrossReferences(fShowCrossReferences);
 			SavePrefsForModule();
+			break;
+		}
+
+		case MENU_OPTIONS_PRINT_NEW_PAGE:
+		{
+			fPrintNewPagePerTranslation = !fPrintNewPagePerTranslation;
+			fPrintNewPageItem->SetMarked(fPrintNewPagePerTranslation);
+			prefsLock.Lock();
+			preferences.RemoveData("printNewPagePerTranslation");
+			preferences.AddBool("printNewPagePerTranslation",
+				fPrintNewPagePerTranslation);
+			prefsLock.Unlock();
+			SavePreferences(PREFERENCES_FILE);
+			break;
+		}
+
+		case MENU_OPTIONS_PRINT_HIGHLIGHTS:
+		{
+			fPrintIncludeHighlights = !fPrintIncludeHighlights;
+			fPrintHighlightsItem->SetMarked(fPrintIncludeHighlights);
+			prefsLock.Lock();
+			preferences.RemoveData("printIncludeHighlights");
+			preferences.AddBool("printIncludeHighlights",
+				fPrintIncludeHighlights);
+			prefsLock.Unlock();
+			SavePreferences(PREFERENCES_FILE);
 			break;
 		}
 
@@ -1213,6 +1286,25 @@ void SGMainWindow::SetModule(const TextType &module, const int32 &index)
 	
 	fModManager->SetModule(sgmod);
 	fCurrentModule = sgmod;
+
+	// Keep the global "module" preference live, not just caught up at
+	// the NEXT switch or at quit. SavePrefsForModule() above only ran
+	// against the module we're leaving (it's called at the top of this
+	// function, before fCurrentModule is reassigned) -- so without this,
+	// the saved value always lagged one switch behind the module actually
+	// showing in this window. Other windows read it as "whatever Bible
+	// is currently active in the main window" (SGVerseListWindow's
+	// _DefaultBibleModule(), SGSearchWindow.cpp's default search module)
+	// and both reportedly showed the wrong module right after a switch --
+	// reproduced and traced to this gap. Only the one key, not a full
+	// SavePrefsForModule() call: that would also write this module's
+	// still-stale (pre-LoadPrefsForModule()) display settings into ITS
+	// own per-module prefs file below, clobbering whatever was actually
+	// saved for it last time.
+	prefsLock.Lock();
+	preferences.RemoveData("module");
+	preferences.AddString("module", fCurrentModule->Name());
+	prefsLock.Unlock();
 
 	// make sure only the books available can be selected
 	BMenuItem* currentbook;
@@ -1586,7 +1678,9 @@ SGMainWindow::EnsureSearchWindow(void)
 		// columns, but never widened WHICH modules that could mean.
 		fSearchWindow = new SGSearchWindow(r,
 								fModManager->SearchableModuleNames(),
-								new BMessenger(this));
+								new BMessenger(this),
+								fCurrentModule != NULL
+									? fCurrentModule->Name() : NULL);
 		fFindMessenger = new BMessenger(fSearchWindow);
 	}
 	fSearchWindow->Show();
@@ -1643,6 +1737,131 @@ SGMainWindow::EnsureVerseListWindow(void)
 	}
 	fVerseListWindow->Show();
 	fVerseListWindow->Activate(true);
+}
+
+
+void
+SGMainWindow::_PrintReadingPane(void)
+{
+	int32 start, end;
+	fParallelView->ActiveChainRange(start, end);
+	if (start < 0)
+		return;
+
+	std::vector<ParallelBibleView::ColumnDescription> columns
+		= fParallelView->ColumnLayout();
+	std::vector<ParallelBibleView::ExportRow> rows
+		= fParallelView->BuildExportRows();
+	if (rows.empty())
+		return;
+
+	// Which of [start, end]'s own indices are actual Bible columns, in
+	// the same left-to-right order BuildExportRows() itself filled each
+	// row's columnText (it skips notes columns there -- see its own
+	// comment) -- the C-th entry here is exactly what columnText[C]
+	// means for every row.
+	std::vector<int32> bibleColumnIndices;
+	for (int32 i = start; i <= end; i++) {
+		if (i >= 0 && (size_t)i < columns.size() && !columns[i].isNotes)
+			bibleColumnIndices.push_back(i);
+	}
+
+	TextDocumentRef document(new TextDocument(), true);
+	// Options > New Page per Translation When Printing -- one entry per
+	// translation section after the first, recording where its own
+	// heading paragraph is ABOUT to land (before AppendPrintHeading()
+	// adds it) so PrintTextDocument()'s pagination forces a break right
+	// there. Left empty (no forced breaks at all) when the option is off.
+	std::vector<int32> forcedPageBreaks;
+	for (size_t c = 0; c < bibleColumnIndices.size(); c++) {
+		if (fPrintNewPagePerTranslation && c > 0)
+			forcedPageBreaks.push_back(document->CountParagraphs());
+
+		const ParallelBibleView::ColumnDescription& column
+			= columns[bibleColumnIndices[c]];
+		BString heading(column.moduleName);
+		if (!column.key.IsEmpty())
+			heading << " - " << column.key;
+		AppendPrintHeading(document, heading);
+
+		// #113: "nothing selected in this column prints the whole
+		// chapter, a selection narrows just this column to it" -- other
+		// columns without their own selection are unaffected.
+		int firstVerse = -1, lastVerse = -1;
+		bool hasSelection = fParallelView->ColumnSelectionVerseRange(
+			bibleColumnIndices[c], firstVerse, lastVerse);
+
+		// Options > Include Highlight Colours When Printing -- one
+		// colour per verse (the first highlight overlapping it, if more
+		// than one does; see AppendPrintBodyLine()'s own comment on why
+		// sub-verse precision isn't attempted for print), looked up
+		// once per column rather than per row.
+		std::map<int, rgb_color> highlightByVerse;
+		if (fPrintIncludeHighlights) {
+			std::vector<BibleTextDocument::VerseHighlight> highlights
+				= fParallelView->ColumnHighlights(bibleColumnIndices[c]);
+			for (size_t h = 0; h < highlights.size(); h++) {
+				if (highlightByVerse.find(highlights[h].verse)
+					== highlightByVerse.end()) {
+					highlightByVerse[highlights[h].verse]
+						= highlights[h].color;
+				}
+			}
+		}
+
+		for (size_t r = 0; r < rows.size(); r++) {
+			if (c >= rows[r].columnText.size())
+				continue;
+			if (hasSelection && (rows[r].verse < firstVerse
+					|| rows[r].verse > lastVerse)) {
+				continue;
+			}
+			BString line;
+			if (fShowVerseNumbers)
+				line << rows[r].verse << "  ";
+			line << rows[r].columnText[c];
+			std::map<int, rgb_color>::iterator found
+				= highlightByVerse.find(rows[r].verse);
+			AppendPrintBodyLine(document, line,
+				found != highlightByVerse.end() ? &found->second : NULL);
+		}
+	}
+
+	// Notes -- reported missing entirely from the printed output.
+	// rows[].notesText is already resolved from the first notes column
+	// WITHIN the active chain (BuildExportRows()'s own comment) -- empty
+	// on every row when the active chain has none of its own, even if
+	// some OTHER (non-active) chain does. That's why this checks the
+	// rows themselves rather than NotesEnabled(), which is view-wide,
+	// not chain-scoped, and would wrongly add an empty Notes section
+	// for a chain with none.
+	bool hasNotes = false;
+	for (size_t r = 0; r < rows.size() && !hasNotes; r++)
+		hasNotes = !rows[r].notesText.IsEmpty();
+	if (hasNotes) {
+		BString notesHeading(B_TRANSLATE("Notes"));
+		for (int32 i = start; i <= end; i++) {
+			if (i >= 0 && (size_t)i < columns.size() && columns[i].isNotes) {
+				if (!columns[i].moduleName.IsEmpty())
+					notesHeading = columns[i].moduleName;
+				break;
+			}
+		}
+		AppendPrintHeading(document, notesHeading);
+
+		for (size_t r = 0; r < rows.size(); r++) {
+			if (rows[r].notesText.IsEmpty())
+				continue;
+			BString line;
+			if (fShowVerseNumbers)
+				line << rows[r].verse << "  ";
+			line << rows[r].notesText;
+			AppendPrintBodyLine(document, line);
+		}
+	}
+
+	PrintTextDocument(this, document, B_TRANSLATE("Print Reading Pane"),
+		forcedPageBreaks);
 }
 
 

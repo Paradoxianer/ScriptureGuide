@@ -81,7 +81,8 @@ void VersePreview::FrameResized(float width, float height)
 
 SGSearchWindow::SGSearchWindow(BRect frame,
 					const std::vector<BString>& moduleNames,
-					BMessenger* owner)
+					BMessenger* owner,
+					const char* defaultModuleName)
  :	BWindow(frame, "", B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL,
 			B_NOT_ZOOMABLE | B_CLOSE_ON_ESCAPE),
  	fHitsWindow(NULL),
@@ -114,10 +115,25 @@ SGSearchWindow::SGSearchWindow(BRect frame,
 	fSearchStart = 0;
 	fSearchEnd = books.size()-1;
 
+	// Default to whichever module is actually active in the main window,
+	// not just whatever happens to come first in the full installed-module
+	// list -- reported as confusing: picking e.g. "Menge" there, then
+	// opening Find, still showed some other (alphabetically/registration-
+	// order first) translation here.
+	int32 defaultIndex = 0;
+	if (defaultModuleName != NULL) {
+		for (size_t i = 0; i < fModuleNames.size(); i++) {
+			if (fModuleNames[i] == defaultModuleName) {
+				defaultIndex = (int32)i;
+				break;
+			}
+		}
+	}
+
 	// start the show
 	BuildGUI();
-	_RebuildModuleMenu(0);
-	_ApplyModuleSelection(0);
+	_RebuildModuleMenu(defaultIndex);
+	_ApplyModuleSelection(defaultIndex);
 	searchString->MakeFocus(true);
 }
 

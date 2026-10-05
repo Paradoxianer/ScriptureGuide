@@ -39,6 +39,7 @@ SRCS = \
 	 LogosSearchWindow.cpp  \
 	 LogosVerseListWindow.cpp  \
 	 Preferences.cpp  \
+	 PrintSupport.cpp  \
 	 ResultListView.cpp  \
 	 SwordBackend.cpp  \
 	 \

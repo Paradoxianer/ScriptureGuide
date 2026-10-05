@@ -75,6 +75,11 @@ private:
 	void BuildGUI(void);
 	void LoadPrefsForModule(void);
 	void SavePrefsForModule(void);
+	// #113: Program > Print… -- stacked sections (one per active-chain
+	// column, heading + verse text) through PrintSupport.h's shared
+	// BPrintJob driver. Active chain only, same scope "Copy Comparison"
+	// above already has.
+	void _PrintReadingPane(void);
 	void RestoreColumnLayout(void);
 	bool NeedsLineBreaks(void);
 
@@ -148,6 +153,10 @@ private:
 	BMenuItem		*fShowVerseNumItem;
 	BMenuItem		*fShowStrongsNumItem;
 	BMenuItem		*fShowCrossRefItem;
+	// #113: persistent print options (Options menu) -- see
+	// _PrintReadingPane()'s own comment.
+	BMenuItem		*fPrintNewPageItem;
+	BMenuItem		*fPrintHighlightsItem;
 
 	// #44: rebuilt every time Options opens, since a colour category is
 	// just a folder the user can add, rename or delete at any moment.
@@ -194,6 +203,11 @@ private:
 					fShowVerseNumbers,
 					fShowStrongsNumbers,
 					fShowCrossReferences;
+	// #113: global (not per-module) print options -- loaded/saved
+	// directly through the app-wide `preferences` blob, not
+	// LoadPrefsForModule()/SavePrefsForModule().
+	bool			fPrintNewPagePerTranslation;
+	bool			fPrintIncludeHighlights;
 
 	BMessenger		*fFindMessenger;
 };

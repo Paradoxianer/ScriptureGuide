@@ -54,6 +54,9 @@ const uint32 MENU_PROGRAM_EXPORT_PLAIN		= 'MPe1';
 const uint32 MENU_PROGRAM_EXPORT_TSV		= 'MPe2';
 const uint32 MENU_PROGRAM_EXPORT_MARKDOWN	= 'MPe3';
 const uint32 MENU_PROGRAM_EXPORT_HTML		= 'MPe4';
+// #113: prints the active chain's currently open column(s), stacked
+// section by section -- see SGMainWindow::_PrintReadingPane().
+const uint32 MENU_PROGRAM_PRINT			= 'MPpr';
 
 const uint32 MENU_EDIT_NOTE				= 'MEno';
 const uint32 MENU_EDIT_FIND				= 'MEfi';
@@ -71,6 +74,14 @@ const uint32 MENU_OPTIONS_VERSENUMBERS	= 'MOvn';
 const uint32 MENU_OPTIONS_STRONGS		= 'MOsn';
 const uint32 MENU_OPTIONS_CROSSREF		= 'MOcr';
 const uint32 MENU_OPTIONS_PARALLEL_VIEW	= 'MOpv';
+// #113: persistent print options (Options menu, not a per-print dialog) --
+// see SGMainWindow::_PrintReadingPane().
+const uint32 MENU_OPTIONS_PRINT_NEW_PAGE		= 'MOpn';
+const uint32 MENU_OPTIONS_PRINT_HIGHLIGHTS		= 'MOph';
+// Deliberately NOT a separate print-only preference like the two above --
+// verse numbers already have an exact on-screen equivalent
+// (MENU_OPTIONS_VERSENUMBERS/fShowVerseNumbers), so printing just reads
+// that directly instead of maintaining a second, redundant toggle.
 
 const uint32 PARALLEL_ADD_COLUMN		= 'PVac';
 const uint32 PARALLEL_SELECT_MODULE	= 'PVsm';
