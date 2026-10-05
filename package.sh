@@ -136,7 +136,8 @@ for bin in "$STAGE/apps/ScriptureGuide/"*; do
 			# Part of Haiku itself; covered by the plain "haiku" requirement.
 			libbe.so|libroot.so|libnetwork.so|libtranslation.so|\
 			libtracker.so|libgame.so|libmedia.so|libdevice.so|\
-			libtextencoding.so|libstdc++.so*|libsupc++.so*|libgcc_s.so*)
+			libtextencoding.so|libstdc++.so*|libsupc++.so*|libgcc_s.so*|\
+			libz.so*)
 				;;
 			*)
 				# libfoo-1.2.3.so and libfoo.so.1 both become lib:libfoo_1
