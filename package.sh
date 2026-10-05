@@ -49,8 +49,13 @@ fi
 step 1 "Abhaengigkeiten installieren"
 # -y so an unattended run doesn't stall on a prompt. Already-installed
 # packages are a no-op, so this is safe to run repeatedly.
-pkgman install -y git haiku_devel devel:libsword_1.8.1 lib:libsword_1.8.1 \
+pkgman install -y haiku_devel devel:libsword_1.8.1 lib:libsword_1.8.1 \
 	devel:libz makefile_engine cmd:wget cmd:unzip cmd:awk
+# git is only needed to fetch a tag -- a checkout build doesn't touch it.
+# (Its package name also differs on the secondary-architecture install.)
+if [ -n "$TAG" ]; then
+	pkgman install -y git
+fi
 
 # --- 2. source ----------------------------------------------------------
 WORK=""
