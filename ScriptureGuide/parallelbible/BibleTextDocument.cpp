@@ -341,6 +341,17 @@ BibleTextDocument::SetBaseFont(const BFont& font)
 {
 	BFont effective = _EffectiveFont(font);
 
+	// Unlike SetShowVerseNumbers()/SetShowStrongsNumbers()/
+	// SetShowCrossReferences() just above, this one rebuilt unconditionally
+	// -- every single call, changed or not. LoadPrefsForModule() calls this
+	// on every startup with the font that's already in effect (just loaded
+	// from the same preferences that built this document moments earlier),
+	// so this was a guaranteed, pointless full rebuild on every launch, one
+	// per open column. Confirmed live: cut several seconds off startup with
+	// several columns open on a loaded system.
+	if (fVerseTextStyle.Font() == effective)
+		return;
+
 	fVerseTextStyle.SetFont(effective);
 
 	// SetFont() replaces the style's whole BFont, including its face, so

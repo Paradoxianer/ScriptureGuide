@@ -173,7 +173,7 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 		// TODO: fail
 		return;
 	}
-	
+
 	SetModuleFromString(module);
 	if (!fCurrentModule)
 	{
