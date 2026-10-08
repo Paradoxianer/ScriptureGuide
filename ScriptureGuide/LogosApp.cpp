@@ -29,28 +29,33 @@ bool gDocsAvailable;
 BRect windowRect(50, 50, 749, 449);
 
 SGApp::SGApp()
-  : BApplication("application/x-vnd.Scripture-Guide")
+  : BApplication("application/x-vnd.Scripture-Guide"),
+  	fStartupBackend(NULL)
 {
 	if (StartupCheck() == B_OK)
 	{
 		BString module, verseKey;
-		
+
 		prefsLock.Lock();
-		
+
 		if (preferences.FindRect("windowframe",&windowRect) != B_OK)
 			windowRect.Set(50, 50, 749, 449);
-		
+
 		if (preferences.FindString("module",&module) != B_OK)
 			module = "WEB";
-		
+
 		if (preferences.FindString("key",&verseKey) != B_OK)
 			verseKey="Gen 1:1";
-		
+
 		prefsLock.Unlock();
-		
-		// opens the main window with the current options
+
+		// opens the main window with the current options -- handing
+		// over fStartupBackend (built by StartupCheck() already) so
+		// the window doesn't do its own, identical SWMgr scan right
+		// behind it. The window takes ownership from here.
 		SGMainWindow* win = new SGMainWindow(windowRect, module.String(),
-			verseKey.String());
+			verseKey.String(), 1, 0, fStartupBackend);
+		fStartupBackend = NULL;
 		win->Show();
 	} else
 	{
@@ -63,6 +68,11 @@ SGApp::SGApp()
 
 SGApp::~SGApp(void)
 {
+	// Only still set if StartupCheck() succeeded but the window was
+	// never actually created to take it over (there's no such path
+	// today, but nothing here should leak if one shows up later).
+	delete fStartupBackend;
+
 	SavePreferences(PREFERENCES_FILE);
 }
 
@@ -266,19 +276,26 @@ status_t SGApp::StartupCheck(void)
 
 	// The directories above can exist (e.g. a normal package install)
 	// while still being completely empty -- a genuinely fresh install
-	// with nothing downloaded yet. Constructing a SwordBackend here is
-	// the same SWMgr scan SGMainWindow's constructor does anyway; doing
-	// it once up front lets us fail cleanly before any window is built,
-	// instead of what used to happen: BuildGUI() would already run, and
-	// only then would SGMainWindow notice CountModules()==0 and bail
+	// with nothing downloaded yet. Constructing a SwordBackend here --
+	// the same (not cheap: profiled at several hundred ms with a few
+	// dozen modules installed) SWMgr scan SGMainWindow's constructor
+	// would otherwise do all over again right behind it -- lets us fail
+	// cleanly before any window is built AND, handed on via
+	// fStartupBackend below, saves that second scan entirely on the
+	// success path. Before fStartupBackend existed, this one was just
+	// thrown away and a second one built moments later; what it was
+	// already built to replace still applies on the failure path below:
+	// BuildGUI() would already run, and only then would SGMainWindow
+	// notice CountModules()==0 and bail
 	// out partway through its own constructor, leaving SGApp to Show() a
 	// half-built, empty window with no indication why.
 	SwordBackend* checkBackend = new SwordBackend();
 	bool hasModules = checkBackend->CountModules() > 0;
-	delete checkBackend;
 
 	if (!hasModules)
 	{
+		delete checkBackend;
+
 		alert = new BAlert("Scripture Guide", "Scripture Guide didn't find any"
 			" Bibles, commentaries, or other books installed yet. You'll need"
 			" at least one from the SWORD Project to get started -- the Book"
@@ -291,6 +308,10 @@ status_t SGApp::StartupCheck(void)
 
 		return B_ERROR;
 	}
+
+	// Handed to the caller (SGApp::SGApp()) instead of being thrown away
+	// here -- see fStartupBackend's own comment on why.
+	fStartupBackend = checkBackend;
 
 	// Check for existence of documentation
 	gDocsAvailable = true;

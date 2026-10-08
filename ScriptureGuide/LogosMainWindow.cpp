@@ -91,7 +91,7 @@ _LoadVectorIcon(const char* name)
 }
 
 SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
-		uint16 selectVers, uint16 selectVersEnd )
+		uint16 selectVers, uint16 selectVersEnd, SwordBackend* existingBackend)
  :	BWindow(frame, "Scripture Guide", B_DOCUMENT_WINDOW, 0),
  	// Starts true so nothing the constructor itself does -- restoring the
 	// saved column layout, applying the startup key -- lands in the
@@ -137,7 +137,11 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	}
 	prefsLock.Unlock();
 
-	fModManager = new SwordBackend();
+	// See this constructor's own doc comment (LogosMainWindow.h) -- a
+	// caller that already paid for a SWMgr scan hands the result
+	// straight in instead of this building a second, identical one.
+	fModManager = existingBackend != NULL ? existingBackend
+		: new SwordBackend();
 	BuildGUI();
 
 	// Keeps every column AddColumn() below adds from loading its own

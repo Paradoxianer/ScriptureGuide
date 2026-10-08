@@ -65,8 +65,16 @@ private:
 class SGMainWindow : public BWindow
 {
 public:
+	// existingBackend: a SwordBackend the caller already built (SGApp's
+	// own StartupCheck() has to build one anyway just to confirm
+	// anything is installed) and is handing over -- this window takes
+	// ownership and deletes it same as one it built itself, just
+	// without paying for a second, identical SWMgr scan right behind
+	// the first. NULL (the default) builds a fresh one, same as always
+	// -- every caller other than SGApp's own startup path.
 	SGMainWindow(BRect frame, const char* module, const char* key,
-					uint16 selectVers = 1, uint16 selectVersEnd = 0);
+					uint16 selectVers = 1, uint16 selectVersEnd = 0,
+					SwordBackend* existingBackend = NULL);
 	~SGMainWindow();
 	virtual bool QuitRequested();
 	virtual void MessageReceived(BMessage* message);
