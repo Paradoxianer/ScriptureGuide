@@ -221,6 +221,9 @@ BibleTextDocument::SetKey(const char* key)
 	if (fModule == NULL)
 		return B_NO_INIT;
 
+	BString oldBook(BookName());
+	int oldChapter = Chapter();
+
 	// Seeded from THIS document's own current position (fKeyText, not
 	// fModule->getKeyText() -- see the class comment) via an explicit
 	// setText() call, not the VerseKey(const char*) constructor -- once
@@ -234,6 +237,19 @@ BibleTextDocument::SetKey(const char* key)
 	_PrepareKey(verseKey);
 	verseKey.setText(fKeyText.String());
 	verseKey.setText(key);
+
+	// _Rebuild() below always renders the whole chapter regardless of
+	// which verse `key` names -- when the new key stays in the SAME
+	// book+chapter already showing, that render is already sitting
+	// there correctly, and a second, identical one is pure waste.
+	// Confirmed via profiling: ParallelBibleView::SetKey() runs this
+	// right after SGMainWindow::SetChapter() already rebuilt the exact
+	// same chapter, purely to move the verse selection within it --
+	// SGMainWindow::SetVerse(), called straight after SetChapter() on
+	// every startup, hit exactly this case every single time.
+	bool sameChapter = oldBook == verseKey.getBookName()
+		&& oldChapter == verseKey.getChapter();
+
 	// Deliberately not forcing verse 1 here, unlike SetChapter()/Next/
 	// PrevChapter() (which always want the chapter's first verse):
 	// _Rebuild() below always renders the whole chapter regardless of
@@ -242,7 +258,8 @@ BibleTextDocument::SetKey(const char* key)
 	// to scroll straight to the requested verse.
 	_SetModuleKey(verseKey);
 
-	_Rebuild();
+	if (!sameChapter)
+		_Rebuild();
 	return B_OK;
 }
 
