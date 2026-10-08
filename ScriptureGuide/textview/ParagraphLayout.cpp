@@ -18,8 +18,18 @@
 #include <stdio.h>
 
 #include <AutoDeleter.h>
+#include <OS.h>
 #include <utf8_functions.h>
 #include <View.h>
+
+
+// Running totals of BFont::GetEscapements() calls and the time spent in
+// them -- each one is a synchronous app_server round trip. Read (never
+// reset) by ParallelBibleView::_Realign()'s [SG-START] diagnostics, which
+// report the difference across each realign. Plain counters, not gated:
+// incrementing two integers costs nothing next to the IPC call they count.
+int32 gGetEscapementsCalls = 0;
+bigtime_t gGetEscapementsTime = 0;
 
 
 enum {
@@ -820,7 +830,10 @@ ParagraphLayout::_AppendGlyphInfos(const TextSpan& span)
 	ArrayDeleter<float> escapementDeleter(escapementArray);
 
 	// Fetch glyph spacing information
+	bigtime_t escapementsStart = system_time();
 	font.GetEscapements(text, charCount, escapementArray);
+	gGetEscapementsTime += system_time() - escapementsStart;
+	gGetEscapementsCalls++;
 
 	// Append to glyph buffer and convert escapement scale
 	float size = font.Size();

@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <OS.h>
+
 
 // Diagnostic logging for the parallel-column engine, silent unless the
 // SG_DEBUG environment variable is set:
@@ -45,6 +47,33 @@ SGDebugEnabled()
 		if (SGDebugEnabled())							\
 			fprintf(stderr, __VA_ARGS__);				\
 	} while (0)
+
+
+// [SG-START] lines: one wall-clock timeline across the whole startup, in
+// milliseconds since main() began (main() calls SGStartTime() first
+// thing, which is what anchors it). Every other timing in this file is a
+// duration of one operation; this is the only one that shows how they
+// add up and where the gaps between them are -- which is what a slow
+// startup actually needs: "which phase", not just "which function".
+//
+// Deliberately plain `inline`, NOT `static inline` like SGDebugEnabled()
+// above: a static function gives every source file its own copy of the
+// function-local `start` below, so each file's timeline started at
+// whenever that file first traced something -- confirmed, the first run
+// showed the window constructor at "-0.0ms", 169ms after main(). An
+// inline function with external linkage shares one static across all of
+// them, which is the whole point of a single timeline.
+inline bigtime_t
+SGStartTime()
+{
+	static const bigtime_t start = system_time();
+	return start;
+}
+
+
+#define SG_TRACE(label)									\
+	SG_LOG("[SG-START] %8.1fms  %s\n",					\
+		(system_time() - SGStartTime()) / 1000.0, label)
 
 
 #endif // SG_DEBUG_H

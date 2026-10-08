@@ -19,6 +19,7 @@
 #include "LogosMainWindow.h"
 #include "Preferences.h"
 #include "SwordBackend.h"
+#include "parallelbible/SGDebug.h"
 #include "parallelbible/BookmarkFile.h"
 
 
@@ -32,8 +33,10 @@ SGApp::SGApp()
   : BApplication("application/x-vnd.Scripture-Guide"),
   	fStartupBackend(NULL)
 {
+	SG_TRACE("SGApp: BApplication constructed");
 	if (StartupCheck() == B_OK)
 	{
+		SG_TRACE("SGApp: StartupCheck() done");
 		BString module, verseKey;
 
 		prefsLock.Lock();
@@ -56,7 +59,9 @@ SGApp::SGApp()
 		SGMainWindow* win = new SGMainWindow(windowRect, module.String(),
 			verseKey.String(), 1, 0, fStartupBackend);
 		fStartupBackend = NULL;
+		SG_TRACE("SGApp: SGMainWindow constructed");
 		win->Show();
+		SG_TRACE("SGApp: Show() returned");
 	} else
 	{
 		// If we don't have B_OK, it means that StartupCheck found some problems
@@ -289,7 +294,9 @@ status_t SGApp::StartupCheck(void)
 	// notice CountModules()==0 and bail
 	// out partway through its own constructor, leaving SGApp to Show() a
 	// half-built, empty window with no indication why.
+	SG_TRACE("StartupCheck: building SwordBackend");
 	SwordBackend* checkBackend = new SwordBackend();
+	SG_TRACE("StartupCheck: SwordBackend built");
 	bool hasModules = checkBackend->CountModules() > 0;
 
 	if (!hasModules)
@@ -356,8 +363,11 @@ bool HelpAvailable(void)
 }
 
 
-int main(void) 
+int main(void)
 {
+	// Anchors the [SG-START] timeline (see SGDebug.h) at the very start.
+	SGStartTime();
+	SG_TRACE("main()");
 	SGApp theApp;
 	theApp.Run();
 	return 0;

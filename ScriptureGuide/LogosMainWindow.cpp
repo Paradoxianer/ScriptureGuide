@@ -4,6 +4,11 @@
 #include <map>
 
 #include "parallelbible/BookmarkFile.h"
+#include "parallelbible/SGDebug.h"
+
+// See textview/ParagraphLayout.cpp.
+extern int32 gGetEscapementsCalls;
+extern bigtime_t gGetEscapementsTime;
 
 #include <Alert.h>
 #include <Application.h>
@@ -111,6 +116,7 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	fFontPanel(NULL),
  	fFindMessenger(NULL)
 {
+	SG_TRACE("SGMainWindow: constructor start");
 	fCurrentVerse = selectVers;
 	fCurrentVerseEnd = selectVersEnd;
 
@@ -142,7 +148,9 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	// straight in instead of this building a second, identical one.
 	fModManager = existingBackend != NULL ? existingBackend
 		: new SwordBackend();
+	SG_TRACE("SGMainWindow: SwordBackend ready");
 	BuildGUI();
+	SG_TRACE("SGMainWindow: BuildGUI() done");
 
 	// Keeps every column AddColumn() below adds from loading its own
 	// highlights right away -- see ParallelBibleView::
@@ -186,12 +194,14 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	fPendingStartupModule = module;
 	fPendingStartupKey = key;
 	PostMessage(M_LOAD_INITIAL_CONTENT);
+	SG_TRACE("SGMainWindow: constructor end");
 }
 
 
 void
 SGMainWindow::_LoadInitialContent(void)
 {
+	SG_TRACE("_LoadInitialContent: start");
 	const char* module = fPendingStartupModule.String();
 	const char* key = fPendingStartupKey.IsEmpty()
 		? NULL : fPendingStartupKey.String();
@@ -203,6 +213,7 @@ SGMainWindow::_LoadInitialContent(void)
 	}
 
 	SetModuleFromString(module);
+	SG_TRACE("_LoadInitialContent: SetModuleFromString() done");
 	if (!fCurrentModule)
 	{
 		// It's possible for this call to fail, so we'll handle it as best we can. 
@@ -271,10 +282,13 @@ SGMainWindow::_LoadInitialContent(void)
 	prefsLock.Unlock();
 	_ApplyHiddenHighlightColors();
 
+	SG_TRACE("_LoadInitialContent: hidden highlight colours applied");
 	RestoreColumnLayout();
+	SG_TRACE("_LoadInitialContent: RestoreColumnLayout() done");
 
 	// Load the preferences for the individual module
 	LoadPrefsForModule();
+	SG_TRACE("_LoadInitialContent: LoadPrefsForModule() done");
 
 
 	BMenuItem* item = fBookMenu->FindItem(BookFromKey(key));
@@ -286,7 +300,9 @@ SGMainWindow::_LoadInitialContent(void)
 		fCurrentChapter = ChapterFromKey(key);
 		fCurrentVerse = VerseFromKey(key);
 		SetChapter(fCurrentChapter);
+		SG_TRACE("_LoadInitialContent: SetChapter() done");
 		SetVerse(fCurrentVerse);
+		SG_TRACE("_LoadInitialContent: SetVerse() done");
 	}
 
 	// Everything above is "where the window opens", not navigation the
@@ -301,6 +317,9 @@ SGMainWindow::_LoadInitialContent(void)
 	// plain, direct reload lands at exactly the same point in startup
 	// SuppressHighlightReload()'s original comment was aiming for.
 	fParallelView->ReloadHighlightsNow();
+	SG_TRACE("_LoadInitialContent: end (highlights reloaded)");
+	SG_LOG("[SG-START] totals so far: GetEscapements=%d calls/%.1fms\n",
+		(int)gGetEscapementsCalls, gGetEscapementsTime / 1000.0);
 }
 
 

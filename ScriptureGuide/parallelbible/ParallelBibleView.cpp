@@ -44,6 +44,10 @@
 #include "BookmarkFile.h"
 #include "ParagraphLayout.h"
 #include "SGDebug.h"
+
+// See ParagraphLayout.cpp.
+extern int32 gGetEscapementsCalls;
+extern bigtime_t gGetEscapementsTime;
 #include "SwordBackend.h"
 #include "VerseAligner.h"
 #include "constants.h"
@@ -1930,6 +1934,7 @@ ParallelBibleView::FrameResized(float width, float height)
 	SG_LOG("[SG] FrameResized(width=%.1f, height=%.1f)\n",
 		width, height);
 	BView::FrameResized(width, height);
+	SG_TRACE("_Realign requested by FrameResized()");
 	_Realign();
 
 	// Re-applies whatever verse the active chain was last navigated to.
@@ -2086,6 +2091,7 @@ ParallelBibleView::MouseUp(BPoint where)
 		}
 
 		fNotesSplitDragGuideX = -1.0f;
+		SG_TRACE("_Realign requested by MouseUp()");
 		_Realign();
 		return;
 	}
@@ -2151,6 +2157,7 @@ ParallelBibleView::MessageReceived(BMessage* message)
 			// delete a spent object for no reason.
 			delete fNotesRealignRunner;
 			fNotesRealignRunner = NULL;
+			SG_TRACE("_Realign requested by MessageReceived()");
 			_Realign();
 			break;
 		}
@@ -2438,6 +2445,7 @@ ParallelBibleView::SetShowVerseNumbers(bool show)
 	// never inline in the document text, so this Bible/Commentary-
 	// specific toggle doesn't apply to it either way (see
 	// _BuildNotesDocument()).
+	SG_TRACE("_Realign requested by SetShowVerseNumbers()");
 	_Realign();
 	return B_OK;
 }
@@ -2453,6 +2461,7 @@ ParallelBibleView::SetShowStrongsNumbers(bool show)
 	fShowStrongsNumbers = show;
 	for (size_t i = 0; i < fDocuments.size(); i++)
 		fDocuments[i]->SetShowStrongsNumbers(show);
+	SG_TRACE("_Realign requested by SetShowStrongsNumbers()");
 	_Realign();
 	return B_OK;
 }
@@ -2471,6 +2480,7 @@ ParallelBibleView::SetShowCrossReferences(bool show)
 		fDocuments[i]->SetShowCrossReferences(show);
 	for (size_t i = 0; i < fNotesColumns.size(); i++)
 		fNotesColumns[i].document->SetShowCrossReferences(show);
+	SG_TRACE("_Realign requested by SetShowCrossReferences()");
 	_Realign();
 	return B_OK;
 }
@@ -2489,6 +2499,7 @@ ParallelBibleView::SetBaseFont(const BFont& font)
 		fDocuments[i]->SetBaseFont(font);
 	for (size_t i = 0; i < fNotesColumns.size(); i++)
 		fNotesColumns[i].document->SetBaseFont(font);
+	SG_TRACE("_Realign requested by SetBaseFont()");
 	_Realign();
 	return B_OK;
 }
@@ -3021,6 +3032,7 @@ ParallelBibleView::_ReloadHighlights()
 		document->SetHighlights(highlights);
 	}
 
+	SG_TRACE("_Realign requested by _ReloadHighlights()");
 	_Realign();
 }
 
@@ -3698,6 +3710,7 @@ ParallelBibleView::SetKey(const char* key)
 	}
 	bigtime_t perfAfterNotes = system_time();
 
+	SG_TRACE("_Realign requested by SetKey()");
 	_Realign();
 	bigtime_t perfAfterRealign = system_time();
 
@@ -4060,6 +4073,7 @@ ParallelBibleView::NextChapter()
 			notes.document->SetKey(chainKey.String());
 		}
 	}
+	SG_TRACE("_Realign requested by PrevChapter()");
 	_Realign();
 	// A new chapter always starts at verse 1 (both *Chapter() methods
 	// force that); reset the viewport too, or a scroll position from the
@@ -4096,6 +4110,7 @@ ParallelBibleView::PrevChapter()
 			notes.document->SetKey(chainKey.String());
 		}
 	}
+	SG_TRACE("_Realign requested by NextChapter()");
 	_Realign();
 	_ScrollChainTo(fActivePosition, 0.0f);
 	return B_OK;
@@ -4204,6 +4219,7 @@ ParallelBibleView::_RebuildLayout()
 	}
 
 	_RebuildHeader();
+	SG_TRACE("_Realign requested by _RebuildLayout()");
 	_Realign();
 }
 
@@ -4351,6 +4367,16 @@ ParallelBibleView::_RebuildHeader()
 void
 ParallelBibleView::_Realign()
 {
+	// [SG-START] timeline entry (see SGDebug.h): numbered, so a startup
+	// that realigns the same chain over and over shows up as exactly
+	// that, and split three ways -- the last part (re-laying out every
+	// text view) is not covered by any other timing here.
+	static int32 sRealignCount = 0;
+	sRealignCount++;
+	bigtime_t realignStart = system_time();
+	int32 escapementsCallsBefore = gGetEscapementsCalls;
+	bigtime_t escapementsTimeBefore = gGetEscapementsTime;
+
 	int32 start = 0;
 	while ((size_t)start < fColumnOrder.size()) {
 		int32 end = _ChainEnd(start);
@@ -4429,7 +4455,9 @@ ParallelBibleView::_Realign()
 		start = end + 1;
 	}
 
+	bigtime_t realignAligned = system_time();
 	_PositionColumns();
+	bigtime_t realignPositioned = system_time();
 
 	for (size_t i = 0; i < fTextViews.size(); i++) {
 		fTextViews[i]->Relayout();
@@ -4449,6 +4477,18 @@ ParallelBibleView::_Realign()
 		if (_IsChainRightmost(i))
 			_UpdateChainScrollBar(i);
 	}
+
+	bigtime_t realignEnd = system_time();
+	SG_LOG("[SG-START] %8.1fms  _Realign #%d: total=%.1fms align=%.1fms "
+		"position=%.1fms relayout=%.1fms columns=%zu "
+		"GetEscapements=%d calls/%.1fms\n",
+		(realignEnd - SGStartTime()) / 1000.0, (int)sRealignCount,
+		(realignEnd - realignStart) / 1000.0,
+		(realignAligned - realignStart) / 1000.0,
+		(realignPositioned - realignAligned) / 1000.0,
+		(realignEnd - realignPositioned) / 1000.0, fColumnOrder.size(),
+		(int)(gGetEscapementsCalls - escapementsCallsBefore),
+		(gGetEscapementsTime - escapementsTimeBefore) / 1000.0);
 }
 
 
