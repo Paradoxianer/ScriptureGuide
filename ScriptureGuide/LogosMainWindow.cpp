@@ -178,6 +178,24 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	AddCommonFilter(new EndKeyFilter);
 	AddCommonFilter(new UniversalSearchEnterFilter(fUniversalSearchBox));
 
+	// Everything else -- picking the startup module, restoring the saved
+	// column layout, navigating to the startup key -- moved to
+	// _LoadInitialContent(), run once this window's loop is actually up
+	// (see its own doc comment in the header). `module`/`key` are about
+	// to go out of scope, so stashed here for it to read instead.
+	fPendingStartupModule = module;
+	fPendingStartupKey = key;
+	PostMessage(M_LOAD_INITIAL_CONTENT);
+}
+
+
+void
+SGMainWindow::_LoadInitialContent(void)
+{
+	const char* module = fPendingStartupModule.String();
+	const char* key = fPendingStartupKey.IsEmpty()
+		? NULL : fPendingStartupKey.String();
+
 	if (fModManager->CountModules()==0)
 	{
 		// TODO: fail
@@ -276,12 +294,13 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	fRestoringHistory = false;
 	UpdateHistoryControls();
 
-	// Queued now, delivered once this window's loop actually starts
-	// running (see SuppressHighlightReload()'s own comment) -- the
-	// window is already showing plain Bible text by then; this is what
-	// makes the highlights pop in a moment later instead of making
-	// Show() itself wait on them.
-	PostMessage(M_LOAD_DEFERRED_HIGHLIGHTS);
+	// This whole method already runs after Show() (see its own doc
+	// comment in the header), so unlike everything built above --
+	// RestoreColumnLayout()'s AddColumn() calls among them -- there's no
+	// separate suppress/defer dance needed just for this any more: a
+	// plain, direct reload lands at exactly the same point in startup
+	// SuppressHighlightReload()'s original comment was aiming for.
+	fParallelView->ReloadHighlightsNow();
 }
 
 
@@ -1195,8 +1214,8 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 				JumpToKey(key.String());
 			break;
 		}
-		case M_LOAD_DEFERRED_HIGHLIGHTS:
-			fParallelView->ReloadHighlightsNow();
+		case M_LOAD_INITIAL_CONTENT:
+			_LoadInitialContent();
 			break;
 		case SG_STRONGS_LOOKUP:
 		{

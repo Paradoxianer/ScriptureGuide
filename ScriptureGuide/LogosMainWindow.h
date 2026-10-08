@@ -81,6 +81,21 @@ public:
 
 private:
 	void BuildGUI(void);
+	// Everything the constructor used to do synchronously after
+	// BuildGUI() -- picking the startup module, restoring the saved
+	// column layout, navigating to the startup key, loading highlights
+	// -- moved here and run from a message (M_LOAD_INITIAL_CONTENT) the
+	// constructor posts to itself instead. The constructor itself is now
+	// just BuildGUI() plus bookkeeping: fast, and the window is already
+	// Show()n (by SGApp, right after construction) by the time this
+	// actually runs, so the chrome -- menu bar, toolbar, book list --
+	// appears immediately instead of waiting on the same SWORD text
+	// layout work that made RestoreColumnLayout()/SetChapter()/
+	// SetVerse() slow (profiled: BFont::GetEscapements(), ~47% of it).
+	// Reads fPendingStartupModule/fPendingStartupKey, which the
+	// constructor stashed since its own `module`/`key` arguments are
+	// long gone by the time this message is actually delivered.
+	void _LoadInitialContent(void);
 	void LoadPrefsForModule(void);
 	void SavePrefsForModule(void);
 	// #113: Program > Print… -- stacked sections (one per active-chain
@@ -198,6 +213,10 @@ private:
 
 
 	SwordBackend	*fModManager;
+	// The constructor's own `module`/`key` arguments, kept around for
+	// _LoadInitialContent() -- see its own comment on why.
+	BString			fPendingStartupModule;
+	BString			fPendingStartupKey;
 	SGModule		*fCurrentModule;
 	uint16			fCurrentChapter;
 	uint16			fCurrentVerse;

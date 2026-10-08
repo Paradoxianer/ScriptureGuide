@@ -164,11 +164,15 @@ const uint32 SG_BIBLE					= 'SGbl';
 const uint32 SG_STRONGS_LOOKUP			= 'SGsl';
 
 // Posted by SGMainWindow to itself at the very end of its own
-// constructor -- see ParallelBibleView::SuppressHighlightReload()'s own
-// comment for why: queued before the window can even process messages,
-// so this is the first thing its loop runs once Show() actually unlocks
-// it, which is exactly "as soon as the window is already up".
-const uint32 M_LOAD_DEFERRED_HIGHLIGHTS	= 'MldH';
+// constructor -- queued before the window can even process messages, so
+// this is the first thing its loop runs once Show() actually unlocks it
+// (a freshly constructed BWindow is locked for its own creating thread
+// until then), which is exactly "as soon as the window is already up".
+// See SGMainWindow::_LoadInitialContent()'s own comment for what that
+// buys: the window's chrome appears immediately: the SWORD text layout
+// work (confirmed the dominant cost by profiling) runs after, not before,
+// Show().
+const uint32 M_LOAD_INITIAL_CONTENT		= 'MlIc';
 
 // search flags
 
