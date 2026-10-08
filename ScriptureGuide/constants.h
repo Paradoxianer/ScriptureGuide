@@ -163,6 +163,13 @@ const uint32 DOCS_UNAVAILABLE			= 'DCUN';
 const uint32 SG_BIBLE					= 'SGbl';
 const uint32 SG_STRONGS_LOOKUP			= 'SGsl';
 
+// Posted by SGMainWindow to itself at the very end of its own
+// constructor -- see ParallelBibleView::SuppressHighlightReload()'s own
+// comment for why: queued before the window can even process messages,
+// so this is the first thing its loop runs once Show() actually unlocks
+// it, which is exactly "as soon as the window is already up".
+const uint32 M_LOAD_DEFERRED_HIGHLIGHTS	= 'MldH';
+
 // search flags
 
 const int REG_ICASE						= 2;  

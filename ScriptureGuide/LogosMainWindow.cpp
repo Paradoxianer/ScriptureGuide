@@ -140,6 +140,12 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	fModManager = new SwordBackend();
 	BuildGUI();
 
+	// Keeps every column AddColumn() below adds from loading its own
+	// highlights right away -- see ParallelBibleView::
+	// SuppressHighlightReload()'s own comment. Lifted again, and a real
+	// (deferred) reload run, at the very end of this constructor.
+	fParallelView->SuppressHighlightReload(true);
+
 	// BLayout invalidation is asynchronous (see BWindow::
 	// UpdateSizeLimits()'s own doc comment: layout normally only
 	// resolves once the deferred B_LAYOUT_WINDOW message reaches this
@@ -265,6 +271,13 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 	// user performed -- see fRestoringHistory's initializer.
 	fRestoringHistory = false;
 	UpdateHistoryControls();
+
+	// Queued now, delivered once this window's loop actually starts
+	// running (see SuppressHighlightReload()'s own comment) -- the
+	// window is already showing plain Bible text by then; this is what
+	// makes the highlights pop in a moment later instead of making
+	// Show() itself wait on them.
+	PostMessage(M_LOAD_DEFERRED_HIGHLIGHTS);
 }
 
 
@@ -1178,6 +1191,9 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 				JumpToKey(key.String());
 			break;
 		}
+		case M_LOAD_DEFERRED_HIGHLIGHTS:
+			fParallelView->ReloadHighlightsNow();
+			break;
 		case SG_STRONGS_LOOKUP:
 		{
 			BString number;

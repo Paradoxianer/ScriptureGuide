@@ -220,6 +220,28 @@ public:
 										{ return kHeaderHeight; }
 
 				status_t			AddColumn(const char* moduleName);
+
+				// Startup only: suppresses every _ReloadHighlights() call
+				// (each one ends in a full _Realign(), the same expensive
+				// relayout pass as everything else that touches text) while
+				// the window is still being built -- the plain Bible text
+				// shows up first, highlights pop in a moment later instead
+				// of making the whole window wait on them. Reported live:
+				// startup blocked for several seconds before the window
+				// even became responsive, several of the profiled hot
+				// paths traced back to a highlight reload triggered while
+				// restoring the saved column layout.
+				// ReloadHighlightsNow() is the other half: clears the
+				// suppression and runs the (now real) reload once, meant
+				// to be called from a message posted to the window at the
+				// very end of its own constructor -- PostMessage() queues
+				// it before Show() even runs, but nothing delivers it
+				// until the window's loop actually starts (see Show()'s
+				// own doc comment on a freshly constructed BWindow being
+				// locked for its creating thread until then), so this
+				// naturally lands just after the window is already up.
+				void				SuppressHighlightReload(bool suppress);
+				void				ReloadHighlightsNow();
 				// Appends a brand-new notes column at the very end,
 				// joined to whatever chain the current last column
 				// belongs to (or starting its own chain if this is the
@@ -553,6 +575,9 @@ public:
 				void				HighlightWordMatches(
 										const char* strongsNumber);
 				BString				fWordMatchStrongsNumber;
+
+				// See SuppressHighlightReload()/ReloadHighlightsNow() above.
+				bool				fSuppressHighlightReload;
 
 				void				_ChangeColumnFromMessage(
 										BMessage* message);

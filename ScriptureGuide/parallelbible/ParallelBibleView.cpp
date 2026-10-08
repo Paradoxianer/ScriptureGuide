@@ -1839,7 +1839,8 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fInitialWidth(initialWidth),
 	fContentWidth(0.0f),
 	fNotesWidthFraction(-1.0f),
-	fNotesSplitDragGuideX(-1.0f)
+	fNotesSplitDragGuideX(-1.0f),
+	fSuppressHighlightReload(false)
 {
 	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 
@@ -2983,6 +2984,14 @@ ParallelBibleView::_ApplyHighlightMessage(BMessage* message)
 void
 ParallelBibleView::_ReloadHighlights()
 {
+	// See SuppressHighlightReload()'s own comment -- during startup this
+	// turns every call this function would otherwise make into a no-op.
+	// ReloadHighlightsNow() always runs a real reload once the
+	// suppression lifts, regardless of whether anything tried to trigger
+	// one while it was up, so there's nothing to remember here.
+	if (fSuppressHighlightReload)
+		return;
+
 	// Read once for the whole view rather than once per column: the
 	// files are tiny, but the directory walk is not free and every
 	// column would repeat exactly the same one.
@@ -3013,6 +3022,21 @@ ParallelBibleView::_ReloadHighlights()
 	}
 
 	_Realign();
+}
+
+
+void
+ParallelBibleView::SuppressHighlightReload(bool suppress)
+{
+	fSuppressHighlightReload = suppress;
+}
+
+
+void
+ParallelBibleView::ReloadHighlightsNow()
+{
+	fSuppressHighlightReload = false;
+	_ReloadHighlights();
 }
 
 
