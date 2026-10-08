@@ -243,7 +243,9 @@ public:
 		fPosition(-1),
 		fTrackingForDrag(false),
 		fDragAndDropStarted(false),
-		fShowingLinkCursor(false)
+		fShowingLinkCursor(false),
+		fHoverStrongsStart(-1),
+		fHoverStrongsEnd(-1)
 	{
 	}
 
@@ -425,6 +427,7 @@ public:
 		const BMessage* dragMessage)
 	{
 		_UpdateLinkCursor(where, transit);
+		_UpdateStrongsHover(where, transit);
 
 		if (fTrackingForDrag) {
 			// Squared-distance check avoids pulling in libm for a plain
@@ -1033,6 +1036,106 @@ private:
 		return true;
 	}
 
+	// The Strong's hover underline is an overlay, drawn on top of the
+	// already laid-out text -- never a text style. A style change would
+	// re-measure the paragraph and realign the whole chain, which with a
+	// Strong's-tagged translation open costs a few hundred ms per word
+	// hovered; this costs a line on a few pixels.
+	virtual void Draw(BRect updateRect)
+	{
+		TextDocumentView::Draw(updateRect);
+
+		std::vector<BRect> lines;
+		_StrongsUnderlineRects(lines);
+		if (lines.empty())
+			return;
+		PushState();
+		SetHighColor(ui_color(B_DOCUMENT_TEXT_COLOR));
+		for (size_t i = 0; i < lines.size(); i++) {
+			if (lines[i].Intersects(updateRect))
+				StrokeLine(lines[i].LeftBottom(), lines[i].RightBottom());
+		}
+		PopState();
+	}
+
+	// Remembers which Strong's word the mouse is over and, only when that
+	// changes, redraws the old and new word's underline and swaps the
+	// tooltip -- the lookup itself (TextOffsetAt()/StrongsLinkAt()) is
+	// the same cheap in-process one _UpdateLinkCursor() already does on
+	// every mouse move.
+	void _UpdateStrongsHover(BPoint where, uint32 transit)
+	{
+		int32 start = -1;
+		int32 end = -1;
+		BString number;
+		if (fBibleDocument != NULL && transit != B_EXITED_VIEW
+			&& transit != B_OUTSIDE_VIEW
+			&& !fBibleDocument->StrongsLinkAt(TextOffsetAt(where), start,
+				end, number)) {
+			start = end = -1;
+		}
+
+		if (start == fHoverStrongsStart && end == fHoverStrongsEnd)
+			return;
+
+		_InvalidateStrongsUnderline();
+		fHoverStrongsStart = start;
+		fHoverStrongsEnd = end;
+		_InvalidateStrongsUnderline();
+
+		if (start >= 0 && fOwner != NULL)
+			SetToolTip(fOwner->StrongsTooltipText(number).String());
+		else
+			SetToolTip((BToolTip*)NULL);
+	}
+
+	// One rect per text line the hovered word covers (a word normally
+	// sits on one line, but nothing here assumes it), its bottom edge
+	// where the underline goes: the bottom of the line box, which sits
+	// below descenders and so never runs through a letter. Empty when
+	// nothing is hovered -- or when the remembered offsets no longer
+	// point at a Strong's word, since a chapter change rebuilds the
+	// document under them without a mouse move to reset them.
+	void _StrongsUnderlineRects(std::vector<BRect>& outRects)
+	{
+		outRects.clear();
+		if (fHoverStrongsStart < 0 || fBibleDocument == NULL)
+			return;
+		int32 start, end;
+		BString number;
+		if (!fBibleDocument->StrongsLinkAt(fHoverStrongsStart, start, end,
+				number)
+			|| start != fHoverStrongsStart || end != fHoverStrongsEnd) {
+			return;
+		}
+
+		BRect current;
+		bool haveCurrent = false;
+		for (int32 offset = start; offset < end; offset++) {
+			float x1, y1, x2, y2;
+			GetTextBounds(offset, x1, y1, x2, y2);
+			if (haveCurrent && y2 > current.bottom - 0.5f
+				&& y2 < current.bottom + 0.5f) {
+				current.right = x2;
+				continue;
+			}
+			if (haveCurrent)
+				outRects.push_back(current);
+			current.Set(x1, y2 - 2.0f, x2, y2 - 1.0f);
+			haveCurrent = true;
+		}
+		if (haveCurrent)
+			outRects.push_back(current);
+	}
+
+	void _InvalidateStrongsUnderline()
+	{
+		std::vector<BRect> lines;
+		_StrongsUnderlineRects(lines);
+		for (size_t i = 0; i < lines.size(); i++)
+			Invalidate(lines[i].InsetByCopy(-1.0f, -1.0f));
+	}
+
 	// Swaps in the system's "follow link" cursor while hovering a
 	// cross-reference or Strong's number (either kind of clickable span
 	// -- see _TryFollowReferenceAt()/_TryFollowStrongsNumberAt() above),
@@ -1200,6 +1303,10 @@ private:
 	BPoint				fDragStartPoint;
 	BPoint				fMouseDownPoint;
 	bool				fShowingLinkCursor;
+	// The Strong's-tagged word under the mouse (document offsets, end
+	// exclusive), -1 when none -- see _UpdateStrongsHover().
+	int32				fHoverStrongsStart;
+	int32				fHoverStrongsEnd;
 };
 
 
@@ -1829,6 +1936,8 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	float initialWidth)
 	:
 	BView(name, B_WILL_DRAW | B_FRAME_EVENTS),
+	fSuppressHighlightReload(false),
+	fStrongsBackend(NULL),
 	fManager(manager),
 	fActivePosition(-1),
 	fSuppressScrollPropagation(false),
@@ -1843,8 +1952,7 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fInitialWidth(initialWidth),
 	fContentWidth(0.0f),
 	fNotesWidthFraction(-1.0f),
-	fNotesSplitDragGuideX(-1.0f),
-	fSuppressHighlightReload(false)
+	fNotesSplitDragGuideX(-1.0f)
 {
 	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 
@@ -3053,6 +3161,33 @@ ParallelBibleView::ReloadHighlightsNow()
 
 
 void
+ParallelBibleView::SetStrongsBackend(const SwordBackend* backend)
+{
+	fStrongsBackend = backend;
+	fStrongsTooltipCache.clear();
+}
+
+
+BString
+ParallelBibleView::StrongsTooltipText(const BString& number)
+{
+	std::map<BString, BString>::const_iterator cached
+		= fStrongsTooltipCache.find(number);
+	if (cached != fStrongsTooltipCache.end())
+		return cached->second;
+
+	BString text(number);
+	if (fStrongsBackend != NULL) {
+		BString gloss = fStrongsBackend->StrongsGloss(number.String());
+		if (!gloss.IsEmpty())
+			text << "\n" << gloss;
+	}
+	fStrongsTooltipCache[number] = text;
+	return text;
+}
+
+
+void
 ParallelBibleView::HighlightWordMatches(const char* strongsNumber)
 {
 	fWordMatchStrongsNumber = strongsNumber != NULL ? strongsNumber : "";
@@ -4073,7 +4208,7 @@ ParallelBibleView::NextChapter()
 			notes.document->SetKey(chainKey.String());
 		}
 	}
-	SG_TRACE("_Realign requested by PrevChapter()");
+	SG_TRACE("_Realign requested by NextChapter()");
 	_Realign();
 	// A new chapter always starts at verse 1 (both *Chapter() methods
 	// force that); reset the viewport too, or a scroll position from the
@@ -4110,7 +4245,7 @@ ParallelBibleView::PrevChapter()
 			notes.document->SetKey(chainKey.String());
 		}
 	}
-	SG_TRACE("_Realign requested by NextChapter()");
+	SG_TRACE("_Realign requested by PrevChapter()");
 	_Realign();
 	_ScrollChainTo(fActivePosition, 0.0f);
 	return B_OK;

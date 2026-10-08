@@ -244,6 +244,12 @@ public:
 			// this returns false.
 			bool				StrongsNumberAt(int32 documentOffset,
 									BString& outNumber) const;
+			// Same lookup, also handing back where the word starts and
+			// ends (document offsets, end exclusive) -- what a hover
+			// underline needs to know which characters to draw under.
+			bool				StrongsLinkAt(int32 documentOffset,
+									int32& outStart, int32& outEnd,
+									BString& outNumber) const;
 
 			// Extra bottom spacing per verse, used by VerseAligner to keep
 			// the same verse lined up across parallel columns. Replaces
@@ -385,7 +391,6 @@ private:
 			CharacterStyle		fVerseNumberStyle;
 			CharacterStyle		fVerseTextStyle;
 			CharacterStyle		fReferenceLinkStyle;
-			CharacterStyle		fStrongsNumberStyle;
 			ParagraphStyle		fParagraphStyle;
 
 			bool				fShowVerseNumbers;

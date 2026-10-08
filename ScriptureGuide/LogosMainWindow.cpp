@@ -505,6 +505,7 @@ void SGMainWindow::BuildGUI(void)
 	// simple" discussion that led to this merge).
 	fParallelView = new ParallelBibleView("parallelView",
 		fModManager->Manager(), Frame().Width());
+	fParallelView->SetStrongsBackend(fModManager);
 	// Vertical scrolling is now per-column (see the class comment on
 	// ParallelBibleView, issue #12) -- this outer BScrollView only ever
 	// needs its horizontal bar any more.

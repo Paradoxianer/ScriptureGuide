@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <InterfaceDefs.h>
 #include <String.h>
 #include "SwordBackend.h"
 #include "constants.h"
@@ -743,6 +744,51 @@ BString SwordBackend::LookupStrongsNumber(const char* strongsNumber,
 	}
 
 	return BString();
+}
+
+
+BString SwordBackend::StrongsGloss(const char* strongsNumber,
+	int32 maxChars) const
+{
+	BString entry = StripMarkupTags(LookupStrongsNumber(strongsNumber));
+
+	// Line breaks and runs of spaces from the entry's own layout read as
+	// noise in a one-paragraph tooltip.
+	entry.ReplaceAll('\n', ' ');
+	entry.ReplaceAll('\t', ' ');
+	while (entry.FindFirst("  ") >= 0)
+		entry.ReplaceAll("  ", " ");
+	entry.Trim();
+
+	// Characters, not bytes: entries are full of Greek, Hebrew and
+	// umlauts, and cutting mid-character would leave a broken glyph.
+	if (maxChars > 0 && entry.CountChars() > maxChars) {
+		entry.TruncateChars(maxChars);
+		entry.Trim();
+		entry << B_UTF8_ELLIPSIS;
+	}
+	return entry;
+}
+
+
+BString StripMarkupTags(const BString& text)
+{
+	BString result;
+	bool inTag = false;
+	for (int32 i = 0; i < text.Length(); i++) {
+		char c = text[i];
+		if (c == '<') {
+			inTag = true;
+			continue;
+		}
+		if (c == '>') {
+			inTag = false;
+			continue;
+		}
+		if (!inTag)
+			result.Append(&c, 1);
+	}
+	return result;
 }
 
 

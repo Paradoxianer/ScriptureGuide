@@ -30,37 +30,6 @@
 #define B_TRANSLATION_CONTEXT "DictionaryWindow"
 
 
-// Lexicon/dictionary entries carry whatever raw markup their own render
-// filter left behind, unstripped for a "plain" target -- the same kind
-// of leak already seen (and worked around narrowly) for Bible verses'
-// <w>/<note> tags elsewhere in this app, but a dictionary entry's tag
-// vocabulary (<entryFree>, <orth>, <pron>, <lb/>, ...) is much less
-// predictable, so this strips *any* "<...>" run generically rather than
-// naming specific tags. Not real markup rendering (no bold/italic from
-// e.g. <hi>), just enough to read the definition instead of raw angle
-// brackets.
-static BString
-StripTags(const BString& text)
-{
-	BString result;
-	bool inTag = false;
-	for (int32 i = 0; i < text.Length(); i++) {
-		char c = text[i];
-		if (c == '<') {
-			inTag = true;
-			continue;
-		}
-		if (c == '>') {
-			inTag = false;
-			continue;
-		}
-		if (!inTag)
-			result.Append(&c, 1);
-	}
-	return result;
-}
-
-
 // #32: reference recognition already covers notes, commentary and the
 // verse-list description field -- the one surface it never reached is a
 // dictionary/lexicon entry, because fEntryView was a plain BTextView
@@ -749,7 +718,7 @@ SGDictionaryWindow::_LookupKey(const char* key)
 void
 SGDictionaryWindow::_ShowEntry(const BString& rawEntry)
 {
-	BString clean = StripTags(rawEntry);
+	BString clean = StripMarkupTags(rawEntry);
 	clean.Trim();
 	// 0 for a non-Strong's lexicon (AmTract, Hitchcock, ...) -- see
 	// SetEntryText()'s own comment on why that skips in-entry

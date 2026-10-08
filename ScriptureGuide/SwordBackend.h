@@ -228,6 +228,14 @@ struct StrongsCrossReference {
 std::vector<StrongsCrossReference> FindStrongsCrossReferencesInText(
 	const char* text, char sameLexiconPrefix);
 
+// Lexicon/dictionary entries carry whatever raw markup their own render
+// filter left behind (<entryFree>, <orth>, <lb/>, ...) -- a vocabulary
+// too unpredictable to name tag by tag, so any "<...>" run goes. Not
+// real markup rendering, just enough to read the text instead of angle
+// brackets. Shared by the dictionary window and the reading pane's
+// Strong's tooltip.
+BString						StripMarkupTags(const BString& text);
+
 
 std::vector<const char*>	GetBookNames(void);
 
@@ -398,6 +406,14 @@ public:
 	// lookup instead of leaving it untouched.
 	BString				LookupStrongsNumber(const char* strongsNumber,
 							SGModule** outLexicon = NULL) const;
+
+	// A short, plain-text gist of LookupStrongsNumber()'s entry -- markup
+	// stripped, whitespace collapsed, cut at `maxChars` (with an ellipsis)
+	// -- for a hover tooltip rather than the full article the dictionary
+	// window shows. Empty under the same conditions LookupStrongsNumber()
+	// returns empty.
+	BString				StrongsGloss(const char* strongsNumber,
+							int32 maxChars = 160) const;
 
 	// Whether a dictionary that could resolve numbers of this kind is
 	// installed at all -- 'G' for Greek (New Testament), 'H' for Hebrew

@@ -5,6 +5,7 @@
 #ifndef PARALLEL_BIBLE_VIEW_H
 #define PARALLEL_BIBLE_VIEW_H
 
+#include <map>
 #include <vector>
 
 #include <Referenceable.h>
@@ -18,6 +19,8 @@
 #include "HighlightStore.h"
 #include "PersonalNotesModule.h"
 #include "TextDocumentView.h"
+
+class SwordBackend;
 
 using namespace sword;
 
@@ -242,6 +245,19 @@ public:
 				// naturally lands just after the window is already up.
 				void				SuppressHighlightReload(bool suppress);
 				void				ReloadHighlightsNow();
+
+				// Strong's-tagged words are no longer styled in the text;
+				// hovering one underlines it and shows a tooltip with its
+				// number and a short gloss (see BibleColumnView). The
+				// gloss comes from the window's own SwordBackend, handed
+				// in here rather than built -- building one is a full
+				// SWMgr scan. NULL (the default) shows the number alone.
+				void				SetStrongsBackend(
+										const SwordBackend* backend);
+				// "G1722 -- <gloss>", cached per number: a lexicon lookup
+				// is cheap, but hovering the same common word over and
+				// over would repeat it for nothing.
+				BString				StrongsTooltipText(const BString& number);
 				// Appends a brand-new notes column at the very end,
 				// joined to whatever chain the current last column
 				// belongs to (or starting its own chain if this is the
@@ -578,6 +594,10 @@ public:
 
 				// See SuppressHighlightReload()/ReloadHighlightsNow() above.
 				bool				fSuppressHighlightReload;
+
+				// See SetStrongsBackend()/StrongsTooltipText() above.
+				const SwordBackend*	fStrongsBackend;
+				std::map<BString, BString>	fStrongsTooltipCache;
 
 				void				_ChangeColumnFromMessage(
 										BMessage* message);

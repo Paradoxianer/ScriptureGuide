@@ -121,14 +121,6 @@ BibleTextDocument::BibleTextDocument(SWModule* module, int singleVerse)
 	fReferenceLinkStyle.SetForegroundColor(linkColor);
 	fReferenceLinkStyle.SetUnderline(1);
 
-	// Deliberately no color change here, unlike fReferenceLinkStyle --
-	// a colored underline under nearly every word of a fully Strong's-
-	// tagged translation (which is most of them) made the text hard to
-	// read at a glance (reported). Just a plain underline in the text's
-	// own color, plus the hover cursor MouseMoved() sets (see
-	// BibleColumnView), is enough to read as "clickable" without
-	// fighting the prose for attention.
-	fStrongsNumberStyle.SetUnderline(1);
 
 	// Seeded from the module's key AT THIS MOMENT -- the caller (see
 	// ParallelBibleView::_SetColumnToBible()) already set it to whatever
@@ -383,9 +375,6 @@ BibleTextDocument::SetBaseFont(const BFont& font)
 	fReferenceLinkStyle.SetForegroundColor(linkColor);
 	fReferenceLinkStyle.SetUnderline(1);
 
-	fStrongsNumberStyle.SetFont(effective);
-	fStrongsNumberStyle.SetUnderline(1);
-
 	_Rebuild();
 }
 
@@ -621,9 +610,20 @@ bool
 BibleTextDocument::StrongsNumberAt(int32 documentOffset,
 	BString& outNumber) const
 {
+	int32 start, end;
+	return StrongsLinkAt(documentOffset, start, end, outNumber);
+}
+
+
+bool
+BibleTextDocument::StrongsLinkAt(int32 documentOffset, int32& outStart,
+	int32& outEnd, BString& outNumber) const
+{
 	for (size_t i = 0; i < fStrongsLinks.size(); i++) {
 		if (documentOffset >= fStrongsLinks[i].start
 			&& documentOffset < fStrongsLinks[i].end) {
+			outStart = fStrongsLinks[i].start;
+			outEnd = fStrongsLinks[i].end;
 			outNumber = fStrongsLinks[i].number;
 			return true;
 		}
@@ -982,7 +982,17 @@ BibleTextDocument::_BuildVerseParagraph(int verse, bool linkedToPrevious,
 			int32 linkStart = documentOffset + verseNumberLength
 				+ span.start;
 			if (span.isStrongs) {
-				piece.style = fStrongsNumberStyle;
+				// Plain verse text, not a style of its own: a Strong's
+				// word is marked only in fStrongsLinks, and BibleColumnView
+				// underlines it and shows its tooltip on hover. Giving it
+				// the same style lets Paragraph::Append() merge it straight
+				// back into the text around it -- a per-word style made
+				// every tagged word its own span, and every span its own
+				// app_server round trip to measure: ~48 per verse instead
+				// of ~4, which was most of the startup time with a
+				// Strong's-tagged translation open (measured: 49,058 vs
+				// 5,645 GetEscapements() calls, 3.4-4.5s vs 0.8-1.1s).
+				piece.style = fVerseTextStyle;
 				pieces.push_back(piece);
 				StrongsLink link;
 				link.start = linkStart;
