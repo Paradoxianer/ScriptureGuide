@@ -104,9 +104,37 @@ BookmarkFile::BookmarkFile()
 }
 
 
+BString BookmarkFile::sRootDirectoryOverride;
+
+
+/*static*/ void
+BookmarkFile::SetRootDirectoryOverride(const char* path)
+{
+	sRootDirectoryOverride = "";
+	if (path == NULL || path[0] == '\0')
+		return;
+
+	// Normalized, with symlinks resolved: every path read back from the
+	// filesystem (BEntry::GetPath(), the listings built on it) comes back
+	// resolved, so an override given as e.g. "/tmp/..." -- a symlink to
+	// /boot/system/cache/tmp on Haiku -- would never compare equal to the
+	// paths derived from it. Seen in the tests: the same colour folder
+	// found twice under two different spellings.
+	create_directory(path, 0755);
+	BPath normalized(path, NULL, true);
+	sRootDirectoryOverride = normalized.InitCheck() == B_OK
+		? normalized.Path() : path;
+}
+
+
 BString
 BookmarkFile::RootDirectory()
 {
+	if (!sRootDirectoryOverride.IsEmpty()) {
+		create_directory(sRootDirectoryOverride.String(), 0755);
+		return sRootDirectoryOverride;
+	}
+
 	BPath path;
 	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path, true) != B_OK)
 		return BString();

@@ -58,6 +58,13 @@
 // somewhere disposable instead.
 static const char* const kTestNotesPath = "/tmp/scriptureguide-tests/notes";
 
+// Same for bookmarks and highlights: the highlight tests create and delete
+// real files, and in the user's own verse-list folder they raced a running
+// ScriptureGuide watching it (a highlight test failed once while the app
+// was open) and left files behind whenever a run was cut short.
+static const char* const kTestVerseListsPath
+	= "/tmp/scriptureguide-tests/verselists";
+
 
 using namespace sword;
 
@@ -2397,8 +2404,8 @@ TestHighlightBookmarkRoundTrip()
 		"BookmarkFile::ListHighlights: finds a highlight inside a colour "
 		"folder");
 
-	// Clean up after itself -- this test writes into the real settings
-	// tree, same as the personal-notes test above.
+	// Clean up after itself -- this test writes real files, into
+	// kTestVerseListsPath rather than the user's own folder (see main()).
 	written.Remove();
 	BEntry(collection.String()).Remove();
 }
@@ -2828,6 +2835,7 @@ main()
 	// has to be a process-wide switch rather than an argument passed at
 	// each call site.
 	PersonalNotesModule::SetLocationOverride(kTestNotesPath);
+	BookmarkFile::SetRootDirectoryOverride(kTestVerseListsPath);
 
 	BApplication app("application/x-vnd.ScriptureGuide-Tests");
 

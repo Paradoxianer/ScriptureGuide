@@ -227,6 +227,17 @@ public:
 			// "library" segment around.
 			static BString	RootDirectory();
 
+			// Points RootDirectory() -- and so HighlightsDirectory() and
+			// everything built on them -- somewhere else for the whole
+			// process; NULL or empty restores the real location. For the
+			// tests only, same idea as PersonalNotesModule::
+			// SetLocationOverride(): they create and delete real bookmark
+			// and highlight files, and pointed at the user's own folder
+			// they raced a running ScriptureGuide watching it (seen: a
+			// highlight test failing once while the app was open) and
+			// left files behind whenever a run was cut short.
+			static void		SetRootDirectoryOverride(const char* path);
+
 			// #44: RootDirectory()/Highlights -- one sub-folder per
 			// colour, each an ordinary collection. Created on demand.
 			static BString	HighlightsDirectory();
@@ -304,6 +315,7 @@ public:
 			static const char*	kDescriptionFileName;
 
 private:
+			static BString	sRootDirectoryOverride;
 			BString			fPath;
 			BString			fReference;
 			BString			fVersification;
