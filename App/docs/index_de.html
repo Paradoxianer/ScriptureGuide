@@ -40,10 +40,14 @@ footer { margin-top: 3em; border-top: 1px solid #ccc; padding-top: 1em;
 <li><a href="#groups">Spaltengruppen</a></li>
 <li><a href="#toolbar">Die Werkzeugleiste</a></li>
 <li><a href="#notes">Eigene Notizen</a></li>
+<li><a href="#highlights">Stellen markieren</a></li>
 <li><a href="#links">Querverweise und Strong-Nummern</a></li>
+<li><a href="#dictionary">Das Wörterbuch</a></li>
 <li><a href="#menus">Die Menüs</a></li>
 <li><a href="#find">Suchen</a></li>
+<li><a href="#hitschart">Die Trefferübersicht</a></li>
 <li><a href="#verselists">Verslisten</a></li>
+<li><a href="#printing">Drucken</a></li>
 <li><a href="#locale">Anderssprachige Systeme</a></li>
 <li><a href="#install">Bibeln und Kommentare installieren</a></li>
 </ul>
@@ -128,7 +132,35 @@ SWORD-Modul, angelegt beim ersten Schreiben. Eine in eine Notiz getippte Stellen
 im Bild.</p>
 
 <p>Es sind mehrere Notizspalten möglich, in verschiedenen Gruppen, jede
-neben einer anderen Stelle.</p>
+neben einer anderen Stelle. Die eigenen Notizen lassen sich durchsuchen wie
+jeder andere Text: Sie stehen im Suchfenster unter <b>Suche in</b>. Zieht
+man markierten Bibeltext auf eine Notiz, wird er samt Stellenangabe
+eingefügt, und die Angabe wird zum Link.</p>
+
+<h2 id="highlights">Stellen markieren</h2>
+
+<p>Text in einer Spalte markieren und loslassen: Es erscheint ein Menü mit
+sechs gedeckten Farben. Ein Klick auf eine davon, und die Stelle behält sie.
+Dasselbe Menü entfernt eine Markierung wieder und fügt die Auswahl einer
+Versliste hinzu.</p>
+
+<img src="pics/highlight-context-menu.png" alt="Eine Auswahl im Lesebereich mit dem Menü der Farben Grün, Gelb, Rot, Blau, Lila und Orange, dazu Markierung entfernen und Zur Versliste hinzufügen">
+
+<p>Eine Markierung innerhalb einer Übersetzung gehört genau zu diesen
+Wörtern dieser Übersetzung. Zieht man die Auswahl über mehrere Spalten,
+rastet sie wie oben beschrieben auf ganze Verse ein und wird stattdessen
+als versweite Markierung gespeichert, die in allen Spalten erscheint, auch
+in später hinzugefügten.</p>
+
+<p>Eine Markierung ist ein gewöhnlicher Verslisten-Eintrag mit einer Farbe,
+abgelegt in der Sammlung <b>Highlights</b> mit einem Ordner pro Farbe. So
+erreicht man die Markierungen über „Gehe zu Liste“ wie jede andere Liste,
+der Tracker zeigt sie, und „Kopieren nach“ übernimmt eine in eine echte
+Versliste. Ein Farbordner darf beliebig umbenannt werden. Unter
+Einstellungen &rarr; Markierungsfarben lassen sich einzelne Farben ein- und
+ausblenden.</p>
+
+<img src="pics/goto-list-highlights.png" alt="Gehe zu Liste im Verslisten-Fenster mit der Sammlung Highlights und einem Ordner pro Farbe">
 
 <h2 id="links">Querverweise und Strong-Nummern</h2>
 
@@ -136,10 +168,13 @@ neben einer anderen Stelle.</p>
 werden als Link dargestellt; ein Klick bewegt die Gruppe, in der sie stehen.
 Mit <b>zurück</b> geht es wieder zur Ausgangsstelle.</p>
 
-<p>In Modulen, die sie enthalten, sind mit Strong-Nummern versehene Wörter
-unterstrichen und öffnen beim Anklicken ein Wörterbuchfenster:</p>
-
-<img src="pics/dictionary.png" alt="Das Wörterbuchfenster mit dem Eintrag zu einem griechischen Wort">
+<p>In Modulen, die sie enthalten, sehen mit Strong-Nummern versehene Wörter
+wie gewöhnlicher Text aus. Fährt man mit der Maus darüber, wird das Wort
+unterstrichen, und sofort erscheint ein Tooltip mit der Strong-Nummer und
+einer kurzen Erklärung aus dem installierten Lexikon; er bleibt stehen,
+solange sich die Maus innerhalb des Wortes bewegt. Ein Klick auf das Wort
+öffnet das Wörterbuch bei seinem Eintrag und hebt im Kapitel jedes andere
+Wort mit derselben Nummer hervor, in allen offenen Spalten.</p>
 
 <p>Dazu muss das passende Wörterbuch installiert sein –
 <code>StrongsGreek</code> fürs Neue, <code>StrongsHebrew</code> fürs Alte
@@ -147,20 +182,37 @@ Testament. Beide stehen in der Buchverwaltung. Solange keines vorhanden ist,
 werden die Nummern als gewöhnlicher Text dargestellt statt als Links, die
 nirgendwohin führen könnten.</p>
 
+<h2 id="dictionary">Das Wörterbuch</h2>
+
+<p>Programm &rarr; Wörterbuch öffnet das Wörterbuchfenster; ein Klick auf ein
+Wort mit Strong-Nummer öffnet es bei diesem Wort. Oben wählt man ein
+Wörterbuch oder Lexikon. Die Seitenleiste listet alle seine Einträge, man
+kann also das ganze Lexikon durchblättern, nicht nur ein Wort nachschlagen;
+die Trennlinie zwischen Seitenleiste und Eintrag lässt sich verschieben. Was
+man in <b>Nachschlagen</b> tippt, springt zum passenden Eintrag.</p>
+
+<img src="pics/dictionary.png" alt="Das Wörterbuchfenster mit dem Eintrag zu einem griechischen Wort">
+
+<p>Stellenangaben in einem Eintrag sind Links, ebenso Verweise auf andere
+Strong-Nummern wie <code>see GREEK for 25</code> oder <code>vgl.</code>.
+Bei einer Strong-Nummer zeigt der Knopf <b>Trefferübersicht anzeigen</b>,
+wo sie in der unter <b>Suche in</b> gewählten Bibel vorkommt.</p>
+
 <h2 id="menus">Die Menüs</h2>
 
 <div class="menu">
 <dl>
 <dt>Programm</dt>
 <dd>Über; Buchverwaltung; Wörterbuch; Verslisten; Vergleich kopieren (als
-reiner Text, Tabulator-getrennt, Markdown oder HTML); Fenster duplizieren;
-Fenster schließen; Beenden.</dd>
+reiner Text, Tabulator-getrennt, Markdown oder HTML); Drucken; Fenster
+duplizieren; Fenster schließen; Beenden.</dd>
 <dt>Navigation</dt>
 <dd>Zurück und Vorwärts; Vers finden; nächstes und vorheriges Buch; nächstes
 und vorheriges Kapitel.</dd>
 <dt>Einstellungen</dt>
 <dd>Versnummern anzeigen; Strong-Nummern anzeigen; Querverweise anzeigen;
-Schrift wählen.</dd>
+Markierungsfarben; Schrift; beim Drucken neue Seite je Übersetzung;
+Markierungsfarben mitdrucken.</dd>
 </dl>
 </div>
 
@@ -186,6 +238,23 @@ Ausdruck einstellen. Bei regulären Ausdrücken trifft <code>P[^ ]+</code>
 jedes Wort, das mit „P“ beginnt; die anderswo üblichen Schrägstriche
 (<code>/so hier/</code>) werden hier nicht verwendet.</p>
 
+<p>Die vierte Art, <b>Strong-Nummer</b>, dient dem Wortstudium: Eine Nummer
+wie <code>G26</code> oder <code>H7456</code> eingeben, und sie findet jeden
+Vers mit demselben Wort im Grundtext, in einem Modul mit Strong-Nummern.
+Treffer, die die Wortmarkierungen des Moduls selbst nicht hergeben, werden
+weggelassen.</p>
+
+<h2 id="hitschart">Die Trefferübersicht</h2>
+
+<p><b>Trefferübersicht anzeigen</b> zeigt, wo eine Reihe von Versen in der
+Bibel liegt: eine Zeile pro Buch mit einem Kästchen pro Kapitel, schattiert
+nach der Zahl der Treffer, dazu eine Kachelgrafik der Treffer pro Buch.
+Fährt man über ein Kästchen, werden die Treffer dieses Kapitels aufgelistet.
+Es gibt sie für Suchergebnisse, für eine Strong-Nummer im Wörterbuch und für
+eine Versliste. Jedes dieser Fenster hat seine eigene Übersicht, sodass sich
+zwei nebeneinander vergleichen lassen, und aktualisiert sie, wenn sich seine
+Treffer ändern. Eine Übersicht lässt sich drucken.</p>
+
 <h2 id="verselists">Verslisten</h2>
 
 <p>Programm &rarr; Verslisten öffnet ein eigenes Fenster zum Anlegen
@@ -198,15 +267,35 @@ Lesebereich direkt zu dieser Stelle.</p>
 <p>Jede Sammlung ist ein Ordner, eine kleine Datei pro Stelle, sodass auch
 der Tracker sie durchsuchen und sortieren kann. Sammlungen lassen sich
 verschachteln; <b>Gehe zu Liste</b> reicht beliebig tief hinein. Ein
-Doppelklick auf den Namen einer Sammlung benennt ihren Ordner direkt um.
-Änderungen von außerhalb der Anwendung &ndash; im Tracker, oder durch eine
-andere Instanz &ndash; erscheinen, ohne das Fenster neu zu öffnen.</p>
+Klick auf den Namen der Liste oben öffnet es ebenfalls, sein
+Rechtsklick-Menü benennt die Liste um. Änderungen von außerhalb der
+Anwendung &ndash; im Tracker, oder durch eine andere Instanz &ndash;
+erscheinen, ohne das Fenster neu zu öffnen.</p>
+
+<p>Einträge können Tags tragen, und <b>Nach Tag filtern</b> zeigt nur die mit
+einem bestimmten Tag. Datei &rarr; Textliste importieren nimmt mehrere
+Textdateien auf einmal; jede wird eine eigene neue Liste, benannt nach ihrer
+Datei. Textliste exportieren schreibt die offene Liste wieder hinaus, Liste
+schließen leert das Fenster.</p>
+
+<h2 id="printing">Drucken</h2>
+
+<p>Programm &rarr; Drucken druckt den Lesebereich: das aktuelle Kapitel der
+aktiven Spaltengruppe, eine Übersetzung nach der anderen. Zwei Einstellungen
+im Menü Einstellungen bestimmen das Ergebnis: ob jede Übersetzung auf einer
+neuen Seite beginnt und ob Markierungsfarben mitgedruckt werden.
+Versnummern werden gedruckt, wenn sie angezeigt werden.</p>
+
+<p>Im Verslisten-Fenster druckt Datei &rarr; Drucken die Liste, entweder nur
+mit Stellenangaben oder mit dem Text jedes Verses. Für ein PDF wählt man
+Haikus Drucker <b>Print to PDF</b>.</p>
 
 <h2 id="locale">Anderssprachige Systeme</h2>
 
-<p>ScriptureGuide folgt der Systemsprache und ist neben Englisch ins
-Deutsche, Spanische, Französische, Kroatische, Niederländische, Rumänische
-und Russische übersetzt. Auch Stellenangaben folgen der jeweiligen
+<p>ScriptureGuide folgt der Systemsprache. Die deutsche Übersetzung ist
+vollständig; Spanisch, Französisch, Kroatisch, Niederländisch, Rumänisch
+und Russisch decken die älteren Teile der Oberfläche ab, neuere Funktionen
+erscheinen dort auf Englisch. Auch Stellenangaben folgen der jeweiligen
 Schreibweise: Auf einem deutschen System wird <code>Johannes 3, 16</code>
 mit Komma sowohl angenommen als auch angezeigt statt <code>John 3:16</code>
 mit Doppelpunkt – im Feld „Gehe zu / Suche“, in den Suchergebnissen und in

@@ -40,10 +40,14 @@ footer { margin-top: 3em; border-top: 1px solid #ccc; padding-top: 1em;
 <li><a href="#groups">Column Groups</a></li>
 <li><a href="#toolbar">The Toolbar</a></li>
 <li><a href="#notes">Personal Notes</a></li>
+<li><a href="#highlights">Marking Passages</a></li>
 <li><a href="#links">Cross-References and Strong's Numbers</a></li>
+<li><a href="#dictionary">The Dictionary</a></li>
 <li><a href="#menus">The Menus</a></li>
 <li><a href="#find">Searching</a></li>
+<li><a href="#hitschart">The Hits Chart</a></li>
 <li><a href="#verselists">Verse Lists</a></li>
+<li><a href="#printing">Printing</a></li>
 <li><a href="#locale">Using a Non-English System</a></li>
 <li><a href="#install">Installing Bibles and Commentaries</a></li>
 </ul>
@@ -127,7 +131,32 @@ module of their own, created the first time you write one. A reference typed int
 link, as in the illustration.</p>
 
 <p>You can have more than one notes column, in different groups, each beside
-a different passage.</p>
+a different passage. Your notes can be searched like any other text: they
+appear in the search window's <b>Search in</b> menu. Dragging a selection of
+Bible text onto a note inserts the text together with its reference, which
+becomes a link.</p>
+
+<h2 id="highlights">Marking Passages</h2>
+
+<p>Select text in a column and let go: a menu appears offering six muted
+colours. Click one and the passage keeps it. The same menu removes a mark
+again, and adds the selection to a verse list.</p>
+
+<img src="pics/highlight-context-menu.png" alt="A selection in the reading pane with the menu offering Green, Yellow, Red, Blue, Purple, Orange, Remove Highlight and Add to Verse List">
+
+<p>A mark made inside one translation belongs to exactly those words in that
+translation. Dragging a selection across columns snaps to whole verses, as
+described above, and stores a verse-wide mark instead, shown in every
+column at once, including columns added later.</p>
+
+<p>A highlight is an ordinary verse-list entry that carries a colour, kept
+in a <b>Highlights</b> collection with one folder per colour. So Go to List
+reaches your marks like any other list, Tracker browses them, and Copy to
+moves one into a real verse list. A colour folder can be renamed freely.
+Options &rarr; Highlight Colours switches individual colours on and
+off.</p>
+
+<img src="pics/goto-list-highlights.png" alt="Go to List opened in the Verse Lists window, showing the Highlights collection with one folder per colour">
 
 <h2 id="links">Cross-References and Strong's Numbers</h2>
 
@@ -135,10 +164,12 @@ a different passage.</p>
 are shown as links; clicking one navigates the group it is in. Use
 <b>back</b> to return.</p>
 
-<p>In modules that carry them, Strong's-tagged words are underlined and open
-a dictionary window when clicked:</p>
-
-<img src="pics/dictionary.png" alt="The dictionary window showing the entry for a Greek word">
+<p>In modules that carry them, Strong's-tagged words look like ordinary
+text. Hovering over one underlines it and shows a tooltip at once with its
+Strong's number and a short gloss from the installed lexicon; the tooltip
+stays while you move within the word. Clicking the word opens the
+dictionary at its entry and lights up every other word with the same number
+in the chapter, in every open column.</p>
 
 <p>This needs the matching dictionary installed --
 <code>StrongsGreek</code> for the New Testament,
@@ -146,20 +177,38 @@ a dictionary window when clicked:</p>
 Until one is installed, its numbers are simply shown as ordinary text rather
 than as links that could not lead anywhere.</p>
 
+<h2 id="dictionary">The Dictionary</h2>
+
+<p>Program &rarr; Dictionary opens the dictionary window; clicking a
+Strong's-tagged word opens it at that word. Choose a dictionary or lexicon
+at the top. The sidebar lists every entry of it, so you can browse the
+whole lexicon, not just look up one word; the divider between the sidebar
+and the entry can be dragged. Type into <b>Look up</b> to jump to an
+entry.</p>
+
+<img src="pics/dictionary.png" alt="The dictionary window showing the entry for a Greek word">
+
+<p>Bible references inside an entry are links, and so are references to
+other Strong's numbers, such as <code>see GREEK for 25</code> or the German
+<code>vgl.</code>. For a Strong's number, the <b>Show Hits Chart</b>
+button shows where it occurs in the Bible chosen under <b>Search
+in</b>.</p>
+
 <h2 id="menus">The Menus</h2>
 
 <div class="menu">
 <dl>
 <dt>Program</dt>
 <dd>About; Book Manager; Dictionary; Verse Lists; Copy Comparison (as plain
-text, tab-separated, Markdown or HTML); Duplicate This Window; Close This
-Window; Quit.</dd>
+text, tab-separated, Markdown or HTML); Print; Duplicate This Window; Close
+This Window; Quit.</dd>
 <dt>Navigation</dt>
 <dd>Back and Forward; Find Verse; Next and Previous Book; Next and Previous
 Chapter.</dd>
 <dt>Options</dt>
 <dd>Show Verse Numbers; Show Strong's Numbers; Show Cross-References;
-Choose Font.</dd>
+Highlight Colours; Choose Font; New Page per Translation When Printing;
+Include Highlight Colours When Printing.</dd>
 </dl>
 </div>
 
@@ -185,6 +234,22 @@ regular expressions, <code>P[^ ]+</code> matches any word starting with "P";
 the slashes often written around them elsewhere (<code>/like this/</code>)
 are not used here.</p>
 
+<p>The fourth mode, <b>Strong's Number</b>, is for word study: type a number
+such as <code>G26</code> or <code>H7456</code> and it finds every verse
+using the same original-language word, in a module that carries Strong's
+tags. Hits the module's own word tags do not actually support are left
+out.</p>
+
+<h2 id="hitschart">The Hits Chart</h2>
+
+<p><b>Show Hits Chart</b> draws where a set of verses falls in the Bible:
+one row per book with a square per chapter, shaded by how many hits it has,
+and a treemap of hits per book. Hovering over a square lists that chapter's
+hits. It is available for search results, for a Strong's number in the
+dictionary, and for a verse list. Each of these windows keeps its own chart,
+so two can be compared side by side, and updates it in place when its
+results change. A chart can be printed.</p>
+
 <h2 id="verselists">Verse Lists</h2>
 
 <p>Program &rarr; Verse Lists opens a separate window for building named
@@ -196,15 +261,34 @@ to that verse.</p>
 
 <p>Each collection is a folder, one small file per reference, so Tracker can
 browse and sort it too. Collections can be nested; <b>Go to List</b> reaches
-into them at any depth. Double-clicking a collection's name renames its
-folder in place. Changes made outside the app &mdash; in Tracker, or by
-another instance &mdash; appear without reopening the window.</p>
+into them at any depth; clicking the list's name at the top opens it too,
+and its right-click menu renames the list. Changes made outside the app
+&mdash; in Tracker, or by another instance &mdash; appear without reopening
+the window.</p>
+
+<p>Entries can carry tags, and <b>Filter by tag</b> shows only those with
+one. File &rarr; Import Text List takes several text files at once; each
+becomes a new list of its own, named after its file. Export Text List
+writes the open list back out, and Close List empties the window.</p>
+
+<h2 id="printing">Printing</h2>
+
+<p>Program &rarr; Print prints the reading pane: the current chapter of the
+active column group, one translation after the other. Two settings in the
+Options menu shape it: whether each translation starts on a new page, and
+whether highlight colours are printed. Verse numbers are printed when they
+are shown.</p>
+
+<p>In the Verse Lists window, File &rarr; Print prints the list, either as
+references only or with each verse's text. To get a PDF, choose Haiku's
+<b>Print to PDF</b> printer.</p>
 
 <h2 id="locale">Using a Non-English System</h2>
 
-<p>ScriptureGuide follows your system language, and is translated into
-German, Spanish, French, Croatian, Dutch, Romanian and Russian besides
-English. Verse references follow local convention too: on a German system
+<p>ScriptureGuide follows your system language. The German translation is
+complete; Spanish, French, Croatian, Dutch, Romanian and Russian cover the
+older parts of the interface, and newer features appear in English
+there. Verse references follow local convention too: on a German system
 <code>Johannes 3, 16</code> with a comma is both accepted and displayed,
 rather than <code>John 3:16</code> with a colon -- in the Go to / Search
 field, in search results, and in dragged reference text alike.</p>

@@ -17,7 +17,7 @@ Strong's numbers become something to study, not just to look up.
   one by one. Hovering one underlines it and shows a tooltip at once
   with its number and a short gloss from the installed lexicon. The
   tooltip stays put while the mouse moves within the word.
-- **Hits Chart** (#107): a per-chapter grid and a treemap of where the
+- **Hits Chart**: a per-chapter grid and a treemap of where the
   hits fall, for search results, for a Strong's number in the
   dictionary, and for a verse list. Each source window keeps its own
   chart and updates it in place; it can be printed.

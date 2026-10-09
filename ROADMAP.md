@@ -1,6 +1,6 @@
 # Roadmap
 
-Where ScriptureGuide goes after 1.4.0. Ordered by what unlocks what, not
+Where ScriptureGuide goes after 1.5.0. Ordered by what unlocks what, not
 by wishlist size. Each entry says what it needs and what is already known
 about the ground it stands on.
 
@@ -10,28 +10,6 @@ Version targets now live as
 the grouping; the milestone itself is the source of truth for which
 issue is in which one, so if the two ever disagree, trust GitHub and
 fix this file.
-
-## 1.5.0 -- word study, and the UI settling down
-
-- [#83](https://github.com/Paradoxianer/ScriptureGuide/issues/83) Given
-  a Strong's-tagged word, find every other verse using the same one --
-  the "Bible Word Study" a dictionary click can't do yet. Needs a new
-  search mode keyed by Strong's number rather than plain text; confirmed
-  `SwordBackend` has nothing like that today.
-- [#106](https://github.com/Paradoxianer/ScriptureGuide/issues/106)
-  Highlight same-word occurrences within the visible chapter --
-  independent of #83 (it needs `StrongsNumberAt()`, which already
-  exists, not the new search), filed from the same csv-bibel.de
-  reference.
-- [#32](https://github.com/Paradoxianer/ScriptureGuide/issues/32)
-  Reference recognition works in notes, commentary and verse-list
-  descriptions already -- the one place left is dictionary entries
-  themselves. Small, standalone remainder.
-- [#18](https://github.com/Paradoxianer/ScriptureGuide/issues/18) HIG
-  audit. 1.4.0 settled the selection menu into one popup and removed
-  the borderless palette window -- the reading pane is not mid-change
-  for the first time in several releases, which is what this was
-  waiting for.
 
 ## 1.6.0 -- a verse list you can read by, not just manage
 
@@ -119,6 +97,28 @@ can't answer by itself.
   parallel/harmonized display of overlapping accounts,
   [#85](https://github.com/Paradoxianer/ScriptureGuide/issues/85)
   BibleSync co-navigation with other SWORD apps.
+
+## Done in 1.5.0
+
+Word study, as planned: a Strong's-number search mode (#83), every
+occurrence of a word lit up in the chapter (#106), and references
+recognised inside dictionary entries (#32). The dictionary went further
+than this file asked -- it browses the whole lexicon (#84) and links
+other Strong's numbers inside an entry (#110, pulled forward from
+1.6.0). #18's audit replaced the hand-rolled spinner and made the last
+fixed colour follow Appearance changes.
+
+Not planned here but shipped: a Hits Chart showing where results fall
+(built while prototyping #107, which itself -- the donut chart -- is
+still open), searchable notes (#54), dropping Bible text onto a note
+cites it (#38), batch import of verse lists, and printing of the reading
+pane and of verse lists (#113, #87).
+
+And startup: with several translations open the window took several
+seconds to show any text. Measured rather than guessed, the cause was
+one synchronous app_server round trip per Strong's-tagged word on every
+layout, 19 realigns where one was enough, and the SWORD module manager
+built twice. Now about a third of a second.
 
 ## Done in 1.4.0
 

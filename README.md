@@ -9,7 +9,7 @@ Read several translations side by side, verse aligned, with your own notes
 in a column of their own — and a Book Manager for downloading the Bibles,
 commentaries and dictionaries CrossWire publishes.
 
-**Current release: 1.3.6** (test release) — [download the
+**Current release: 1.5.0** (test release) — [download the
 package](https://github.com/Paradoxianer/ScriptureGuide/releases/latest) ·
 [changelog](CHANGELOG.md)
 
@@ -35,15 +35,30 @@ you type, and are stored as a SWORD module of their own.
 
 ![A notes column with verse numbers and a cross-reference rendered as a link](App/docs/pics/notes.png)
 
-**Cross-references and Strong's numbers.** References in commentary or note
-text become links; Strong's-tagged words open a dictionary window. Back and
+**Marking passages.** Select text and pick one of six muted colours; drag
+the selection across columns and the mark covers whole verses in every
+column. Highlights are stored as ordinary verse-list entries, one folder
+per colour, so Tracker and *Go to List* reach them too.
+
+![The selection menu with six highlight colours, Remove Highlight and Add to Verse List](App/docs/pics/highlight-context-menu.png)
+
+**Cross-references and Strong's numbers.** References in commentary, note
+and dictionary text become links. Hovering a Strong's-tagged word shows its
+number and a short gloss at once; clicking it opens the dictionary and
+lights up every other occurrence of that word in the chapter. Back and
 forward step through where you have been, so following a link never costs
 you your place.
+
+**Word study.** Search by Strong's number to find every verse using the same
+original-language word, browse a whole lexicon in the dictionary window,
+and see in a Hits Chart — one square per chapter, plus a treemap per book —
+where a search, a Strong's number or a verse list falls in the Bible.
 
 **One field for going and finding.** Type a reference into *Go to / Search*
 and it jumps there; type anything else and it searches. Searching covers the
 translations you actually have open, and can be narrowed to a range of
-books, made case-sensitive, or given a regular expression.
+books, made case-sensitive, or given a regular expression. Your own notes
+are searchable too.
 
 ![The search window with results, module selection and book range](App/docs/pics/search.png)
 
@@ -61,12 +76,14 @@ Collections can nest, *Go to List* reaches into them at any depth, and a
 change made outside the app — in Tracker, from another instance — shows up
 without reopening the window.
 
-**Copy Comparison.** Every open column's text for the current chapter, as a
-verse-by-verse table, on the clipboard as plain text, tab-separated,
-Markdown or HTML.
+**Copy Comparison and printing.** Every open column's text for the current
+chapter, as a verse-by-verse table, on the clipboard as plain text,
+tab-separated, Markdown or HTML. The reading pane and verse lists can be
+printed, or saved as PDF through Haiku's *Print to PDF*.
 
-**In your language.** The interface is translated into German, Spanish,
-French, Croatian, Dutch, Romanian and Russian. Verse references follow local
+**In your language.** The interface is fully translated into German;
+Spanish, French, Croatian, Dutch, Romanian and Russian cover its older
+parts. Verse references follow local
 convention too — a German system reads and writes `Johannes 3, 16` rather
 than `John 3:16`.
 
@@ -83,13 +100,13 @@ dictionaries are findable among several hundred Bibles.
 **A package**, from the
 [releases page](https://github.com/Paradoxianer/ScriptureGuide/releases/latest):
 
-    pkgman install scriptureguide-1.3.6-1-x86_64.hpkg
+    pkgman install scriptureguide-1.5.0-1-x86_64.hpkg
 
 **Build your own package.** A prebuilt `.hpkg` records the Haiku version it
 was built on and may refuse to install on another. `package.sh` builds one
 that matches your machine, and needs nothing present but itself:
 
-    sh package.sh v1.3.6
+    sh package.sh v1.5.0
 
 It installs the build dependencies, fetches the source, builds both
 applications, writes the `.hpkg` into the current directory and removes what
@@ -121,8 +138,8 @@ Diagnostics are off unless asked for:
 
 ## Where it's going
 
-[ROADMAP.md](ROADMAP.md) — verse lists shipped in 1.3.0; passage
-highlighting is next.
+[ROADMAP.md](ROADMAP.md) — highlighting shipped in 1.4.0 and word study in
+1.5.0; next is a verse list you can read by in the reading pane.
 
 ## Documentation
 
