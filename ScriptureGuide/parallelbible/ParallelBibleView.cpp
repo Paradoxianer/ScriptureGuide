@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cctype>
 #include <cstring>
 #include <map>
 
@@ -35,6 +36,7 @@
 #include <ScrollView.h>
 #include <StringView.h>
 #include <TextView.h>
+#include <ToolTip.h>
 #include <Directory.h>
 #include <Screen.h>
 #include <Window.h>
@@ -1069,10 +1071,18 @@ private:
 		int32 end = -1;
 		BString number;
 		if (fBibleDocument != NULL && transit != B_EXITED_VIEW
-			&& transit != B_OUTSIDE_VIEW
-			&& !fBibleDocument->StrongsLinkAt(TextOffsetAt(where), start,
-				end, number)) {
-			start = end = -1;
+			&& transit != B_OUTSIDE_VIEW) {
+			int32 offset = TextOffsetAt(where);
+			if (!fBibleDocument->StrongsLinkAt(offset, start, end, number)) {
+				start = end = -1;
+				// Crossing the space or punctuation between two tagged
+				// words hid the tooltip and showed it again one word on
+				// -- a flicker at every word boundary (reported as
+				// restless). The current word stays until the mouse is
+				// over other actual text.
+				if (fHoverStrongsStart >= 0 && _IsGapAt(offset))
+					return;
+			}
 		}
 
 		if (start == fHoverStrongsStart && end == fHoverStrongsEnd)
@@ -1083,10 +1093,36 @@ private:
 		fHoverStrongsEnd = end;
 		_InvalidateStrongsUnderline();
 
-		if (start >= 0 && fOwner != NULL)
+		if (start >= 0 && fOwner != NULL) {
 			SetToolTip(fOwner->StrongsTooltipText(number).String());
-		else
+			// Haiku's tooltip window listens to every pointer event on the
+			// screen (SetEventMask(B_POINTER_EVENTS), see ToolTipView in
+			// the kit's ToolTipManager.cpp) and hides an ordinary tooltip
+			// on the very first mouse movement, wherever it happens --
+			// reported as vanishing the moment the mouse moved at all. A
+			// sticky one follows the mouse instead. Leaving the word is
+			// what clears it (SetToolTip(NULL) below), not moving.
+			ToolTip()->SetSticky(true);
+			// Right away, not after Haiku's usual 750ms rest -- that read
+			// as "nothing happens" (reported). ShowToolTip() hands the tip
+			// straight to the tooltip manager, which adds no delay of its
+			// own. Only called when the hovered word changes.
+			ShowToolTip(ToolTip());
+		} else
 			SetToolTip((BToolTip*)NULL);
+	}
+
+	// Whether the character at `offset` is whitespace or (ASCII)
+	// punctuation -- the gap between two words rather than other text.
+	bool _IsGapAt(int32 offset) const
+	{
+		BString character = fBibleDocument->Text(offset, 1);
+		if (character.IsEmpty())
+			return true;
+		if (character.Length() != 1)
+			return false;
+		unsigned char c = (unsigned char)character.ByteAt(0);
+		return isspace(c) || ispunct(c);
 	}
 
 	// One rect per text line the hovered word covers (a word normally
@@ -3168,6 +3204,42 @@ ParallelBibleView::SetStrongsBackend(const SwordBackend* backend)
 }
 
 
+// Breaks `text` into lines of at most `maxLineChars` characters at word
+// boundaries -- a tooltip shows each line as-is, so an unbroken gloss came
+// out as one very wide strip across the screen (reported). Counts
+// characters, not bytes: glosses are full of Greek, Hebrew and umlauts. A
+// single word longer than a line stays whole on a line of its own.
+static BString
+WrapToLines(const BString& text, int32 maxLineChars)
+{
+	BString result;
+	int32 lineChars = 0;
+	int32 start = 0;
+	while (start < text.Length()) {
+		int32 end = text.FindFirst(' ', start);
+		if (end < 0)
+			end = text.Length();
+		BString word;
+		text.CopyInto(word, start, end - start);
+		start = end + 1;
+		if (word.IsEmpty())
+			continue;
+
+		int32 wordChars = word.CountChars();
+		if (lineChars > 0 && lineChars + 1 + wordChars > maxLineChars) {
+			result << "\n";
+			lineChars = 0;
+		} else if (lineChars > 0) {
+			result << " ";
+			lineChars++;
+		}
+		result << word;
+		lineChars += wordChars;
+	}
+	return result;
+}
+
+
 BString
 ParallelBibleView::StrongsTooltipText(const BString& number)
 {
@@ -3176,11 +3248,18 @@ ParallelBibleView::StrongsTooltipText(const BString& number)
 	if (cached != fStrongsTooltipCache.end())
 		return cached->second;
 
+	// Narrow and tall rather than one long line: ~45 characters per line
+	// reads like a short paragraph, and the extra height buys room for
+	// more of the entry than a single line ever had.
+	static const int32 kMaxGlossChars = 300;
+	static const int32 kMaxLineChars = 45;
+
 	BString text(number);
 	if (fStrongsBackend != NULL) {
-		BString gloss = fStrongsBackend->StrongsGloss(number.String());
+		BString gloss = fStrongsBackend->StrongsGloss(number.String(),
+			kMaxGlossChars);
 		if (!gloss.IsEmpty())
-			text << "\n" << gloss;
+			text << "\n" << WrapToLines(gloss, kMaxLineChars);
 	}
 	fStrongsTooltipCache[number] = text;
 	return text;

@@ -254,9 +254,10 @@ public:
 				// SWMgr scan. NULL (the default) shows the number alone.
 				void				SetStrongsBackend(
 										const SwordBackend* backend);
-				// "G1722 -- <gloss>", cached per number: a lexicon lookup
-				// is cheap, but hovering the same common word over and
-				// over would repeat it for nothing.
+				// The number on its own line, then the gloss wrapped into
+				// short lines; cached per number: a lexicon lookup is
+				// cheap, but hovering the same common word over and over
+				// would repeat it for nothing.
 				BString				StrongsTooltipText(const BString& number);
 				// Appends a brand-new notes column at the very end,
 				// joined to whatever chain the current last column
