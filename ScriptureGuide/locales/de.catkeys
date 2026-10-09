@@ -1,23 +1,26 @@
-1	English	application/x-vnd.Scripture-Guide	2113018583
+1	German	application/x-vnd.Scripture-Guide	818944069
 Add Reference	VerseListWindow		Referenz hinzufügen
 Dictionary 	DictionaryWindow		Wörterbuch 
+Print…	SearchHitsWindow		Drucken…
 Regular Expression	SearchWindow		Regulärer Ausdruck
 Move to	VerseListWindow		Verschieben nach
 As HTML Table	MainWindow		Als HTML-Tabelle
 \"%text%\" isn't a Bible reference ScriptureGuide recognizes. Try something like \"John 3:16\" or \"Genesis 1:1-3\".	VerseListWindow		\"%text%\" ist keine Bibelstelle, die ScriptureGuide erkennt. Versuchen Sie etwas wie \"Johannes 3:16\" oder \"1. Mose 1:1-3\".
-Copy Comparison	MainWindow		Vergleich kopieren
 OK	VerseListWindow		OK
+Copy Comparison	MainWindow		Vergleich kopieren
+All Tags	VerseListWindow		Alle Tags
 Rename Verse List	VerseListWindow		Versliste umbenennen
 (add to this collection)	ParallelBibleView		(zu dieser Sammlung hinzufügen)
+Include Highlight Colours When Printing	MainWindow		Markierungsfarben mitdrucken
 File	VerseListWindow		Datei
 Move Down	VerseListWindow		Nach unten
-Search results (only shown if a lookup finds more than one match):	DictionaryWindow		Suchergebnisse (nur sichtbar, wenn eine Suche mehr als einen Treffer liefert):
 (No list open)	VerseListWindow		(Keine Liste geöffnet)
 Find	SearchWindow		Finde
 Move Verse List	VerseListWindow		Versliste verschieben
+Print…	MainWindow		Drucken…
 New Verse List…	VerseListWindow		Neue Versliste…
-Search in 	SearchWindow		Suche in
 Copy to	VerseListWindow		Kopieren nach
+Search in 	SearchWindow		Suche in
 New Verse List	VerseListWindow		Neue Versliste
 Show Verse Numbers	MainWindow		Zeige Versnummerierung
 Font Size: 	FontPanel		Schriftgröße
@@ -26,47 +29,59 @@ Description	VerseListWindow		Beschreibung
 Edit	VerseListWindow		Bearbeiten
 Add Reference…	VerseListWindow		Referenz hinzufügen…
 Verse	ExportFormats		Vers
+%d hits in this chapter:	SearchHitsWindow		%d Treffer in diesem Kapitel:
 Copy List to	VerseListWindow		Liste kopieren nach
 Go to / Search:	MainWindow		Gehe zu / Suche:
 Rename List…	VerseListWindow		Liste umbenennen…
+Print	VerseListWindow		Drucken
 Custom Order	VerseListWindow		Eigene Reihenfolge
 Add to Verse List	ParallelBibleView		Zur Versliste hinzufügen
+Print Verse List	VerseListWindow		Versliste drucken
+Verse Lists (top level)	VerseListWindow		Verslisten (oberste Ebene)
 Program	MainWindow		Programm
 Verses	VerseListWindow		Verse
-Verse Lists (top level)	VerseListWindow		Verslisten (oberste Ebene)
 Next Chapter	MainWindow		nächstes Kapitel
 Font Name	FontPanel		Schrift
-Dictionary…	MainWindow		Wörterbuch…
 Could not move this collection there -- a collection with the same name may already exist in the target location.	VerseListWindow		Diese Sammlung konnte nicht dorthin verschoben werden -- am Zielort existiert möglicherweise bereits eine Sammlung mit demselben Namen.
+Dictionary…	MainWindow		Wörterbuch…
 Delete File…	VerseListWindow		Datei löschen…
+References Only…	VerseListWindow		Nur Stellenangaben…
 Previous Book	MainWindow		vorheriges Buch
 Look up	DictionaryWindow		Nachschlagen
 Rename	VerseListWindow		Umbenennen
 No entry for %number% in the installed Strong's dictionary.	DictionaryWindow		Kein Eintrag für %number% im installierten Strong-Wörterbuch.
 Show Strong's Numbers	MainWindow		Strong-Nummern anzeigen
+Tag:	VerseListWindow		Tag:
 Match Case	SearchWindow		Großschreibung beachten
 Chapter	MainWindow		Kapitel
+Print Reading Pane	MainWindow		Lesebereich drucken
 Options	MainWindow		Einstellungen
 No matching entry found.	DictionaryWindow		Kein passender Eintrag gefunden.
 Notes	ParallelBibleView		Notizen
+Close List	VerseListWindow		Liste schließen
+Import Text Lists	VerseListWindow		Textlisten importieren
+(No highlights yet)	MainWindow		(Noch keine Markierungen)
 End in 	SearchWindow		End in
+%d matching entries -- pick one from the list.	DictionaryWindow		%d passende Einträge – bitte einen aus der Liste wählen.
 Save	VerseListWindow		Speichern
 Verse Lists…	MainWindow		Verslisten…
 Notes	MainWindow		Notizen
-Entry:	DictionaryWindow		Eintrag:
 No module selected.	BibleTextDocument		Kein Modul ausgewählt.
 Previous Chapter	MainWindow		vorheriges Kapitel
 Go to List	VerseListWindow		Gehe zu Liste
-%d matching entries -- pick one below.	DictionaryWindow		%d passende Einträge – bitte unten auswählen.
+New Page per Translation When Printing	MainWindow		Beim Drucken neue Seite je Übersetzung
 Move Up	VerseListWindow		Nach oben
+With Text…	VerseListWindow		Mit Text…
 Find Verse…	MainWindow		Vers finden…
+Show Hits Chart	SearchWindow		Trefferübersicht anzeigen
 Reference:	VerseListWindow		Referenz:
 Delete this entire collection and everything in it? This cannot be undone.	VerseListWindow		Diese gesamte Sammlung und ihren gesamten Inhalt löschen? Dies kann nicht rückgängig gemacht werden.
 Commentaries	ParallelBibleView		Kommentare
-Import Text List	VerseListWindow		Textliste importieren
+%d references in \"%s\" (%s)	VerseListWindow		%d Stellen in \"%s\" (%s)
+Search Hits	SearchHitsWindow		Suchtreffer
 Choose Font…	MainWindow		Schrift…
-Verse	MainWindow		Vers
 Back	MainWindow		Zurück
+Verse	MainWindow		Vers
 Notes	ExportFormats		Notizen
 Delete Verse List	VerseListWindow		Versliste löschen
 Show Cross-References	MainWindow		Querverweise anzeigen
@@ -76,7 +91,10 @@ Forward	MainWindow		Vorwärts
 Look up: 	DictionaryWindow		Nachschlagen: 
 Reference	VerseListWindow		Referenz
 Import Text List…	VerseListWindow		Textliste importieren…
+Filter by tag:	VerseListWindow		Nach Tag filtern:
 As Plain Text	MainWindow		Als reinen Text
+Strong's Number	SearchWindow		Strong-Nummer
+Show Hits Chart	VerseListWindow		Trefferübersicht anzeigen
 Book Manager…	MainWindow		Buchverwaltung…
 Duplicate This Window…	MainWindow		Fenster duplizieren
 Tags	VerseListWindow		Tags
@@ -87,29 +105,39 @@ Start in 	SearchWindow		Start in
 Create	VerseListWindow		Erstellen
 As Tab-Separated	MainWindow		Als Tabulator-getrennt
 Find Words	SearchWindow		Suche Wörter
-Next Book	MainWindow		nächstes Buch
-Cancel	VerseListWindow		Abbrechen
 Export	VerseListWindow		Exportieren
+Cancel	VerseListWindow		Abbrechen
+Next Book	MainWindow		nächstes Buch
 Add	VerseListWindow		Hinzufügen
 Export Text List…	VerseListWindow		Textliste exportieren…
 Book:	MainWindow		Buch:
+in	SearchWindow		in
 About Scripture Guide…	MainWindow		Über Scripture Guide…
 Move List to	VerseListWindow		Liste verschieben nach
 Import	VerseListWindow		Importieren
 Verse Lists	VerseListWindow		Verslisten
+New Tag	VerseListWindow		Neuer Tag
+New Tag…	VerseListWindow		Neuer Tag…
 Search Progress:	SearchWindow		Fortschritt Suche:
 Preview	FontPanel		Vorschau
 No Strong's dictionary for these numbers is installed. Install the %module% module via Program > Book Manager to look up %number%.	DictionaryWindow		Für diese Nummern ist kein Strong-Wörterbuch installiert. Installiere das Modul %module% über „Programm › Buchverwaltung“, um %number% nachzuschlagen.
 Find Phrase	SearchWindow		Suche Phrase
+hits for	SearchWindow		Treffer für
 Name:	VerseListWindow		Name:
 OK	FontPanel		OK
 Search Results:	SearchWindow		Ergebniss der Suche:
+Show Hits Chart	DictionaryWindow		Trefferübersicht anzeigen
 Delete	VerseListWindow		Löschen
 Location:	VerseListWindow		Ort:
+Search in 	DictionaryWindow		Suche in 
 Dictionary	DictionaryWindow		Wörterbuch
 As Markdown Table	MainWindow		Als Markdown-Tabelle
+… and %d more	SearchHitsWindow		… und %d weitere
+Remove Highlight	ParallelBibleView		Markierung entfernen
 Navigation	MainWindow		Navigation
 Biblical Texts	ParallelBibleView		Bibeltexte
+Highlight Colours	MainWindow		Markierungsfarben
 Find: 	SearchWindow		Suche:
 Edit Reference…	VerseListWindow		Referenz bearbeiten…
+%d occurrences of %s in %s	DictionaryWindow		%d Vorkommen von %s in %s
 New sub-collection here…	VerseListWindow		Neue Untersammlung hier…
