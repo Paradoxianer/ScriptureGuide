@@ -236,6 +236,15 @@ std::vector<StrongsCrossReference> FindStrongsCrossReferencesInText(
 // Strong's tooltip.
 BString						StripMarkupTags(const BString& text);
 
+// Breaks `text` into lines of at most `maxLineChars` characters at word
+// boundaries, for a tooltip: it shows each line as-is, so an unbroken
+// text came out as one very wide strip across the screen (reported).
+// Counts characters, not bytes -- Bible and lexicon text is full of
+// Greek, Hebrew and umlauts. A single word longer than a line stays whole
+// on a line of its own.
+BString						WrapToLines(const BString& text,
+								int32 maxLineChars);
+
 
 std::vector<const char*>	GetBookNames(void);
 

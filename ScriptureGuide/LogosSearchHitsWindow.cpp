@@ -16,6 +16,7 @@
 #include <ScrollBar.h>
 #include <ScrollView.h>
 #include <StringView.h>
+#include <ToolTip.h>
 #include <View.h>
 #include <Window.h>
 
@@ -145,7 +146,9 @@ public:
 		// canvas for a scrollbar to reveal by scrolling, no matter what
 		// MinSize()/MaxSize() below advertised.
 		BView(name, B_WILL_DRAW | B_FRAME_EVENTS | B_SUPPORTS_LAYOUT),
-		fBooks(GetBookChapterCounts())
+		fBooks(GetBookChapterCounts()),
+		fHoverRow(-1),
+		fHoverChapter(-1)
 	{
 		SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 
@@ -286,55 +289,80 @@ public:
 			key << hits[i].book << "|" << hits[i].chapter;
 			fHits[key].push_back(&hits[i]);
 		}
+		// The hovered square's tooltip described the previous hits.
+		fHoverRow = fHoverChapter = -1;
+		SetToolTip((BToolTip*)NULL);
 		Invalidate();
 	}
 
+	// Same behaviour as the reading pane's Strong's tooltip (see
+	// BibleColumnView::_UpdateStrongsHover()): shown at once instead of
+	// after Haiku's 750ms rest, sticky so it follows the mouse instead of
+	// vanishing on the first movement, rebuilt only when the hovered
+	// square changes, and wrapped narrow instead of one line per verse
+	// running across the screen.
 	virtual void MouseMoved(BPoint where, uint32 code,
 		const BMessage* dragMessage)
 	{
-		int32 row, chapter;
-		if (_SquareAt(where, &row, &chapter)) {
-			const std::vector<const SearchHit*>* hits
-				= _HitsFor(fBooks[row].book, chapter);
-			if (hits != NULL && !hits->empty()) {
-				BString tip;
-				if (hits->size() == 1) {
-					tip << (*hits)[0]->reference << ": "
-						<< (*hits)[0]->verseText;
-				} else {
-					// A single hit's reference+text used to be shown
-					// even when this chapter's own square (see
-					// HitColorForCount()) was already visibly darker for
-					// having several -- nothing actually said how many,
-					// or what the others were. Caps at 4 lines so one
-					// very dense chapter (a common word can turn up
-					// 10+ times) doesn't turn the tooltip into a wall of
-					// text.
-					static const size_t kMaxShown = 4;
-					size_t shown = std::min(hits->size(), kMaxShown);
-					BString header;
-					header.SetToFormat(
-						B_TRANSLATE("%d hits in this chapter:"),
-						(int)hits->size());
-					tip << header << "\n";
-					for (size_t k = 0; k < shown; k++) {
-						if (k > 0)
-							tip << "\n";
-						tip << (*hits)[k]->reference << ": "
-							<< (*hits)[k]->verseText;
-					}
-					if (hits->size() > shown) {
-						BString more;
-						more.SetToFormat(B_TRANSLATE("… and %d more"),
-							(int)(hits->size() - shown));
-						tip << "\n" << more;
-					}
-				}
-				SetToolTip(tip.String());
-				return;
+		int32 row = -1;
+		int32 chapter = -1;
+		const std::vector<const SearchHit*>* hits = NULL;
+		if (code != B_EXITED_VIEW && code != B_OUTSIDE_VIEW
+			&& _SquareAt(where, &row, &chapter)) {
+			hits = _HitsFor(fBooks[row].book, chapter);
+		}
+		if (hits == NULL || hits->empty()) {
+			row = chapter = -1;
+			hits = NULL;
+		}
+
+		if (row == fHoverRow && chapter == fHoverChapter)
+			return;
+		fHoverRow = row;
+		fHoverChapter = chapter;
+
+		if (hits == NULL) {
+			SetToolTip((BToolTip*)NULL);
+			return;
+		}
+
+		BString tip;
+		static const int32 kMaxLineChars = 50;
+		if (hits->size() == 1) {
+			tip << WrapToLines(BString((*hits)[0]->reference)
+				<< ": " << (*hits)[0]->verseText, kMaxLineChars);
+		} else {
+			// A single hit's reference+text used to be shown
+			// even when this chapter's own square (see
+			// HitColorForCount()) was already visibly darker for
+			// having several -- nothing actually said how many,
+			// or what the others were. Caps at 4 lines so one
+			// very dense chapter (a common word can turn up
+			// 10+ times) doesn't turn the tooltip into a wall of
+			// text.
+			static const size_t kMaxShown = 4;
+			size_t shown = std::min(hits->size(), kMaxShown);
+			BString header;
+			header.SetToFormat(
+				B_TRANSLATE("%d hits in this chapter:"),
+				(int)hits->size());
+			tip << header << "\n";
+			for (size_t k = 0; k < shown; k++) {
+				if (k > 0)
+					tip << "\n";
+				tip << WrapToLines(BString((*hits)[k]->reference)
+					<< ": " << (*hits)[k]->verseText, kMaxLineChars);
+			}
+			if (hits->size() > shown) {
+				BString more;
+				more.SetToFormat(B_TRANSLATE("… and %d more"),
+					(int)(hits->size() - shown));
+				tip << "\n" << more;
 			}
 		}
-		SetToolTip((BToolTip*)NULL);
+		SetToolTip(tip.String());
+		ToolTip()->SetSticky(true);
+		ShowToolTip(ToolTip());
 	}
 
 	virtual void MouseDown(BPoint where)
@@ -428,6 +456,10 @@ private:
 	float	fCellWidth;
 	float	fLabelWidth;
 	int32	fMaxChapters;
+	// The square whose tooltip is showing, -1 when none -- see
+	// MouseMoved().
+	int32	fHoverRow;
+	int32	fHoverChapter;
 };
 
 
@@ -879,7 +911,6 @@ public:
 		fTitleHeight = ceilf(fh.ascent + fh.descent + fh.leading);
 
 		static const float kTitleGap = 8.0f;
-		static const float kSectionGap = 16.0f;
 
 		ChapterGridView* grid = new ChapterGridView("printHitsGrid", hits);
 		float gridHeight = grid->FitWidth(width);

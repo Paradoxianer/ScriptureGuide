@@ -3254,42 +3254,6 @@ ParallelBibleView::SetStrongsBackend(const SwordBackend* backend)
 }
 
 
-// Breaks `text` into lines of at most `maxLineChars` characters at word
-// boundaries -- a tooltip shows each line as-is, so an unbroken gloss came
-// out as one very wide strip across the screen (reported). Counts
-// characters, not bytes: glosses are full of Greek, Hebrew and umlauts. A
-// single word longer than a line stays whole on a line of its own.
-static BString
-WrapToLines(const BString& text, int32 maxLineChars)
-{
-	BString result;
-	int32 lineChars = 0;
-	int32 start = 0;
-	while (start < text.Length()) {
-		int32 end = text.FindFirst(' ', start);
-		if (end < 0)
-			end = text.Length();
-		BString word;
-		text.CopyInto(word, start, end - start);
-		start = end + 1;
-		if (word.IsEmpty())
-			continue;
-
-		int32 wordChars = word.CountChars();
-		if (lineChars > 0 && lineChars + 1 + wordChars > maxLineChars) {
-			result << "\n";
-			lineChars = 0;
-		} else if (lineChars > 0) {
-			result << " ";
-			lineChars++;
-		}
-		result << word;
-		lineChars += wordChars;
-	}
-	return result;
-}
-
-
 BString
 ParallelBibleView::StrongsTooltipText(const BString& number)
 {

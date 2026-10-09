@@ -771,6 +771,36 @@ BString SwordBackend::StrongsGloss(const char* strongsNumber,
 }
 
 
+BString WrapToLines(const BString& text, int32 maxLineChars)
+{
+	BString result;
+	int32 lineChars = 0;
+	int32 start = 0;
+	while (start < text.Length()) {
+		int32 end = text.FindFirst(' ', start);
+		if (end < 0)
+			end = text.Length();
+		BString word;
+		text.CopyInto(word, start, end - start);
+		start = end + 1;
+		if (word.IsEmpty())
+			continue;
+
+		int32 wordChars = word.CountChars();
+		if (lineChars > 0 && lineChars + 1 + wordChars > maxLineChars) {
+			result << "\n";
+			lineChars = 0;
+		} else if (lineChars > 0) {
+			result << " ";
+			lineChars++;
+		}
+		result << word;
+		lineChars += wordChars;
+	}
+	return result;
+}
+
+
 BString StripMarkupTags(const BString& text)
 {
 	BString result;
