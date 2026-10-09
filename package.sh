@@ -59,7 +59,9 @@ if [ -z "$SKIP_DEPS" ]; then
 fi
 # git is only needed to fetch a tag -- a checkout build doesn't touch it.
 # (Its package name also differs on the secondary-architecture install.)
-if [ -n "$TAG" ]; then
+# Only when missing: under setarch x86 pkgman finds no package called
+# "git" at all, although the primary one is installed and works.
+if [ -n "$TAG" ] && ! command -v git >/dev/null 2>&1; then
 	pkgman install -y git
 fi
 
