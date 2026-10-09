@@ -55,10 +55,10 @@ and see in a Hits Chart — one square per chapter, plus a treemap per book —
 where a search, a Strong's number or a verse list falls in the Bible.
 
 **One field for going and finding.** Type a reference into *Go to / Search*
-and it jumps there; type anything else and it searches. Searching covers the
-translations you actually have open, and can be narrowed to a range of
-books, made case-sensitive, or given a regular expression. Your own notes
-are searchable too.
+and it jumps there; type anything else and it searches. Any installed Bible
+or commentary can be searched -- your own notes too -- starting with the one
+you are reading, narrowed to a range of books, made case-sensitive, or given
+a regular expression.
 
 ![The search window with results, module selection and book range](App/docs/pics/search.png)
 
