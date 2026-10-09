@@ -1,5 +1,67 @@
 # Changelog
 
+## 1.5.0 (test release)
+
+### Word study
+
+Strong's numbers become something to study, not just to look up.
+
+- **Search by Strong's number** (#83): the search window has a fourth
+  mode that finds every verse using the same original-language word.
+  Hits the module's own word tags do not actually back up are dropped:
+  SWORD's index reports some that are not there.
+- **Every occurrence in the chapter** (#106): clicking a tagged word
+  opens the dictionary as before, and now also lights up every other
+  word with the same number, in every open column.
+- **Hover instead of underline**: tagged words are no longer underlined
+  one by one. Hovering one underlines it and shows a tooltip at once
+  with its number and a short gloss from the installed lexicon. The
+  tooltip stays put while the mouse moves within the word.
+- **Hits Chart** (#107): a per-chapter grid and a treemap of where the
+  hits fall, for search results, for a Strong's number in the
+  dictionary, and for a verse list. Each source window keeps its own
+  chart and updates it in place; it can be printed.
+
+### Dictionary
+
+- Browse the whole lexicon in a permanent sidebar (#84), with a
+  draggable divider. Filling the sidebar no longer freezes the window
+  for a second on large lexicons.
+- Bible references inside an entry are clickable (#32), and so are
+  references to other Strong's numbers, such as "see GREEK for 25" or
+  "vgl." (#110).
+
+### Notes
+
+- Your own notes are searchable (#54).
+- Dropping Bible text onto a note cites its reference (#38).
+- Several ways notes could be silently lost or not shown are fixed, and
+  the test suite no longer writes into your own notes or verse lists.
+
+### Verse lists and printing
+
+- Import several text files at once, each becoming its own list.
+- File > Close List; a click on the list name opens Go to List.
+- Print the reading pane (Program > Print…), optionally with highlight
+  colours and a new page per translation; print a verse list as
+  references only or with text.
+
+### Startup
+
+Starting with several translations open used to take several seconds
+before any text appeared. The window now shows at once and the text
+follows in about a third of a second: the SWORD module manager is
+built once instead of twice, the columns are aligned once instead of
+19 times, and Strong's-tagged text is no longer split into one
+separately measured piece per word.
+
+### Under the hood
+
+- Haiku's own `BSpinner` replaces a hand-rolled spinner, and the search
+  window's preview follows Appearance colour changes live (#18).
+- German translation brought up to date.
+- `package.sh` can build secondary-architecture (x86_gcc2) packages.
+
 ## 1.4.0 (test release)
 
 ### Marking passages
