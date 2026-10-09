@@ -1973,6 +1973,10 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	:
 	BView(name, B_WILL_DRAW | B_FRAME_EVENTS),
 	fSuppressHighlightReload(false),
+	fUpdateDepth(0),
+	fRealignPending(false),
+	fPendingScrollPosition(-1),
+	fPendingScrollVerse(-1),
 	fStrongsBackend(NULL),
 	fManager(manager),
 	fActivePosition(-1),
@@ -2581,6 +2585,13 @@ ParallelBibleView::SetNotesEnabled(bool enabled)
 status_t
 ParallelBibleView::SetShowVerseNumbers(bool show)
 {
+	// Unchanged means nothing to do -- every column already has this
+	// value (new ones get it in _SetColumnToBible()). LoadPrefsForModule()
+	// calls all four of these on every startup and module switch, and
+	// each one used to realign every column regardless (measured: four
+	// full three-column realigns, ~1.4s, at startup alone).
+	if (fShowVerseNumbers == show)
+		return B_OK;
 	fShowVerseNumbers = show;
 	for (size_t i = 0; i < fDocuments.size(); i++)
 		fDocuments[i]->SetShowVerseNumbers(show);
@@ -2602,6 +2613,9 @@ ParallelBibleView::SetShowVerseNumbers(bool show)
 status_t
 ParallelBibleView::SetShowStrongsNumbers(bool show)
 {
+	// See SetShowVerseNumbers().
+	if (fShowStrongsNumbers == show)
+		return B_OK;
 	fShowStrongsNumbers = show;
 	for (size_t i = 0; i < fDocuments.size(); i++)
 		fDocuments[i]->SetShowStrongsNumbers(show);
@@ -2619,6 +2633,9 @@ ParallelBibleView::SetShowStrongsNumbers(bool show)
 status_t
 ParallelBibleView::SetShowCrossReferences(bool show)
 {
+	// See SetShowVerseNumbers().
+	if (fShowCrossReferences == show)
+		return B_OK;
 	fShowCrossReferences = show;
 	for (size_t i = 0; i < fDocuments.size(); i++)
 		fDocuments[i]->SetShowCrossReferences(show);
@@ -2638,6 +2655,9 @@ ParallelBibleView::SetShowCrossReferences(bool show)
 status_t
 ParallelBibleView::SetBaseFont(const BFont& font)
 {
+	// See SetShowVerseNumbers().
+	if (fBaseFont == font)
+		return B_OK;
 	fBaseFont = font;
 	for (size_t i = 0; i < fDocuments.size(); i++)
 		fDocuments[i]->SetBaseFont(font);
@@ -3193,6 +3213,36 @@ ParallelBibleView::ReloadHighlightsNow()
 {
 	fSuppressHighlightReload = false;
 	_ReloadHighlights();
+}
+
+
+void
+ParallelBibleView::BeginUpdate()
+{
+	fUpdateDepth++;
+}
+
+
+void
+ParallelBibleView::EndUpdate()
+{
+	if (fUpdateDepth <= 0 || --fUpdateDepth > 0)
+		return;
+
+	if (fRealignPending) {
+		fRealignPending = false;
+		_Realign();
+	}
+	if (fPendingScrollPosition >= 0) {
+		int32 position = fPendingScrollPosition;
+		int verse = fPendingScrollVerse;
+		fPendingScrollPosition = -1;
+		fPendingScrollVerse = -1;
+		if ((size_t)position < fColumnOrder.size()) {
+			_ScrollChainTo(position,
+				verse > 1 ? _ChainVerseY(position, verse) : 0.0f);
+		}
+	}
 }
 
 
@@ -3874,12 +3924,27 @@ ParallelBibleView::SetKey(const char* key)
 	int32 start = _ChainStart(fActivePosition);
 	int32 end = _ChainEnd(fActivePosition);
 
+	// One realign for this whole call, however many things below ask
+	// for one -- _ReloadHighlights() used to realign, and then this
+	// function realigned again right after it, on every chapter change.
+	BeginUpdate();
+
+	// Only a column whose text was actually rebuilt counts as changed.
+	// BibleTextDocument::SetKey() keeps the text when the key stays in
+	// the chapter already showing; treating that as a change anyway
+	// dropped the selection, cleared the #106 word match and realigned
+	// every column just to move to another verse of the same chapter.
+	bool hasBible = false;
 	bool changedAnyBible = false;
 	for (int32 i = start; i <= end; i++) {
 		if (fColumnOrder[i] != COLUMN_BIBLE)
 			continue;
+		hasBible = true;
 		int32 bibleIndex = _BibleIndexForPosition(i);
-		fDocuments[bibleIndex]->SetKey(key);
+		bool rebuilt = false;
+		fDocuments[bibleIndex]->SetKey(key, &rebuilt);
+		if (!rebuilt)
+			continue;
 		// A selection's text offsets are only meaningful for the chapter
 		// they were made in -- SetKey() rebuilds the column's document
 		// out from under it (see BibleTextDocument::_Rebuild()), so a
@@ -3889,7 +3954,7 @@ ParallelBibleView::SetKey(const char* key)
 		fTextViews[bibleIndex]->SetSelection(0, 0);
 		changedAnyBible = true;
 	}
-	if (changedAnyBible)
+	if (hasBible)
 		fLastKnownKey = key;
 	// #44: SetKey() above rebuilt each Bible document from scratch,
 	// which drops whatever highlights it was carrying -- they belong to
@@ -3909,6 +3974,7 @@ ParallelBibleView::SetKey(const char* key)
 	}
 	bigtime_t perfAfterBible = system_time();
 
+	bool changedAnyNotes = false;
 	// A notes column now navigates with its own chain exactly like a
 	// Bible column does (its own BibleTextDocument, see
 	// _BuildNotesDocument()) -- no separate "rebuild the view for every
@@ -3920,29 +3986,37 @@ ParallelBibleView::SetKey(const char* key)
 		// Before the key, not after: the verse count for this chapter
 		// depends on it (#46).
 		notes.document->SetVersification(_ChainVersification(i));
-		notes.document->SetKey(key);
+		bool rebuilt = false;
+		notes.document->SetKey(key, &rebuilt);
+		changedAnyNotes = changedAnyNotes || rebuilt;
 	}
 	bigtime_t perfAfterNotes = system_time();
 
-	SG_TRACE("_Realign requested by SetKey()");
-	_Realign();
-	bigtime_t perfAfterRealign = system_time();
+	if (changedAnyBible || changedAnyNotes) {
+		SG_TRACE("_Realign requested by SetKey()");
+		_Realign();
+	}
 
+	// Scrolled after the realign, which EndUpdate() below performs --
+	// or, inside a caller's own BeginUpdate()/EndUpdate(), handed to that
+	// outer EndUpdate() to do once the layout is final.
 	VerseKey verseKey;
 	SetVerseKeyLocale(verseKey);
 	verseKey.setText(key);
-	int verse = verseKey.getVerse();
-	_ScrollChainTo(fActivePosition,
-		verse > 1 ? _ChainVerseY(fActivePosition, verse) : 0.0f);
-	bigtime_t perfEnd = system_time();
+	fPendingScrollPosition = fActivePosition;
+	fPendingScrollVerse = verseKey.getVerse();
+	EndUpdate();
+	bigtime_t perfAfterRealign = system_time();
+	bigtime_t perfEnd = perfAfterRealign;
+
 
 	SG_LOG("[SG-PERF] SetKey(\"%s\") total=%.2fms "
-		"bibleLoop=%.2fms notesLoop=%.2fms realign=%.2fms scroll=%.2fms\n",
+		"bibleLoop=%.2fms notesLoop=%.2fms realign+scroll=%.2fms "
+		"(deferred if batched)\n",
 		key, (perfEnd - perfStart) / 1000.0,
 		(perfAfterBible - perfStart) / 1000.0,
 		(perfAfterNotes - perfAfterBible) / 1000.0,
-		(perfAfterRealign - perfAfterNotes) / 1000.0,
-		(perfEnd - perfAfterRealign) / 1000.0);
+		(perfAfterRealign - perfAfterNotes) / 1000.0);
 
 	return B_OK;
 }
@@ -4583,8 +4657,15 @@ ParallelBibleView::_Realign()
 {
 	// [SG-START] timeline entry (see SGDebug.h): numbered, so a startup
 	// that realigns the same chain over and over shows up as exactly
-	// that, and split three ways -- the last part (re-laying out every
-	// text view) is not covered by any other timing here.
+	// that, and split three ways: Align(), _PositionColumns() (which
+	// re-lays out every column's view), and the redraw/scrollbar rest.
+	// Inside BeginUpdate()/EndUpdate(): only note it, EndUpdate() runs
+	// it once.
+	if (fUpdateDepth > 0) {
+		fRealignPending = true;
+		return;
+	}
+
 	static int32 sRealignCount = 0;
 	sRealignCount++;
 	bigtime_t realignStart = system_time();
@@ -4673,15 +4754,16 @@ ParallelBibleView::_Realign()
 	_PositionColumns();
 	bigtime_t realignPositioned = system_time();
 
-	for (size_t i = 0; i < fTextViews.size(); i++) {
-		fTextViews[i]->Relayout();
+	// Redraw only: _PositionColumns() just above already ran Relayout()
+	// on every column's view, after Align() had set the new spacing. A
+	// second Relayout() here re-measured every glyph of every column a
+	// second time for nothing (seen in the [SG-START] timings, one full
+	// measurement pass per realign).
+	for (size_t i = 0; i < fTextViews.size(); i++)
 		fTextViews[i]->Invalidate();
-	}
 	for (size_t i = 0; i < fNotesColumns.size(); i++) {
-		if (fNotesColumns[i].view != NULL) {
-			fNotesColumns[i].view->Relayout();
+		if (fNotesColumns[i].view != NULL)
 			fNotesColumns[i].view->Invalidate();
-		}
 	}
 
 	// Every column has just been re-laid out at its (unchanged) width, so
@@ -4694,7 +4776,7 @@ ParallelBibleView::_Realign()
 
 	bigtime_t realignEnd = system_time();
 	SG_LOG("[SG-START] %8.1fms  _Realign #%d: total=%.1fms align=%.1fms "
-		"position=%.1fms relayout=%.1fms columns=%zu "
+		"position=%.1fms finish=%.1fms columns=%zu "
 		"GetEscapements=%d calls/%.1fms\n",
 		(realignEnd - SGStartTime()) / 1000.0, (int)sRealignCount,
 		(realignEnd - realignStart) / 1000.0,

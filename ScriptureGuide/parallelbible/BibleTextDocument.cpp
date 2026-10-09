@@ -208,8 +208,10 @@ BibleTextDocument::_SetModuleKey(VerseKey& verseKey)
 
 
 status_t
-BibleTextDocument::SetKey(const char* key)
+BibleTextDocument::SetKey(const char* key, bool* outRebuilt)
 {
+	if (outRebuilt != NULL)
+		*outRebuilt = false;
 	if (fModule == NULL)
 		return B_NO_INIT;
 
@@ -250,8 +252,11 @@ BibleTextDocument::SetKey(const char* key)
 	// to scroll straight to the requested verse.
 	_SetModuleKey(verseKey);
 
-	if (!sameChapter)
+	if (!sameChapter) {
 		_Rebuild();
+		if (outRebuilt != NULL)
+			*outRebuilt = true;
+	}
 	return B_OK;
 }
 

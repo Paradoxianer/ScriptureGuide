@@ -66,7 +66,12 @@ public:
 			int					Chapter() const;
 			int					Verse() const;
 
-			status_t			SetKey(const char* key);
+			// `outRebuilt`, if given, reports whether the text was
+			// actually rebuilt -- it is not when `key` stays in the
+			// chapter already showing (only the verse moved), and a
+			// caller can then skip everything that depends on new text.
+			status_t			SetKey(const char* key,
+									bool* outRebuilt = NULL);
 			status_t			SetChapter(const char* book, int chapter);
 			status_t			NextChapter();
 			status_t			PrevChapter();

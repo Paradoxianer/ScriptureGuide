@@ -212,6 +212,13 @@ SGMainWindow::_LoadInitialContent(void)
 		return;
 	}
 
+	// Everything below -- the first column, the restored layout, the
+	// display preferences, the startup key, the highlights -- realigns
+	// once, at EndUpdate() at the end, instead of after each step
+	// (measured: 19 realigns at startup with three columns, nine of them
+	// a few hundred ms each, where one was enough).
+	fParallelView->BeginUpdate();
+
 	SetModuleFromString(module);
 	SG_TRACE("_LoadInitialContent: SetModuleFromString() done");
 	if (!fCurrentModule)
@@ -252,8 +259,12 @@ SGMainWindow::_LoadInitialContent(void)
 				fModManager->SetModule(mod);
 				fCurrentModule = mod;
 			}
-		} else
-			return; // Shoud never happen.
+		} else {
+			// Shoud never happen. Close the batch opened above anyway --
+			// left open, every later realign would stay deferred forever.
+			fParallelView->EndUpdate();
+			return;
+		}
 	}
 
 	// SetModuleFromString() above already added the parallel view's first
@@ -317,7 +328,9 @@ SGMainWindow::_LoadInitialContent(void)
 	// plain, direct reload lands at exactly the same point in startup
 	// SuppressHighlightReload()'s original comment was aiming for.
 	fParallelView->ReloadHighlightsNow();
-	SG_TRACE("_LoadInitialContent: end (highlights reloaded)");
+	SG_TRACE("_LoadInitialContent: highlights reloaded");
+	fParallelView->EndUpdate();
+	SG_TRACE("_LoadInitialContent: end (realigned once)");
 	SG_LOG("[SG-START] totals so far: GetEscapements=%d calls/%.1fms\n",
 		(int)gGetEscapementsCalls, gGetEscapementsTime / 1000.0);
 }
@@ -691,8 +704,10 @@ void SGMainWindow::LoadPrefsForModule(void)
 	modPrefsLock.Unlock();
 
 	// fShowVerseNumbers was just (re)loaded above -- keep the menu mark
-	// and the actual columns in sync with it. Harmless/no-op if nothing
-	// has actually changed (see BibleTextDocument::SetShowVerseNumbers()).
+	// and the actual columns in sync with it. Each setter below is a
+	// no-op when its value is unchanged; the ones that do change realign
+	// once together, not once each.
+	fParallelView->BeginUpdate();
 	fShowVerseNumItem->SetMarked(fShowVerseNumbers);
 	fParallelView->SetShowVerseNumbers(fShowVerseNumbers);
 	fShowStrongsNumItem->SetMarked(fShowStrongsNumbers);
@@ -703,6 +718,7 @@ void SGMainWindow::LoadPrefsForModule(void)
 	// Same idea for fDisplayFont -- was dead state before this (see #21):
 	// loaded/saved but never actually applied to the reading pane.
 	fParallelView->SetBaseFont(fDisplayFont);
+	fParallelView->EndUpdate();
 }
 
 

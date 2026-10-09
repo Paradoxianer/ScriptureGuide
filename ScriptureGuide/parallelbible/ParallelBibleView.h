@@ -246,6 +246,17 @@ public:
 				void				SuppressHighlightReload(bool suppress);
 				void				ReloadHighlightsNow();
 
+				// Batches realignment: between BeginUpdate() and the
+				// matching EndUpdate() (nestable), every request to
+				// realign -- adding a column, a display setting, SetKey()
+				// -- is only noted, and EndUpdate() realigns once, then
+				// scrolls to the verse SetKey() asked for, now that the
+				// layout it is measured against is final. Measured at
+				// startup with three columns: 19 realigns of a few
+				// hundred ms each, where one was enough.
+				void				BeginUpdate();
+				void				EndUpdate();
+
 				// Strong's-tagged words are no longer styled in the text;
 				// hovering one underlines it and shows a tooltip with its
 				// number and a short gloss (see BibleColumnView). The
@@ -595,6 +606,14 @@ public:
 
 				// See SuppressHighlightReload()/ReloadHighlightsNow() above.
 				bool				fSuppressHighlightReload;
+
+				// See BeginUpdate()/EndUpdate() above. A scroll SetKey()
+				// could not do yet because the layout was still pending:
+				// the chain position and the verse, -1 when none.
+				int32				fUpdateDepth;
+				bool				fRealignPending;
+				int32				fPendingScrollPosition;
+				int					fPendingScrollVerse;
 
 				// See SetStrongsBackend()/StrongsTooltipText() above.
 				const SwordBackend*	fStrongsBackend;
