@@ -1503,3 +1503,120 @@ FindStrongsWordsInText(SWModule* module, const BString& renderedText)
 
 	return result;
 }
+
+
+// The visible text of one OSIS fragment: tags dropped, the few XML
+// entities a module's markup actually uses decoded, whitespace runs
+// collapsed to one space.
+static BString
+PlainTitleText(const BString& markup)
+{
+	BString plain;
+	bool inTag = false;
+	for (int32 i = 0; i < markup.Length(); i++) {
+		char c = markup.ByteAt(i);
+		if (c == '<')
+			inTag = true;
+		else if (c == '>')
+			inTag = false;
+		else if (!inTag)
+			plain.Append(c, 1);
+	}
+
+	plain.ReplaceAll("&lt;", "<");
+	plain.ReplaceAll("&gt;", ">");
+	plain.ReplaceAll("&quot;", "\"");
+	plain.ReplaceAll("&apos;", "'");
+	plain.ReplaceAll("&amp;", "&");
+	plain.ReplaceAll('\n', ' ');
+	plain.ReplaceAll('\t', ' ');
+	while (plain.FindFirst("  ") >= 0)
+		plain.ReplaceAll("  ", " ");
+	plain.Trim();
+	return plain;
+}
+
+
+// Every complete <title ...>...</title> in one attribute value. A value
+// can also hold only the opening half of a title whose text and closing
+// tag sit in the verse itself -- GerMenge opens its Psalm superscriptions
+// this way, and renderText() already shows their text as the start of
+// verse 1 -- so an unclosed title is skipped rather than shown twice.
+static void
+CollectTitles(const BString& value, std::vector<SectionHeading>& outTitles)
+{
+	int32 cursor = 0;
+	while (true) {
+		int32 open = value.FindFirst("<title", cursor);
+		if (open < 0)
+			return;
+		int32 openEnd = value.FindFirst('>', open);
+		if (openEnd < 0)
+			return;
+		cursor = openEnd + 1;
+		// <title .../> is a milestone, not a title with text.
+		if (value.ByteAt(openEnd - 1) == '/')
+			continue;
+		int32 close = value.FindFirst("</title>", cursor);
+		if (close < 0)
+			return;
+
+		BString startTag;
+		value.CopyInto(startTag, open, openEnd + 1 - open);
+		BString inner;
+		value.CopyInto(inner, cursor, close - cursor);
+		cursor = close + strlen("</title>");
+
+		SectionHeading heading;
+		heading.text = PlainTitleText(inner);
+		heading.canonical = startTag.FindFirst("canonical=\"true\"") >= 0;
+		if (!heading.text.IsEmpty())
+			outTitles.push_back(heading);
+	}
+}
+
+
+std::vector<SectionHeading>
+ExtractSectionHeadings(SWModule* module, BString& renderedText,
+	bool includeEditorial)
+{
+	std::vector<SectionHeading> result;
+	if (module == NULL)
+		return result;
+
+	AttributeTypeList& attrs = module->getEntryAttributes();
+	AttributeTypeList::iterator headingType = attrs.find("Heading");
+	if (headingType == attrs.end())
+		return result;
+
+	static const char* const kPlacements[] = { "Preverse", "Interverse" };
+	for (size_t p = 0; p < sizeof(kPlacements) / sizeof(kPlacements[0]);
+			p++) {
+		AttributeList::iterator list
+			= headingType->second.find(kPlacements[p]);
+		if (list == headingType->second.end())
+			continue;
+
+		bool interverse = p == 1;
+		for (AttributeValue::iterator value = list->second.begin();
+				value != list->second.end(); value++) {
+			std::vector<SectionHeading> titles;
+			CollectTitles(BString(value->second.c_str()), titles);
+			for (size_t i = 0; i < titles.size(); i++) {
+				if (interverse) {
+					int32 at = renderedText.FindFirst(titles[i].text);
+					// Only the title's own text: the spacing around it
+					// is what the option-off text has in its place too
+					// (measured on GerMenge Genesis 2:4), so leaving it
+					// keeps both renderings identical.
+					if (at >= 0)
+						renderedText.Remove(at, titles[i].text.Length());
+				}
+				if (titles[i].canonical || includeEditorial)
+					result.push_back(titles[i]);
+			}
+		}
+	}
+
+	return result;
+}

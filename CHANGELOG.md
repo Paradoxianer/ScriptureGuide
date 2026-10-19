@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **Section headings** (#116): a translation's own headings appear above
+  the verses they introduce, in their own bold line. Switch them off
+  under Options > Show Section Headings. Of the installed test modules,
+  ten carry them (among them Menge, NeÜ, Tafel, KJV, ASV). Where only one
+  column has a heading, the others leave the same room above the verse,
+  so the verses still start level. Psalm superscriptions that belong to
+  the Bible text (KJV: "A Psalm of David, when he fled from Absalom his
+  son.") were never shown before; they now appear in italics, whatever
+  the setting. Printing the reading pane includes the headings.
+- **Fixed**: the line after a line break inside a paragraph was indented
+  by one character -- visible after a soft line break in a note.
+
 ## 1.5.0 (test release)
 
 ### Word study

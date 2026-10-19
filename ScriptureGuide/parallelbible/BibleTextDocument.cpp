@@ -97,7 +97,8 @@ BibleTextDocument::SetVersification(const char* versification)
 
 
 
-BibleTextDocument::BibleTextDocument(SWModule* module, int singleVerse)
+BibleTextDocument::BibleTextDocument(SWModule* module, int singleVerse,
+	bool showSectionHeadings)
 	:
 	TextDocument(),
 	fModule(module),
@@ -105,6 +106,7 @@ BibleTextDocument::BibleTextDocument(SWModule* module, int singleVerse)
 	fSkipEmptyVerses(true),
 	fShowStrongsNumbers(true),
 	fShowCrossReferences(true),
+	fShowSectionHeadings(showSectionHeadings),
 	fSingleVerse(singleVerse),
 	fParagraphsEndWithNewline(false),
 	fResolvableStrongsGreek(true),
@@ -121,6 +123,7 @@ BibleTextDocument::BibleTextDocument(SWModule* module, int singleVerse)
 	fReferenceLinkStyle.SetForegroundColor(linkColor);
 	fReferenceLinkStyle.SetUnderline(1);
 
+	_UpdateHeadingStyles();
 
 	// Seeded from the module's key AT THIS MOMENT -- the caller (see
 	// ParallelBibleView::_SetColumnToBible()) already set it to whatever
@@ -351,6 +354,37 @@ BibleTextDocument::SetShowCrossReferences(bool show)
 
 
 void
+BibleTextDocument::SetShowSectionHeadings(bool show)
+{
+	if (fShowSectionHeadings == show)
+		return;
+
+	fShowSectionHeadings = show;
+	_Rebuild();
+}
+
+
+// A heading is a size step above the verse text and bold, a canonical
+// title the verse text's own size in italics -- it is scripture, set
+// apart only as the superscription it is.
+void
+BibleTextDocument::_UpdateHeadingStyles()
+{
+	const BFont& font = fVerseTextStyle.Font();
+
+	fHeadingStyle.SetFont(font);
+	fHeadingStyle.SetFontSize(font.Size() * 1.1f);
+	fHeadingStyle.SetBold(true);
+
+	fCanonicalTitleStyle.SetFont(font);
+	fCanonicalTitleStyle.SetItalic(true);
+
+	fHeadingGapStyle.SetFont(font);
+	fHeadingGapStyle.SetFontSize(font.Size() * 0.6f);
+}
+
+
+void
 BibleTextDocument::SetBaseFont(const BFont& font)
 {
 	BFont effective = _EffectiveFont(font);
@@ -379,6 +413,8 @@ BibleTextDocument::SetBaseFont(const BFont& font)
 	fReferenceLinkStyle.SetFont(effective);
 	fReferenceLinkStyle.SetForegroundColor(linkColor);
 	fReferenceLinkStyle.SetUnderline(1);
+
+	_UpdateHeadingStyles();
 
 	_Rebuild();
 }
@@ -533,6 +569,17 @@ BibleTextDocument::VerseText(int verse) const
 }
 
 
+std::vector<BString>
+BibleTextDocument::VerseHeadings(int verse) const
+{
+	std::map<int, std::vector<BString> >::const_iterator found
+		= fVerseHeadings.find(verse);
+	if (found == fVerseHeadings.end())
+		return std::vector<BString>();
+	return found->second;
+}
+
+
 bool
 BibleTextDocument::VersePositionAt(int32 documentOffset, int& outVerse,
 	int32& outVerseOffset) const
@@ -675,10 +722,21 @@ BibleTextDocument::MatchesForStrongsNumber(const char* strongsNumber,
 
 
 void
-BibleTextDocument::SetVerseSpacing(const std::map<int, float>& spacing)
+BibleTextDocument::SetVerseSpacing(const std::map<int, float>& spacing,
+	const std::map<int, float>& spacingTop)
 {
 	fVerseSpacingBottom = spacing;
+	fVerseSpacingTop = spacingTop;
 	_ApplyVerseSpacing();
+}
+
+
+int32
+BibleTextDocument::HeadingPrefixChars(int verse) const
+{
+	std::map<int, int32>::const_iterator found
+		= fVerseHeadingChars.find(verse);
+	return found != fVerseHeadingChars.end() ? found->second : 0;
 }
 
 
@@ -694,15 +752,20 @@ BibleTextDocument::_ApplyVerseSpacing()
 	int32 count = CountParagraphs();
 	for (int32 i = 0; i < count; i++) {
 		float spacingBottom = 0.0f;
+		float spacingTop = 0.0f;
 		if ((size_t)i < fParagraphVerse.size()) {
 			std::map<int, float>::const_iterator found
 				= fVerseSpacingBottom.find(fParagraphVerse[i]);
 			if (found != fVerseSpacingBottom.end())
 				spacingBottom = found->second;
+			found = fVerseSpacingTop.find(fParagraphVerse[i]);
+			if (found != fVerseSpacingTop.end())
+				spacingTop = found->second;
 		}
 
 		ParagraphStyle style(ParagraphAtIndex(i).Style());
 		style.SetSpacingBottom(spacingBottom);
+		style.SetSpacingTop(spacingTop);
 		SetParagraphStyle(i, style);
 	}
 }
@@ -853,8 +916,10 @@ BibleTextDocument::_CleanRenderedVerseText(BString& text) const
 
 void
 BibleTextDocument::_BuildVerseParagraph(int verse, bool linkedToPrevious,
-	BString text, int32 documentOffset, Paragraph& outParagraph,
-	int32& outPrefixChars, std::vector<ReferenceLink>& outReferenceLinks,
+	BString text, const std::vector<SectionHeading>& headings,
+	int32 documentOffset, Paragraph& outParagraph,
+	int32& outPrefixChars, int32& outHeadingChars,
+	std::vector<ReferenceLink>& outReferenceLinks,
 	std::vector<StrongsLink>& outStrongsLinks)
 {
 	std::vector<StrongsWord> strongsWords;
@@ -882,14 +947,35 @@ BibleTextDocument::_BuildVerseParagraph(int verse, bool linkedToPrevious,
 		= fVerseSpacingBottom.find(verse);
 	if (spacing != fVerseSpacingBottom.end())
 		style.SetSpacingBottom(spacing->second);
+	spacing = fVerseSpacingTop.find(verse);
+	if (spacing != fVerseSpacingTop.end())
+		style.SetSpacingTop(spacing->second);
 
 	Paragraph paragraph(style);
-	int32 verseNumberLength = 0;
+	// Everything ahead of the verse's own text, in characters -- headings
+	// are prose and may well be multi-byte, unlike the verse number.
+	int32 prefixChars = 0;
+
+	for (size_t i = 0; i < headings.size(); i++) {
+		// Space above the first heading, except at the very top, where
+		// there is nothing to separate it from.
+		if (i == 0 && documentOffset > 0) {
+			paragraph.Append(TextSpan("\v", fHeadingGapStyle));
+			prefixChars += 1;
+		}
+		BString line(headings[i].text);
+		line << "\v";
+		paragraph.Append(TextSpan(line, headings[i].canonical
+			? fCanonicalTitleStyle : fHeadingStyle));
+		prefixChars += line.CountChars();
+	}
+	int32 headingChars = prefixChars;
+
 	if (fShowVerseNumbers) {
 		BString number;
 		number << " " << verse << " ";
 		paragraph.Append(TextSpan(number, fVerseNumberStyle));
-		verseNumberLength = number.Length();
+		prefixChars += number.CountChars();
 	} else if (text.IsEmpty()) {
 		// A paragraph whose only span is empty makes the whole
 		// document's Length() undercount how many paragraphs actually
@@ -984,7 +1070,7 @@ BibleTextDocument::_BuildVerseParagraph(int verse, bool linkedToPrevious,
 			piece.start = span.start;
 			piece.length = span.length;
 
-			int32 linkStart = documentOffset + verseNumberLength
+			int32 linkStart = documentOffset + prefixChars
 				+ span.start;
 			if (span.isStrongs) {
 				// Plain verse text, not a style of its own: a Strong's
@@ -1046,7 +1132,8 @@ BibleTextDocument::_BuildVerseParagraph(int verse, bool linkedToPrevious,
 		paragraph.Append(TextSpan("\n", fVerseTextStyle));
 
 	outParagraph = paragraph;
-	outPrefixChars = verseNumberLength;
+	outPrefixChars = prefixChars;
+	outHeadingChars = headingChars;
 }
 
 
@@ -1123,10 +1210,12 @@ BibleTextDocument::RestyleParagraphAfterEdit(int32 paragraphIndex)
 	// with everything past it.
 	Paragraph newParagraph;
 	int32 newPrefixChars;
+	int32 newHeadingChars;
 	std::vector<ReferenceLink> newReferenceLinks;
 	std::vector<StrongsLink> newStrongsLinks;
-	_BuildVerseParagraph(verse, false, text, oldStart, newParagraph,
-		newPrefixChars, newReferenceLinks, newStrongsLinks);
+	_BuildVerseParagraph(verse, false, text,
+		std::vector<SectionHeading>(), oldStart, newParagraph,
+		newPrefixChars, newHeadingChars, newReferenceLinks, newStrongsLinks);
 	int32 newLength = newParagraph.Length();
 
 	// Every OTHER paragraph's own link entries have to slide by however
@@ -1201,6 +1290,8 @@ BibleTextDocument::_Rebuild()
 	fParagraphVerse.clear();
 	fParagraphPrefixChars.clear();
 	fLinkedToPrevious.clear();
+	fVerseHeadings.clear();
+	fVerseHeadingChars.clear();
 	fReferenceLinks.clear();
 	fStrongsLinks.clear();
 
@@ -1287,8 +1378,15 @@ BibleTextDocument::_Rebuild()
 			&& fModule->isLinked(&iterKey, &previousKey);
 
 		BString text;
-		if (!linkedToPrevious)
+		std::vector<SectionHeading> headings;
+		if (!linkedToPrevious) {
 			text = fModule->renderText();
+			// #116: straight after renderText(), whose entry
+			// attributes it reads -- and before the empty check, since
+			// it may cut an interverse heading out of the text.
+			headings = ExtractSectionHeadings(fModule, text,
+				fShowSectionHeadings);
+		}
 
 		if (text.CountChars() < 1 && fSkipEmptyVerses && !linkedToPrevious)
 			continue;
@@ -1300,15 +1398,19 @@ BibleTextDocument::_Rebuild()
 		// stale (and, since text is still empty here, harmless either
 		// way) if linkedToPrevious skipped calling it this iteration.
 		Paragraph paragraph;
-		int32 verseNumberLength = 0;
-		_BuildVerseParagraph(verse, linkedToPrevious, text, documentOffset,
-			paragraph, verseNumberLength, fReferenceLinks, fStrongsLinks);
+		int32 prefixChars = 0;
+		int32 headingChars = 0;
+		_BuildVerseParagraph(verse, linkedToPrevious, text, headings,
+			documentOffset, paragraph, prefixChars, headingChars,
+			fReferenceLinks, fStrongsLinks);
 
 		Append(paragraph);
 		fParagraphVerse.push_back(verse);
-		// Bytes and characters coincide here: the prefix is only ever
-		// spaces and ASCII digits (" 12 "), never anything multi-byte.
-		fParagraphPrefixChars.push_back(verseNumberLength);
+		fParagraphPrefixChars.push_back(prefixChars);
+		for (size_t i = 0; i < headings.size(); i++)
+			fVerseHeadings[verse].push_back(headings[i].text);
+		if (headingChars > 0)
+			fVerseHeadingChars[verse] = headingChars;
 		fLinkedToPrevious[verse] = linkedToPrevious;
 		documentOffset += paragraph.Length();
 

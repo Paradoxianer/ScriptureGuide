@@ -28,6 +28,7 @@
 
 #include <Directory.h>
 
+#include <gbfplain.h>
 #include <markupfiltmgr.h>
 #include <rawfiles.h>
 #include <swmgr.h>
@@ -2827,6 +2828,116 @@ TestBorrowedRawFilesModuleRoundTrips()
 }
 
 
+// #116: the line after a '\v' starts where the paragraph's first line
+// does. ParagraphLayout used to add the break glyph's own advance after
+// moving to the next line, indenting every line that followed a section
+// heading (and every line after a soft break in a note).
+static void
+TestLineAfterSoftBreakIsNotIndented()
+{
+	Paragraph paragraph;
+	paragraph.Append(TextSpan("Heading\vText", CharacterStyle()));
+
+	ParagraphLayout layout;
+	layout.SetWidth(400.0f);
+	layout.SetParagraph(paragraph);
+
+	float firstX1, firstY1, firstX2, firstY2;
+	layout.GetTextBounds(0, firstX1, firstY1, firstX2, firstY2);
+	// "Heading" is 7 characters, then the break; 'T' is offset 8.
+	float nextX1, nextY1, nextX2, nextY2;
+	layout.GetTextBounds(8, nextX1, nextY1, nextX2, nextY2);
+
+	Check(nextY1 > firstY1,
+		"ParagraphLayout: text after a '\\v' goes on the next line");
+	Check(fabs(nextX1 - firstX1) < 0.5f,
+		"ParagraphLayout: the line after a '\\v' is not indented");
+}
+
+
+// #116: an interverse heading -- GerMenge puts one between Genesis 2:4a
+// and 4b -- appears in renderText()'s output once the manager's
+// "Headings" option is on, run into the verse's words. It has to come
+// out of the verse text and go above it instead, leaving the verse text
+// exactly what it is with the option off; that sameness is what keeps a
+// stored highlight's offsets valid across the toggle.
+static void
+TestInterverseHeadingLeavesVerseTextUnchanged(SWMgr* manager)
+{
+	const char* name = "BibleTextDocument: an interverse heading is shown "
+		"above the verse, not inside its text";
+	SWModule* module = manager->getModule("GerMenge");
+	if (module == NULL) {
+		Skip(name, "GerMenge not installed");
+		return;
+	}
+	// The filter SwordBackend gives every module -- without it the
+	// markup around the cut-out title stays in the text, which is not
+	// what the app ever renders.
+	module->addRenderFilter(new GBFPlain());
+
+	manager->setGlobalOption("Headings", "On");
+	BibleTextDocument withHeadings(module, 0, true);
+	withHeadings.SetKey("Gen 2:1");
+
+	manager->setGlobalOption("Headings", "Off");
+	BibleTextDocument withoutHeadings(module, 0, false);
+	withoutHeadings.SetKey("Gen 2:1");
+
+	std::vector<BString> headings = withHeadings.VerseHeadings(4);
+	Check(!headings.empty() && headings[0].FindFirst("Anfangszust") >= 0,
+		name);
+	Check(withoutHeadings.VerseHeadings(4).empty(),
+		"BibleTextDocument: no editorial heading with headings switched "
+		"off");
+	Check(withHeadings.VerseText(4) == withoutHeadings.VerseText(4),
+		"BibleTextDocument: a verse's text is the same with headings on "
+		"and off");
+	Check(withHeadings.CountParagraphs() == withoutHeadings.CountParagraphs(),
+		"BibleTextDocument: headings add no paragraphs of their own");
+
+	// The verse still starts where its own text does: offset 0 of the
+	// verse is past the heading lines, not on them.
+	int32 start = 0, end = 0;
+	bool found = withHeadings.TextRangeForVerseRange(4, 4, start, end);
+	int verse = 0;
+	int32 verseOffset = -1;
+	BString verseText = withHeadings.VerseText(4);
+	int32 lastChar = start + (end - start) - 1;
+	Check(found && withHeadings.VersePositionAt(lastChar, verse,
+			verseOffset)
+		&& verse == 4 && verseOffset == verseText.CountChars() - 1,
+		"BibleTextDocument: offsets within a verse skip its heading lines");
+}
+
+
+// #116: a canonical title -- a Psalm superscription, part of the Bible
+// text -- is shown even with editorial headings switched off, which is
+// also all SWORD reports in that state.
+static void
+TestCanonicalTitleShownWithHeadingsOff(SWMgr* manager)
+{
+	const char* name = "BibleTextDocument: a Psalm superscription is shown "
+		"with section headings off";
+	SWModule* module = manager->getModule("KJV");
+	if (module == NULL) {
+		Skip(name, "KJV not installed");
+		return;
+	}
+
+	manager->setGlobalOption("Headings", "Off");
+	BibleTextDocument document(module, 0, false);
+	document.SetKey("Ps 3:1");
+
+	std::vector<BString> headings = document.VerseHeadings(1);
+	Check(headings.size() == 1
+		&& headings[0].FindFirst("A Psalm of David") == 0, name);
+	Check(document.VerseText(1).FindFirst("A Psalm") < 0,
+		"BibleTextDocument: the superscription is not part of verse 1's "
+		"own text");
+}
+
+
 int
 main()
 {
@@ -2897,6 +3008,9 @@ main()
 	TestHighlightedSpanPaintsItsBackground();
 	TestHighlightsSplitSpansAndBlend(moduleA);
 	TestVersePositionSurvivesDisplayOptions(moduleA);
+	TestLineAfterSoftBreakIsNotIndented();
+	TestInterverseHeadingLeavesVerseTextUnchanged(&manager);
+	TestCanonicalTitleShownWithHeadingsOff(&manager);
 	TestHighlightBookmarkRoundTrip();
 	TestBookmarkCodeHandlesDisplayFormReferences();
 	TestHighlightSpanCoversAVerseRange();

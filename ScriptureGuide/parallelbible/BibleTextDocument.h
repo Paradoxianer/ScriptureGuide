@@ -19,6 +19,8 @@
 
 using namespace sword;
 
+struct SectionHeading;
+
 
 // One Paragraph per verse. The paragraph index therefore doubles as the
 // verse's position within the chapter (see ParagraphIndexForVerse());
@@ -57,8 +59,14 @@ public:
 								// VERSE, so for a long chapter (Psalm 119,
 								// 176 verses) that wasted whole-chapter
 								// render happened 176 times over.
+								// showSectionHeadings seeds
+								// SetShowSectionHeadings() the same way,
+								// for the same reason: switched on after
+								// construction, every Bible column would
+								// render its chapter twice on startup.
 								BibleTextDocument(SWModule* module,
-									int singleVerse = 0);
+									int singleVerse = 0,
+									bool showSectionHeadings = false);
 	virtual						~BibleTextDocument();
 
 			const char*			Key() const;
@@ -109,6 +117,29 @@ public:
 			void				SetShowCrossReferences(bool show);
 			bool				ShowCrossReferences() const
 									{ return fShowCrossReferences; }
+
+			// #116: editorial section headings ("Die Bergpredigt.") as
+			// a line of their own above the verse they introduce. Off by
+			// default, so a document nobody configures (a notes column,
+			// a print or export helper) stays exactly what it was.
+			// Canonical titles -- a Psalm superscription that is part of
+			// the Bible text itself -- are shown either way; only the
+			// editors' additions are optional.
+			//
+			// The heading lines live INSIDE the verse's own paragraph,
+			// ahead of the verse number and joined by '\v' (a line
+			// break that does not end the paragraph, see
+			// ParagraphLayout's is_line_break()), and count as part of
+			// its prefix (fParagraphPrefixChars). So the one-paragraph-
+			// per-verse model everything here rests on is untouched:
+			// VerseAligner measures a verse with its heading and pads
+			// the other columns to match, and highlight offsets, which
+			// never include the prefix, mean the same with headings on
+			// or off. The SWORD side -- the manager's "Headings" option
+			// -- is the caller's to switch; see ExtractSectionHeadings().
+			void				SetShowSectionHeadings(bool show);
+			bool				ShowSectionHeadings() const
+									{ return fShowSectionHeadings; }
 
 			// Family/size apply to both verse text and verse
 			// numbers; verse numbers keep their bold weight
@@ -221,6 +252,11 @@ public:
 			// snippet is compared against when they no longer match.
 			BString				VerseText(int verse) const;
 
+			// #116: the heading lines shown above this verse, top to
+			// bottom -- what export and print need to reproduce them.
+			// Empty for a verse without any, or not in this document.
+			std::vector<BString>	VerseHeadings(int verse) const;
+
 			bool				VersePositionAt(int32 documentOffset,
 									int& outVerse,
 									int32& outVerseOffset) const;
@@ -268,8 +304,23 @@ public:
 			// dominant cost in a chapter switch (profiling: ~90% of a
 			// switch's time was inside VerseAligner::Align(), almost all
 			// of it redundant _Rebuild() calls).
+			//
+			// `spacingTop` (#116) is the padding ABOVE a verse: where one
+			// column has a section heading over a verse and another has
+			// none, the other column's verse moves down by the heading's
+			// height so the verse texts, not just the paragraph tops,
+			// start level.
 			void				SetVerseSpacing(
-									const std::map<int, float>& spacing);
+									const std::map<int, float>& spacing,
+									const std::map<int, float>& spacingTop
+										= std::map<int, float>());
+
+			// #116: how many characters at the start of the verse's
+			// paragraph are heading lines (and the gap above them) --
+			// where the verse's own first line begins, for VerseAligner
+			// to measure the headings' height. 0 without headings or for
+			// a verse not in this document.
+			int32				HeadingPrefixChars(int verse) const;
 
 			// #38/#32: re-derives exactly one verse's paragraph -- its
 			// cross-reference and Strong's-number link spans -- from
@@ -362,6 +413,9 @@ private:
 			void				_CleanRenderedVerseText(
 									BString& text) const;
 
+			// Derives the heading styles from fVerseTextStyle's font.
+			void				_UpdateHeadingStyles();
+
 			BFont				_EffectiveFont(const BFont& baseFont) const;
 			void				_Rebuild();
 			void				_ApplyVerseSpacing();
@@ -396,12 +450,20 @@ private:
 			CharacterStyle		fVerseNumberStyle;
 			CharacterStyle		fVerseTextStyle;
 			CharacterStyle		fReferenceLinkStyle;
+			// #116: an editorial heading, a canonical title, and the
+			// half-height empty line that separates a heading from the
+			// verse above it -- a '\v' alone on its line, whose height
+			// is its own font's (see ParagraphLayout::_FinalizeLine()).
+			CharacterStyle		fHeadingStyle;
+			CharacterStyle		fCanonicalTitleStyle;
+			CharacterStyle		fHeadingGapStyle;
 			ParagraphStyle		fParagraphStyle;
 
 			bool				fShowVerseNumbers;
 			bool				fSkipEmptyVerses;
 			bool				fShowStrongsNumbers;
 			bool				fShowCrossReferences;
+			bool				fShowSectionHeadings;
 			int					fSingleVerse;
 			bool				fParagraphsEndWithNewline;
 			bool				fResolvableStrongsGreek;
@@ -467,18 +529,28 @@ private:
 			// _Rebuild()'s own loop has no such ordering hazard (each
 			// verse is appended once, in order, nothing shifts) and
 			// just appends the two vectors this returns onto its own.
+			//
+			// `headings` (#116) become the lines above the verse number
+			// and are counted into outPrefixChars.
 			void				_BuildVerseParagraph(int verse,
 									bool linkedToPrevious, BString text,
+									const std::vector<SectionHeading>&
+										headings,
 									int32 documentOffset,
 									Paragraph& outParagraph,
 									int32& outPrefixChars,
+									int32& outHeadingChars,
 									std::vector<ReferenceLink>&
 										outReferenceLinks,
 									std::vector<StrongsLink>&
 										outStrongsLinks);
 
-			// verse number -> extra SpacingBottom, set by VerseAligner
+			// verse number -> extra SpacingBottom/SpacingTop, set by
+			// VerseAligner
 			std::map<int, float> fVerseSpacingBottom;
+			std::map<int, float> fVerseSpacingTop;
+			// #116: verse -> HeadingPrefixChars(), rebuilt in _Rebuild().
+			std::map<int, int32> fVerseHeadingChars;
 
 			// #44: highlighted ranges, applied as a background colour
 			// over whatever foreground styling Strong's numbers and
@@ -495,6 +567,9 @@ private:
 			// are switched off, which is exactly why a highlight's
 			// offsets must not include it.
 			std::vector<int32>	fParagraphPrefixChars;
+
+			// #116: verse -> its heading lines, rebuilt in _Rebuild().
+			std::map<int, std::vector<BString> >	fVerseHeadings;
 };
 
 #endif // BIBLE_TEXT_DOCUMENT_H

@@ -52,6 +52,7 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 	}
 
 	std::vector<std::map<int, float> > spacing(columns.size());
+	std::vector<std::map<int, float> > spacingTop(columns.size());
 
 	// Processed in groups, not one verse at a time: a linked commentary
 	// entry (see BibleTextDocument::IsLinkedToPrevious(), #10) puts its
@@ -91,6 +92,17 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 		std::vector<int32> presentCount(columns.size(), 0);
 		float maxGroupHeight = 0.0f;
 
+		// #116: section headings sit above the group's first verse
+		// present in a column. Where they differ between columns, the
+		// columns with less heading get the difference as padding
+		// ABOVE that verse, so the verse texts start level -- padding
+		// below, like the rest of the shortfall, would only level the
+		// paragraph tops and leave a heading's verse lower than its
+		// neighbours.
+		std::vector<float> headingHeight(columns.size(), 0.0f);
+		std::vector<int> firstPresent(columns.size(), -1);
+		float maxHeadingHeight = 0.0f;
+
 		for (size_t c = 0; c < columns.size(); c++) {
 			BibleTextDocument* document = columns[c];
 			if (document == NULL)
@@ -108,14 +120,42 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 				layout.SetParagraph(document->ParagraphAtIndex(index));
 				total += layout.Height();
 				count++;
+
+				if (firstPresent[c] < 0) {
+					firstPresent[c] = v;
+					int32 headingChars = document->HeadingPrefixChars(v);
+					if (headingChars > 0) {
+						// Where the verse's own first line begins.
+						float x1, y1, x2, y2;
+						layout.GetLineBounds(
+							layout.LineIndexForOffset(headingChars),
+							x1, y1, x2, y2);
+						headingHeight[c] = y1;
+						if (y1 > maxHeadingHeight)
+							maxHeadingHeight = y1;
+					}
+				}
 			}
 
 			if (count > 0) {
 				groupNatural[c] = total;
 				presentCount[c] = count;
-				if (total > maxGroupHeight)
-					maxGroupHeight = total;
 			}
+		}
+
+		// The heading padding counts toward each column's height before
+		// the group's shortfall is worked out, or it would be added on
+		// top of a total that already matches.
+		for (size_t c = 0; c < columns.size(); c++) {
+			if (groupNatural[c] < 0.0f)
+				continue;
+			float pad = maxHeadingHeight - headingHeight[c];
+			if (pad > 0.1f) {
+				spacingTop[c][firstPresent[c]] = pad;
+				groupNatural[c] += pad;
+			}
+			if (groupNatural[c] > maxGroupHeight)
+				maxGroupHeight = groupNatural[c];
 		}
 
 		for (size_t c = 0; c < columns.size(); c++) {
@@ -150,6 +190,6 @@ VerseAligner::Align(const std::vector<BibleTextDocument*>& columns,
 
 	for (size_t c = 0; c < columns.size(); c++) {
 		if (columns[c] != NULL)
-			columns[c]->SetVerseSpacing(spacing[c]);
+			columns[c]->SetVerseSpacing(spacing[c], spacingTop[c]);
 	}
 }

@@ -331,6 +331,15 @@ public:
 				bool				ShowCrossReferences() const
 										{ return fShowCrossReferences; }
 
+				// #116: also switches fManager's global "Headings"
+				// option, without which SWORD does not report editorial
+				// headings at all (see ExtractSectionHeadings()). Call
+				// it before the first column is added to have the
+				// columns built with it rather than rebuilt.
+				status_t			SetShowSectionHeadings(bool show);
+				bool				ShowSectionHeadings() const
+										{ return fShowSectionHeadings; }
+
 				// Family/style/size for verse text and (still bold)
 				// verse numbers, applied to every current Bible/
 				// Commentary column and remembered for columns
@@ -443,6 +452,9 @@ public:
 				struct ExportRow {
 					int				verse;
 					std::vector<BString>	columnText;
+					// #116: per column, like columnText -- the
+					// heading lines shown above this verse there.
+					std::vector<std::vector<BString> >	columnHeadings;
 					BString			notesText;
 				};
 				std::vector<ExportRow> BuildExportRows() const;
@@ -985,6 +997,7 @@ private:
 				bool				fShowVerseNumbers;
 				bool				fShowStrongsNumbers;
 				bool				fShowCrossReferences;
+				bool				fShowSectionHeadings;
 				BFont				fBaseFont;
 
 				float				fInitialWidth;
