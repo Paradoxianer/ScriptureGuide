@@ -2938,6 +2938,36 @@ TestCanonicalTitleShownWithHeadingsOff(SWMgr* manager)
 }
 
 
+static void
+TestChapterSummarySplitsAtVerseNumbers()
+{
+	// AKJV Matthew 5 and Romans 8, as the module carries them.
+	std::map<int, BString> pieces = SplitChapterSummary(
+		"1 Christ begins his sermon on the mount: 3 declaring who are "
+		"blessed, 13 who are the salt of the earth, 44 to love even our "
+		"enemies, 38 and to labor after perfectness.", 48);
+	Check(pieces.size() == 4
+		&& pieces[1] == "Christ begins his sermon on the mount"
+		&& pieces[3] == "Declaring who are blessed"
+		&& pieces[13] == "Who are the salt of the earth"
+		&& pieces[44] == "To love even our enemies, 38 and to labor after "
+			"perfectness.",
+		"SplitChapterSummary: cuts at rising verse numbers only");
+
+	pieces = SplitChapterSummary("1 They that are in Christ are free from "
+		"condemnation. 5. 13 What harm comes of the flesh, 6. 14 and what "
+		"good of the Spirit:", 39);
+	Check(pieces.size() == 3
+		&& pieces[1] == "They that are in Christ are free from condemnation."
+		&& pieces[13] == "What harm comes of the flesh"
+		&& pieces[14] == "And what good of the Spirit",
+		"SplitChapterSummary: drops stray bare verse numbers");
+
+	Check(SplitChapterSummary("The Sermon on the Mount", 48).empty(),
+		"SplitChapterSummary: a plain heading is left whole");
+}
+
+
 int
 main()
 {
@@ -3011,6 +3041,7 @@ main()
 	TestLineAfterSoftBreakIsNotIndented();
 	TestInterverseHeadingLeavesVerseTextUnchanged(&manager);
 	TestCanonicalTitleShownWithHeadingsOff(&manager);
+	TestChapterSummarySplitsAtVerseNumbers();
 	TestHighlightBookmarkRoundTrip();
 	TestBookmarkCodeHandlesDisplayFormReferences();
 	TestHighlightSpanCoversAVerseRange();

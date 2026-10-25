@@ -5,6 +5,7 @@
 
 #include "parallelbible/PersonalNotesModule.h"
 #include <swtext.h>
+#include <map>
 #include <vector>
 #include <Locale.h>
 #include <String.h>
@@ -203,9 +204,15 @@ std::vector<StrongsWord> FindStrongsWordsInText(sword::SWModule* module,
 // `canonical` marks a title that is part of the Bible text itself (a
 // Psalm superscription such as "A Psalm of David, when he fled from
 // Absalom his son.") rather than an editor's section heading.
+// `chapterSummary` marks the 1611-style chapter argument some modules
+// (AKJV) carry above verse 1 instead of section headings -- one title
+// that numbers the verses it summarizes ("1 The creation of Heaven and
+// Earth, 3 of the light, 6 of the firmament, ..."); see
+// SplitChapterSummary().
 struct SectionHeading {
 	BString	text;
 	bool	canonical;
+	bool	chapterSummary;
 };
 
 // The titles SWORD reported for the verse `module` last rendered, read
@@ -224,6 +231,17 @@ struct SectionHeading {
 // `includeEditorial`; canonical ones never are.
 std::vector<SectionHeading> ExtractSectionHeadings(sword::SWModule* module,
 					BString& renderedText, bool includeEditorial);
+
+// A chapter summary (see SectionHeading) cut at the verse numbers it
+// names, keyed by verse, each piece trimmed of its joining punctuation
+// and capitalized -- so it can stand above its own verse like a section
+// heading. Only numbers that rise and stay within `verseCount` count as
+// cuts; the summaries are old prose and not always consistent (AKJV
+// Matthew 5 names verse 38 again after 44), and anything that does not
+// fit stays with the piece before it. Returns an empty map when the text
+// does not start with a verse number at all.
+std::map<int, BString> SplitChapterSummary(const BString& summary,
+					int verseCount);
 
 // One occurrence of a Strong's-number cross-reference embedded in a
 // lexicon entry's OWN text (#110) -- e.g. GerStrongsGreek's own entry
