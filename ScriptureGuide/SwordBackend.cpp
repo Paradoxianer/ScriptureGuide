@@ -1570,95 +1570,9 @@ CollectTitles(const BString& value, std::vector<SectionHeading>& outTitles)
 		SectionHeading heading;
 		heading.text = PlainTitleText(inner);
 		heading.canonical = startTag.FindFirst("canonical=\"true\"") >= 0;
-		heading.chapterSummary
-			= startTag.FindFirst("type=\"x-description\"") >= 0;
 		if (!heading.text.IsEmpty())
 			outTitles.push_back(heading);
 	}
-}
-
-
-// One summary piece, as it sits between two verse numbers, made to
-// stand alone: "of the light, " -> "Of the light". A trailing bare
-// number ("condemnation. 5." in AKJV Romans 8) is a stray verse
-// reference the cut did not use, not part of the sentence.
-static BString
-CleanSummaryPiece(BString piece)
-{
-	while (true) {
-		piece.Trim();
-		int32 end = piece.Length();
-		while (end > 0 && strchr(",;:", piece.ByteAt(end - 1)) != NULL)
-			end--;
-		int32 numberEnd = end;
-		if (numberEnd > 0 && piece.ByteAt(numberEnd - 1) == '.')
-			numberEnd--;
-		int32 numberStart = numberEnd;
-		while (numberStart > 0 && isdigit((unsigned char)piece.ByteAt(
-				numberStart - 1)))
-			numberStart--;
-		if (numberStart < numberEnd
-			&& (numberStart == 0 || piece.ByteAt(numberStart - 1) == ' ')) {
-			piece.Truncate(numberStart);
-			continue;
-		}
-		piece.Truncate(end);
-		piece.Trim();
-		break;
-	}
-	if (!piece.IsEmpty() && islower((unsigned char)piece.ByteAt(0)))
-		piece.SetByteAt(0, toupper((unsigned char)piece.ByteAt(0)));
-	return piece;
-}
-
-
-std::map<int, BString>
-SplitChapterSummary(const BString& summary, int verseCount)
-{
-	std::map<int, BString> pieces;
-	int currentVerse = 0;
-	int32 pieceStart = 0;
-	for (int32 i = 0; i < summary.Length(); i++) {
-		if (!isdigit((unsigned char)summary.ByteAt(i))
-			|| (i > 0 && summary.ByteAt(i - 1) != ' '))
-			continue;
-		int32 end = i;
-		int number = 0;
-		while (end < summary.Length()
-			&& isdigit((unsigned char)summary.ByteAt(end))) {
-			number = number * 10 + (summary.ByteAt(end) - '0');
-			end++;
-		}
-		// "13 What harm", not "5. 13" or "6," -- a cut is a number
-		// followed by the words it introduces.
-		if (end + 1 >= summary.Length() || summary.ByteAt(end) != ' '
-			|| isdigit((unsigned char)summary.ByteAt(end + 1)))
-			continue;
-		if (currentVerse == 0 && i != 0)
-			return std::map<int, BString>();
-		if (number <= currentVerse || number > verseCount) {
-			i = end;
-			continue;
-		}
-		if (currentVerse > 0) {
-			BString piece;
-			summary.CopyInto(piece, pieceStart, i - pieceStart);
-			piece = CleanSummaryPiece(piece);
-			if (!piece.IsEmpty())
-				pieces[currentVerse] = piece;
-		}
-		currentVerse = number;
-		pieceStart = end + 1;
-		i = end;
-	}
-	if (currentVerse > 0) {
-		BString piece;
-		summary.CopyInto(piece, pieceStart, summary.Length() - pieceStart);
-		piece = CleanSummaryPiece(piece);
-		if (!piece.IsEmpty())
-			pieces[currentVerse] = piece;
-	}
-	return pieces;
 }
 
 

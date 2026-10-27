@@ -11,9 +11,6 @@
   the Bible text (KJV: "A Psalm of David, when he fled from Absalom his
   son.") were never shown before; they now appear in italics, whatever
   the setting. Printing the reading pane includes the headings.
-  Some modules (AKJV) carry the 1611 chapter summary instead of
-  headings, one line above verse 1 that numbers the verses it covers;
-  it is cut at those numbers and each part shown above its own verse.
 - **Fixed**: the line after a line break inside a paragraph was indented
   by one character -- visible after a soft line break in a note.
 

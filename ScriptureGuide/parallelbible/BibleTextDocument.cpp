@@ -1370,10 +1370,6 @@ BibleTextDocument::_Rebuild()
 	// document-wide one.
 	int32 documentOffset = 0;
 
-	// #116: the pieces of a chapter summary still waiting for their
-	// verse, see SplitChapterSummary().
-	std::map<int, BString> summaryPieces;
-
 	for (int verse = firstVerse; verse <= verseCount; verse++) {
 		iterKey.setVerse(verse);
 		fModule->setKey(iterKey);
@@ -1390,31 +1386,6 @@ BibleTextDocument::_Rebuild()
 			// it may cut an interverse heading out of the text.
 			headings = ExtractSectionHeadings(fModule, text,
 				fShowSectionHeadings);
-
-			// A chapter summary arrives whole at verse 1 but names the
-			// verses its parts belong to; each part goes above its own.
-			for (size_t i = 0; i < headings.size(); ) {
-				if (headings[i].chapterSummary) {
-					std::map<int, BString> pieces = SplitChapterSummary(
-						headings[i].text, verseCount);
-					if (!pieces.empty()) {
-						summaryPieces.insert(pieces.begin(), pieces.end());
-						headings.erase(headings.begin() + i);
-						continue;
-					}
-				}
-				i++;
-			}
-			std::map<int, BString>::iterator piece
-				= summaryPieces.find(verse);
-			if (piece != summaryPieces.end()) {
-				SectionHeading heading;
-				heading.text = piece->second;
-				heading.canonical = false;
-				heading.chapterSummary = true;
-				headings.insert(headings.begin(), heading);
-				summaryPieces.erase(piece);
-			}
 		}
 
 		if (text.CountChars() < 1 && fSkipEmptyVerses && !linkedToPrevious)
