@@ -2938,6 +2938,26 @@ TestCanonicalTitleShownWithHeadingsOff(SWMgr* manager)
 }
 
 
+static void
+TestChapterDescriptionIsNoHeading(SWMgr* manager)
+{
+	const char* name = "BibleTextDocument: a chapter description "
+		"(x-description) is not shown as a section heading";
+	SWModule* module = manager->getModule("AKJV");
+	if (module == NULL) {
+		Skip(name, "AKJV not installed");
+		return;
+	}
+
+	manager->setGlobalOption("Headings", "On");
+	BibleTextDocument document(module, 0, true);
+	document.SetKey("Gen 1:1");
+	Check(document.VerseHeadings(1).empty()
+		&& document.VerseText(1).FindFirst("creation of Heaven") < 0, name);
+	manager->setGlobalOption("Headings", "Off");
+}
+
+
 int
 main()
 {
@@ -3011,6 +3031,7 @@ main()
 	TestLineAfterSoftBreakIsNotIndented();
 	TestInterverseHeadingLeavesVerseTextUnchanged(&manager);
 	TestCanonicalTitleShownWithHeadingsOff(&manager);
+	TestChapterDescriptionIsNoHeading(&manager);
 	TestHighlightBookmarkRoundTrip();
 	TestBookmarkCodeHandlesDisplayFormReferences();
 	TestHighlightSpanCoversAVerseRange();

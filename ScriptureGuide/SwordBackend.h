@@ -203,9 +203,14 @@ std::vector<StrongsWord> FindStrongsWordsInText(sword::SWModule* module,
 // `canonical` marks a title that is part of the Bible text itself (a
 // Psalm superscription such as "A Psalm of David, when he fled from
 // Absalom his son.") rather than an editor's section heading.
+// `description` marks a title OSIS types as a description of the
+// chapter rather than a heading (type="x-description": AKJV's 1611
+// chapter summary above verse 1); ExtractSectionHeadings() leaves those
+// out.
 struct SectionHeading {
 	BString	text;
 	bool	canonical;
+	bool	description;
 };
 
 // The titles SWORD reported for the verse `module` last rendered, read

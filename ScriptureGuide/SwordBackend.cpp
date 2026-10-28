@@ -1570,6 +1570,8 @@ CollectTitles(const BString& value, std::vector<SectionHeading>& outTitles)
 		SectionHeading heading;
 		heading.text = PlainTitleText(inner);
 		heading.canonical = startTag.FindFirst("canonical=\"true\"") >= 0;
+		heading.description
+			= startTag.FindFirst("type=\"x-description\"") >= 0;
 		if (!heading.text.IsEmpty())
 			outTitles.push_back(heading);
 	}
@@ -1612,7 +1614,8 @@ ExtractSectionHeadings(SWModule* module, BString& renderedText,
 					if (at >= 0)
 						renderedText.Remove(at, titles[i].text.Length());
 				}
-				if (titles[i].canonical || includeEditorial)
+				if (!titles[i].description
+					&& (titles[i].canonical || includeEditorial))
 					result.push_back(titles[i]);
 			}
 		}
