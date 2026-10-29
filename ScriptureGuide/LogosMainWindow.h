@@ -176,6 +176,7 @@ private:
 	BMenuItem		*fShowVerseNumItem;
 	BMenuItem		*fShowStrongsNumItem;
 	BMenuItem		*fShowCrossRefItem;
+	BMenuItem		*fShowHeadingsItem;
 	// #113: persistent print options (Options menu) -- see
 	// _PrintReadingPane()'s own comment.
 	BMenuItem		*fPrintNewPageItem;
@@ -235,6 +236,8 @@ private:
 	// LoadPrefsForModule()/SavePrefsForModule().
 	bool			fPrintNewPagePerTranslation;
 	bool			fPrintIncludeHighlights;
+	// #116: global like the two above.
+	bool			fShowSectionHeadings;
 
 	BMessenger		*fFindMessenger;
 };

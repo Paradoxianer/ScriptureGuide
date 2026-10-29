@@ -1989,6 +1989,7 @@ ParallelBibleView::ParallelBibleView(const char* name, SWMgr* manager,
 	fShowVerseNumbers(true),
 	fShowStrongsNumbers(true),
 	fShowCrossReferences(true),
+	fShowSectionHeadings(false),
 	fInitialWidth(initialWidth),
 	fContentWidth(0.0f),
 	fNotesWidthFraction(-1.0f),
@@ -2409,8 +2410,8 @@ ParallelBibleView::InsertColumn(int32 afterPosition, const char* moduleName)
 		module->setKey(verseKey);
 	}
 
-	BReference<BibleTextDocument> document(new BibleTextDocument(module),
-		true);
+	BReference<BibleTextDocument> document(new BibleTextDocument(module, 0,
+		fShowSectionHeadings), true);
 	document->SetShowVerseNumbers(fShowVerseNumbers);
 	document->SetShowStrongsNumbers(fShowStrongsNumbers);
 	// Only offer a Strong's link where a dictionary could actually answer
@@ -2642,6 +2643,26 @@ ParallelBibleView::SetShowCrossReferences(bool show)
 	for (size_t i = 0; i < fNotesColumns.size(); i++)
 		fNotesColumns[i].document->SetShowCrossReferences(show);
 	SG_TRACE("_Realign requested by SetShowCrossReferences()");
+	_Realign();
+	return B_OK;
+}
+
+
+// Bible/Commentary columns only, like SetShowStrongsNumbers(): a personal
+// note carries no OSIS titles. The manager option is switched first, so
+// the rebuilds below already get SWORD's editorial headings (or no
+// longer get them).
+status_t
+ParallelBibleView::SetShowSectionHeadings(bool show)
+{
+	if (fShowSectionHeadings == show)
+		return B_OK;
+	fShowSectionHeadings = show;
+	if (fManager != NULL)
+		fManager->setGlobalOption("Headings", show ? "On" : "Off");
+	for (size_t i = 0; i < fDocuments.size(); i++)
+		fDocuments[i]->SetShowSectionHeadings(show);
+	SG_TRACE("_Realign requested by SetShowSectionHeadings()");
 	_Realign();
 	return B_OK;
 }
@@ -3580,8 +3601,8 @@ ParallelBibleView::_SetColumnToBible(int32 position, const char* moduleName)
 		module->setKey(verseKey);
 	}
 
-	BReference<BibleTextDocument> document(new BibleTextDocument(module),
-		true);
+	BReference<BibleTextDocument> document(new BibleTextDocument(module, 0,
+		fShowSectionHeadings), true);
 	// Match whatever the other columns are currently showing (see
 	// SetShowVerseNumbers()) -- BibleTextDocument defaults to true, so
 	// this only matters when the setting has been turned off.
@@ -4129,24 +4150,19 @@ ParallelBibleView::BuildExportRows() const
 		ExportRow row;
 		row.verse = verse;
 
-		BString verseNumberPrefix;
-		verseNumberPrefix << " " << verse << " ";
-
 		for (int32 i = start; i <= end; i++) {
 			if (fColumnOrder[i] != COLUMN_BIBLE)
 				continue;
 			BibleTextDocument* document
 				= fDocuments[_BibleIndexForPosition(i)].Get();
 
-			BString cellText;
-			int32 s, e;
-			if (document->TextRangeForVerseRange(verse, verse, s, e)) {
-				cellText = document->Text(s, e - s);
-				if (cellText.FindFirst(verseNumberPrefix) == 0)
-					cellText.Remove(0, verseNumberPrefix.Length());
-				cellText.Trim();
-			}
+			// The verse's own text, without the rendered prefix --
+			// verse number and, since #116, any heading lines above
+			// it, which a prefix match on " 12 " no longer caught.
+			BString cellText = document->VerseText(verse);
+			cellText.Trim();
 			row.columnText.push_back(cellText);
+			row.columnHeadings.push_back(document->VerseHeadings(verse));
 		}
 
 		if (fNotes != NULL && notesPosition >= 0) {
@@ -4983,8 +4999,9 @@ ParallelBibleView::_UpdateScrollBars()
 // exactly that padding -- confirmed via two real screenshots in an
 // earlier fix (drift between a notes column and two plain, unlinked
 // Bible-text columns, where nothing about linked commentary entries was
-// even in play). Adding the paragraph's own SpacingBottom back in gives
-// the true on-screen row height.
+// even in play). Adding the paragraph's own SpacingBottom back in -- and
+// its SpacingTop, VerseAligner's room for a neighbour's section heading
+// (#116) -- gives the true on-screen row height.
 float
 ParallelBibleView::_RowHeight(int verse, int32 chainAnchorPosition) const
 {
@@ -5010,7 +5027,8 @@ ParallelBibleView::_RowHeight(int verse, int32 chainAnchorPosition) const
 		// same way it did for VerseAligner's own planning.
 		layout.SetWidth(_MeasurementWidth(i));
 		layout.SetParagraph(paragraph);
-		return layout.Height() + paragraph.Style().SpacingBottom();
+		return paragraph.Style().SpacingTop() + layout.Height()
+			+ paragraph.Style().SpacingBottom();
 	}
 	return kHeaderHeight;
 }

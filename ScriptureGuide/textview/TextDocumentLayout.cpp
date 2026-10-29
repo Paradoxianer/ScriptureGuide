@@ -429,8 +429,11 @@ TextDocumentLayout::_Layout()
 		ParagraphLayoutInfo info = fParagraphLayouts[i];
 		const ParagraphStyle& style = info.layout->Style();
 
-		if (i > 0)
-			y += style.SpacingTop();
+		// The first paragraph's too: VerseAligner (#116) pads a verse
+		// from above to level it with a section heading in the column
+		// next to it, and a chapter's first verse is where headings
+		// are most common.
+		y += style.SpacingTop();
 
 		fParagraphLayouts[i] = ParagraphLayoutInfo(y, info.layout);
 

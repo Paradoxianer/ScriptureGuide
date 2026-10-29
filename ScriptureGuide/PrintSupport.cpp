@@ -52,6 +52,23 @@ AppendPrintBodyLine(TextDocumentRef document, const BString& line,
 }
 
 
+void
+AppendPrintSectionHeading(TextDocumentRef document, const BString& heading)
+{
+	CharacterStyle style;
+	style.SetBold(true);
+	ParagraphStyle paragraphStyle;
+	paragraphStyle.SetSpacingTop(6.0f);
+	paragraphStyle.SetSpacingBottom(2.0f);
+
+	Paragraph paragraph(paragraphStyle);
+	BString text(heading);
+	text << "\n";
+	paragraph.Append(TextSpan(text, style));
+	document->Append(paragraph);
+}
+
+
 namespace {
 
 // A minimal, print-only view: draws a TextDocumentLayout laid out at a

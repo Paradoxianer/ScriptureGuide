@@ -74,6 +74,8 @@ const uint32 MENU_OPTIONS_VERSENUMBERS	= 'MOvn';
 const uint32 MENU_OPTIONS_STRONGS		= 'MOsn';
 const uint32 MENU_OPTIONS_CROSSREF		= 'MOcr';
 const uint32 MENU_OPTIONS_PARALLEL_VIEW	= 'MOpv';
+// #116: section headings above the verses -- global, not per module.
+const uint32 MENU_OPTIONS_HEADINGS		= 'MOsh';
 // #113: persistent print options (Options menu, not a per-print dialog) --
 // see SGMainWindow::_PrintReadingPane().
 const uint32 MENU_OPTIONS_PRINT_NEW_PAGE		= 'MOpn';

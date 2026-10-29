@@ -40,6 +40,12 @@ void AppendPrintHeading(TextDocumentRef document, const BString& heading);
 void AppendPrintBodyLine(TextDocumentRef document, const BString& line,
 	const rgb_color* backgroundColor = NULL);
 
+// #116: a section heading inside a translation's text, above the verse
+// it introduces -- bold like AppendPrintHeading()'s, but body-sized, so
+// it reads as part of the text rather than as a new translation.
+void AppendPrintSectionHeading(TextDocumentRef document,
+	const BString& heading);
+
 // Runs a full print job for `document`: shows the real Print Server
 // page-setup and job-setup panels (ConfigPage()/ConfigJob()), paginates by
 // paragraph boundary (a paragraph never splits across a page -- see

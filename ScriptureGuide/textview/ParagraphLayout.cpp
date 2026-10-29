@@ -593,6 +593,12 @@ ParagraphLayout::_Layout()
 			lineBreak = true;
 			glyph.x = x;
 			fGlyphInfos[i] = glyph;
+			// The break stays on the line it ends. Its advance was added
+			// to x AFTER the reset to the next line's start below, which
+			// indented every line following a '\v' by the break glyph's
+			// width -- seen on the line after each section heading (#116)
+			// and after a soft line break in a note.
+			advanceX = 0.0f;
 		} else if (fWidth > 0.0f && x + advanceX > fWidth) {
 			fGlyphInfos[i] = glyph;
 			if (charClassification == CHAR_CLASS_WHITESPACE) {

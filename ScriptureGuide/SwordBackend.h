@@ -199,6 +199,37 @@ bool NormalizeReferenceText(const char* input, BString& normalized);
 std::vector<StrongsWord> FindStrongsWordsInText(sword::SWModule* module,
 					const BString& renderedText);
 
+// #116: one OSIS <title> that belongs above a verse, as plain text.
+// `canonical` marks a title that is part of the Bible text itself (a
+// Psalm superscription such as "A Psalm of David, when he fled from
+// Absalom his son.") rather than an editor's section heading.
+// `description` marks a title OSIS types as a description of the
+// chapter rather than a heading (type="x-description": AKJV's 1611
+// chapter summary above verse 1); ExtractSectionHeadings() leaves those
+// out.
+struct SectionHeading {
+	BString	text;
+	bool	canonical;
+	bool	description;
+};
+
+// The titles SWORD reported for the verse `module` last rendered, read
+// from its "Heading" entry attributes -- like FindStrongsWordsInText(),
+// call it straight after renderText(). Preverse titles come first, then
+// interverse ones.
+//
+// Measured against the installed modules: editorial headings are only
+// reported while the manager's global "Headings" option is on, canonical
+// ones always. An interverse heading (GerMenge Genesis 2:4, between 4a
+// and 4b) additionally lands INSIDE renderText()'s output once that
+// option is on, run straight into the verse's own words; it is cut out
+// of `renderedText` here, so the verse text stays the same whichever way
+// the option is set -- which is what keeps highlight offsets valid
+// across a toggle. Editorial headings are left out of the result unless
+// `includeEditorial`; canonical ones never are.
+std::vector<SectionHeading> ExtractSectionHeadings(sword::SWModule* module,
+					BString& renderedText, bool includeEditorial);
+
 // One occurrence of a Strong's-number cross-reference embedded in a
 // lexicon entry's OWN text (#110) -- e.g. GerStrongsGreek's own entry
 // for 26 (agape) opens with "von 25", and StrongsGreek's own entry for
@@ -344,6 +375,7 @@ public:
 	
 private:
 	void				DetectTestaments(void);
+	const char*			_RenderVerse();
 	
 	sword::SWModule*	fModule;
 	TextType			fType;
@@ -354,6 +386,10 @@ private:
 	
 	BLanguage			language;
 
+	// GetVerse()'s result. renderText() returns its SWBuf by value, so
+	// a pointer into it dangles as soon as the call returns; this keeps
+	// the text alive until the next GetVerse().
+	BString				fVerseText;
 };
 
 typedef BObjectList<SGModule, true> SGModuleList;

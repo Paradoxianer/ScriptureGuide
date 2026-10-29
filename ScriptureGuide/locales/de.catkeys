@@ -1,4 +1,4 @@
-1	German	application/x-vnd.Scripture-Guide	818944069
+1	German	application/x-vnd.Scripture-Guide	349477722
 Add Reference	VerseListWindow		Referenz hinzufügen
 Dictionary 	DictionaryWindow		Wörterbuch 
 Print…	SearchHitsWindow		Drucken…
@@ -85,6 +85,7 @@ Verse	MainWindow		Vers
 Notes	ExportFormats		Notizen
 Delete Verse List	VerseListWindow		Versliste löschen
 Show Cross-References	MainWindow		Querverweise anzeigen
+Show Section Headings	MainWindow		Abschnittsüberschriften anzeigen
 Quit	MainWindow		Beenden
 Edit Reference	VerseListWindow		Referenz bearbeiten
 Forward	MainWindow		Vorwärts

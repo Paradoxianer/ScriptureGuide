@@ -141,6 +141,12 @@ SGMainWindow::SGMainWindow(BRect frame, const char* module, const char* key,
 			&fPrintIncludeHighlights) != B_OK) {
 		fPrintIncludeHighlights = false;
 	}
+	// #116: on unless switched off -- a translation's headings are part
+	// of how it was published, and most modules have none anyway.
+	if (preferences.FindBool("showSectionHeadings",
+			&fShowSectionHeadings) != B_OK) {
+		fShowSectionHeadings = true;
+	}
 	prefsLock.Unlock();
 
 	// See this constructor's own doc comment (LogosMainWindow.h) -- a
@@ -432,6 +438,10 @@ void SGMainWindow::BuildGUI(void)
 		new BMessage(MENU_OPTIONS_CROSSREF));
 	fShowCrossRefItem->SetMarked(fShowCrossReferences);
 	menu->AddItem(fShowCrossRefItem);
+	fShowHeadingsItem = new BMenuItem(B_TRANSLATE("Show Section Headings"),
+		new BMessage(MENU_OPTIONS_HEADINGS));
+	fShowHeadingsItem->SetMarked(fShowSectionHeadings);
+	menu->AddItem(fShowHeadingsItem);
 	// #44: one checkable entry per highlight colour that actually
 	// exists. Filled in by MenusBeginning(), not here -- a category is a
 	// folder the user can add, rename or delete while the window is
@@ -519,6 +529,9 @@ void SGMainWindow::BuildGUI(void)
 	fParallelView = new ParallelBibleView("parallelView",
 		fModManager->Manager(), Frame().Width());
 	fParallelView->SetStrongsBackend(fModManager);
+	// Before any column exists, so the columns are built with it instead
+	// of rebuilt for it.
+	fParallelView->SetShowSectionHeadings(fShowSectionHeadings);
 	// Vertical scrolling is now per-column (see the class comment on
 	// ParallelBibleView, issue #12) -- this outer BScrollView only ever
 	// needs its horizontal bar any more.
@@ -1157,6 +1170,19 @@ void SGMainWindow::MessageReceived(BMessage* msg)
 			fShowCrossRefItem->SetMarked(fShowCrossReferences);
 			fParallelView->SetShowCrossReferences(fShowCrossReferences);
 			SavePrefsForModule();
+			break;
+		}
+
+		case MENU_OPTIONS_HEADINGS:
+		{
+			fShowSectionHeadings = !fShowSectionHeadings;
+			fShowHeadingsItem->SetMarked(fShowSectionHeadings);
+			fParallelView->SetShowSectionHeadings(fShowSectionHeadings);
+			prefsLock.Lock();
+			preferences.RemoveData("showSectionHeadings");
+			preferences.AddBool("showSectionHeadings", fShowSectionHeadings);
+			prefsLock.Unlock();
+			SavePreferences(PREFERENCES_FILE);
 			break;
 		}
 
@@ -1890,6 +1916,14 @@ SGMainWindow::_PrintReadingPane(void)
 			if (hasSelection && (rows[r].verse < firstVerse
 					|| rows[r].verse > lastVerse)) {
 				continue;
+			}
+			// #116: whatever headings the screen shows above this
+			// verse in this column, printed above it too.
+			if (c < rows[r].columnHeadings.size()) {
+				const std::vector<BString>& headings
+					= rows[r].columnHeadings[c];
+				for (size_t h = 0; h < headings.size(); h++)
+					AppendPrintSectionHeading(document, headings[h]);
 			}
 			BString line;
 			if (fShowVerseNumbers)
