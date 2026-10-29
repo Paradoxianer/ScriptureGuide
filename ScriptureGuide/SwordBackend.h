@@ -375,6 +375,7 @@ public:
 	
 private:
 	void				DetectTestaments(void);
+	const char*			_RenderVerse();
 	
 	sword::SWModule*	fModule;
 	TextType			fType;
@@ -385,6 +386,10 @@ private:
 	
 	BLanguage			language;
 
+	// GetVerse()'s result. renderText() returns its SWBuf by value, so
+	// a pointer into it dangles as soon as the call returns; this keeps
+	// the text alive until the next GetVerse().
+	BString				fVerseText;
 };
 
 typedef BObjectList<SGModule, true> SGModuleList;

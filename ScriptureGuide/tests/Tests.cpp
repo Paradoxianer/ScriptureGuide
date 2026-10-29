@@ -2958,6 +2958,30 @@ TestChapterDescriptionIsNoHeading(SWMgr* manager)
 }
 
 
+static void
+TestSearchVerseTextLeavesInterverseHeadingOut(SWMgr* manager)
+{
+	const char* name = "SGModule::GetVerse: an interverse heading is not "
+		"part of the verse text search hits and verse lists show";
+	SWModule* module = manager->getModule("GerMenge");
+	if (module == NULL) {
+		Skip(name, "GerMenge not installed");
+		return;
+	}
+	// TestInterverseHeadingLeavesVerseTextUnchanged() already gave it
+	// the GBFPlain filter SwordBackend adds.
+	SGModule sgModule(module);
+
+	manager->setGlobalOption("Headings", "Off");
+	BString without(sgModule.GetVerse("Gen 2:4"));
+	manager->setGlobalOption("Headings", "On");
+	BString with(sgModule.GetVerse("Gen 2:4"));
+	manager->setGlobalOption("Headings", "Off");
+
+	Check(!without.IsEmpty() && with == without, name);
+}
+
+
 int
 main()
 {
@@ -3032,6 +3056,7 @@ main()
 	TestInterverseHeadingLeavesVerseTextUnchanged(&manager);
 	TestCanonicalTitleShownWithHeadingsOff(&manager);
 	TestChapterDescriptionIsNoHeading(&manager);
+	TestSearchVerseTextLeavesInterverseHeadingOut(&manager);
 	TestHighlightBookmarkRoundTrip();
 	TestBookmarkCodeHandlesDisplayFormReferences();
 	TestHighlightSpanCoversAVerseRange();

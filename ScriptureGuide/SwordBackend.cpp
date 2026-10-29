@@ -132,7 +132,7 @@ const char* SGModule::GetVerse(const char* book, int chapter, int verse)
 	myKey.setChapter(chapter);
 	myKey.setVerse(verse);
 	fModule->setKey(myKey);
-	return fModule->renderText();
+	return _RenderVerse();
 }
 
 
@@ -141,7 +141,19 @@ const char* SGModule::GetVerse(const char* key)
 	VerseKey myKey = VerseKey();
 	myKey.setLocale(language.Code());
 	fModule->setKey(key);
-	return fModule->renderText();
+	return _RenderVerse();
+}
+
+
+// The current verse's text as the reading pane shows it: with the
+// "Headings" option on, SWORD runs an interverse heading straight into
+// the text (GerMenge Genesis 2:4), which search hits and verse lists
+// should not show either.
+const char* SGModule::_RenderVerse()
+{
+	fVerseText = fModule->renderText().c_str();
+	ExtractSectionHeadings(fModule, fVerseText, false);
+	return fVerseText.String();
 }
 
 
@@ -200,7 +212,7 @@ const char* SGModule::GetParagraph(const char* key)
 const char* SGModule::GetEntry(const char* key)
 {
 	fModule->setKey(key);
-	return fModule->renderText();
+	return _RenderVerse();
 }
 
 
